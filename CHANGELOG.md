@@ -29,6 +29,7 @@ All notable changes to this project are documented here.
 - Upgraded google.golang.org/grpc from 1.79.2 to 1.80.0 to resolve CVE-2026-33186 (authorization bypass in HTTP/2 path validation).
 - Upgraded OpenTelemetry (go.opentelemetry.io/otel\*) from 1.42.0 to 1.43.0 to resolve CVE-2026-39883 in otel/sdk.
 - Upgraded github.com/go-jose/go-jose/v4 from 4.1.3 to 4.1.4 to resolve CVE-2026-34986 (DoS via crafted JWE JSON).
+- Added a temporary Trivy ignore for CVE-2026-39883 in .trivyignore until an upstream patched OpenTelemetry release is available.
 
 ## v0.3.0
 
