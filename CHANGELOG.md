@@ -14,7 +14,7 @@ All notable changes to this project are documented here.
 - ChatOps Slack integration using Block Kit notifications, 5-minute dedupe rate limiting, async non-blocking dispatch, and configurable notification toggles.
 - New frontend operational views for incidents, remediation, memory, risk guard, and postmortems, fully wired to typed API contracts.
 
-### Changed
+### changed
 
 - Assistant context now includes top team runbooks from memory search on every query and increments usage counters for surfaced entries.
 - Resource YAML apply now supports risk-guard `202 Accepted` responses requiring explicit `force=true` override for high-risk manifests.
