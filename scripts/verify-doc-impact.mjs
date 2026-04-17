@@ -6,14 +6,7 @@ const explicitHead = readArgValue("--head") ?? "HEAD";
 
 const docsPrefixes = ["docs/"];
 const docsFiles = new Set(["README.md", "RUN_AND_USE.md", "CHANGELOG.md"]);
-const impactPrefixes = [
-  "backend/cmd/",
-  "backend/internal/",
-  "predictor/app/",
-  "src/",
-  "k8s/",
-  "helm/",
-];
+const impactPrefixes = ["backend/cmd/", "backend/internal/", "predictor/app/", "src/", "k8s/", "helm/"];
 const impactFiles = new Set([
   ".env.example",
   "Dockerfile",
@@ -38,9 +31,7 @@ if (impactingFiles.length === 0) {
 }
 
 if (docsChanged) {
-  console.log(
-    `doc-impact-check: OK (${impactingFiles.length} high-impact changes with documentation updates present)`,
-  );
+  console.log(`doc-impact-check: OK (${impactingFiles.length} high-impact changes with documentation updates present)`);
   process.exit(0);
 }
 
@@ -133,7 +124,14 @@ function listChangedFiles(base, head) {
     return changed;
   }
 
-  return Array.from(new Set([...changed, ...splitLines(staged.stdout), ...splitLines(unstaged.stdout), ...splitLines(untracked.stdout)]));
+  return Array.from(
+    new Set([
+      ...changed,
+      ...splitLines(staged.stdout),
+      ...splitLines(unstaged.stdout),
+      ...splitLines(untracked.stdout),
+    ]),
+  );
 }
 
 function isDocsFile(filePath) {
