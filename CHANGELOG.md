@@ -14,12 +14,19 @@ All notable changes to this project are documented here.
 - ChatOps Slack integration using Block Kit notifications, 5-minute dedupe rate limiting, async non-blocking dispatch, and configurable notification toggles.
 - New frontend operational views for incidents, remediation, memory, risk guard, and postmortems, fully wired to typed API contracts.
 
-### changed
+### Changed
 
 - Assistant context now includes top team runbooks from memory search on every query and increments usage counters for surfaced entries.
 - Resource YAML apply now supports risk-guard `202 Accepted` responses requiring explicit `force=true` override for high-risk manifests.
 - Backend HTTP contract/OpenAPI expanded to document all new operational APIs and schemas.
 - Release metadata bumped to `v0.4.0` across package, Docker, Compose, Helm, and Kubernetes manifests.
+
+### Fixed
+
+- Resolved Prettier formatting style issues in documentation and scripts.
+- Upgraded Go toolchain from 1.25.8 to 1.25.9 to address standard library vulnerabilities (CVE-2026-4947, CVE-2026-4946, CVE-2026-4870) in crypto/x509, crypto/tls, and html/template.
+- Upgraded pytest from 8.4.1 to 9.0.3 to resolve CVE-2025-71176 in predictor dev dependencies.
+- Upgraded google.golang.org/grpc from 1.79.2 to 1.80.0 to resolve CVE-2026-33186 (authorization bypass in HTTP/2 path validation).
 
 ## v0.3.0
 
