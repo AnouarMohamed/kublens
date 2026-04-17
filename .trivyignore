@@ -1,3 +1,0 @@
-# Temporary exception while waiting for upstream patched OpenTelemetry release.
-# Remove this entry as soon as Trivy reports a fixed version for CVE-2026-39883.
-CVE-2026-39883
