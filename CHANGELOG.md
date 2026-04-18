@@ -27,7 +27,7 @@ All notable changes to this project are documented here.
 - Upgraded Go toolchain from 1.25.8 to 1.25.9 to address standard library vulnerabilities (CVE-2026-4947, CVE-2026-4946, CVE-2026-4870) in crypto/x509, crypto/tls, and html/template.
 - Upgraded pytest from 8.4.1 to 9.0.3 to resolve CVE-2025-71176 in predictor dev dependencies.
 - Upgraded google.golang.org/grpc from 1.79.2 to 1.80.0 to resolve CVE-2026-33186 (authorization bypass in HTTP/2 path validation).
-- Upgraded OpenTelemetry (go.opentelemetry.io/otel\*) from 1.42.0 to v1.43.1-0.20260417155231-ac9a33d214ec to resolve CVE-2026-39883 in otel/sdk.
+- Upgraded OpenTelemetry (go.opentelemetry.io/otel\*) from 1.42.0 to v1.43.0 (stable upstream release) to resolve CVE-2026-39883 in otel/sdk.
 - Upgraded github.com/go-jose/go-jose/v4 from 4.1.3 to 4.1.4 to resolve CVE-2026-34986 (DoS via crafted JWE JSON).
 - Removed the temporary Trivy ignore for CVE-2026-39883 after applying the OpenTelemetry upstream patched commit.
 
