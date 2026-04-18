@@ -97,7 +97,7 @@ jobs:
             predictor.sbom.cdx.json
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.0
+        uses: sigstore/cosign-installer@v4.1.1
 
       - name: Sign dashboard image
         run: cosign sign --yes "${{ env.DASHBOARD_IMAGE }}@${{ steps.build_dashboard.outputs.digest }}"
@@ -133,10 +133,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Check deployment secret
         id: kubeconfig
@@ -190,10 +190,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Check deployment secret
         id: kubeconfig
@@ -246,10 +246,10 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
 
       - name: Setup Helm
-        uses: azure/setup-helm@v4
+        uses: azure/setup-helm@v5
 
       - name: Validate tag input
         run: |
