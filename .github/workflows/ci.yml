@@ -226,7 +226,7 @@ jobs:
             -v "${{ github.workspace }}:/workspace" \
             -w /workspace \
             aquasec/trivy:0.56.1 \
-            fs --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 .
+            fs --severity CRITICAL,HIGH --ignore-unfixed --ignorefile .trivyignore --exit-code 1 .
 
       - name: Hadolint Dockerfile
         uses: hadolint/hadolint-action@v3.3.0
