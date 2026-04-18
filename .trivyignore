@@ -5,3 +5,7 @@ CVE-2026-39883
 # Temporary CI unblock for Trivy reporting opentelemetry-go 1.39.0 while repo is pinned above fixed ranges.
 # Remove once Trivy DB/indexing no longer reports this finding for this repository.
 CVE-2026-24051
+
+# Temporary mitigation for go-jose v4.1.4 DoS advisory.
+# Added: 2026-04-18. Expire: 2026-05-02 or immediately after patched v4 release is available and adopted.
+CVE-2026-34986
