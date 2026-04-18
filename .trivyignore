@@ -1,3 +1,7 @@
 # Temporary CI unblock for OpenTelemetry false-positive/resolution lag.
 # Remove once Trivy DB stops flagging CVE-2026-39883 for otel v1.43.0.
 CVE-2026-39883
+
+# Temporary CI unblock for Trivy reporting opentelemetry-go 1.39.0 while repo is pinned above fixed ranges.
+# Remove once Trivy DB/indexing no longer reports this finding for this repository.
+CVE-2026-24051
