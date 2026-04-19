@@ -18,5 +18,20 @@
     "allowImportingTsExtensions": true,
     "types": ["vitest/globals", "@testing-library/jest-dom"],
     "noEmit": true
-  }
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "e2e/**/*.ts", "vite.config.ts", "playwright.config.ts"],
+  "exclude": [
+    "dist",
+    "node_modules",
+    ".venv",
+    "predictor/.venv",
+    ".gocache",
+    ".gomodcache",
+    ".tmp-go",
+    ".postman",
+    "postman",
+    "coverage",
+    "playwright-report",
+    "test-results"
+  ]
 }

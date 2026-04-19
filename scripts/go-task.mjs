@@ -23,6 +23,15 @@ const result = spawnSync("go", args, {
 });
 
 if (result.error) {
+  if (result.error.code === "ENOENT") {
+    const attemptedCommand = ["go", ...args].join(" ");
+    console.error("Go toolchain not found on PATH.");
+    console.error(
+      "Install Go 1.25+ to run backend commands such as npm run dev:api, npm run test:go, and npm run ci:backend.",
+    );
+    console.error(`Attempted command: ${attemptedCommand}`);
+    process.exit(1);
+  }
   console.error(result.error.message);
   process.exit(1);
 }

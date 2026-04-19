@@ -10,6 +10,11 @@ k8s/secret.yaml
 .gocache/
 .gomodcache/
 .tmp-go/
+.venv/
+.ruff_cache/
+.postman/
+.codex
+.codex/
 backend/server.exe
 predictor/.venv/
 predictor/__pycache__/

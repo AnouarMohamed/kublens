@@ -6,7 +6,23 @@ import eslintConfigPrettier from "eslint-config-prettier";
 
 export default tseslint.config(
   {
-    ignores: ["dist", "node_modules", ".gocache", ".gomodcache", "predictor/.venv"],
+    ignores: [
+      "dist/**",
+      "node_modules/**",
+      ".gocache/**",
+      ".gomodcache/**",
+      ".tmp-go/**",
+      ".venv/**",
+      "predictor/.venv/**",
+      ".ruff_cache/**",
+      ".postman/**",
+      "postman/**",
+      ".codex/**",
+      "Screenshots/**",
+      "coverage/**",
+      "playwright-report/**",
+      "test-results/**",
+    ],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

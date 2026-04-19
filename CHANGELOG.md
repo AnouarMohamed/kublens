@@ -23,6 +23,8 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Scoped TypeScript, ESLint, and Prettier checks to repo-owned sources so local `.venv`, Postman workspace exports, and transient Vite temp files no longer break routine quality gates.
+- Improved backend Go task failures with a direct install hint when the `go` toolchain is missing from `PATH`.
 - Resolved Prettier formatting style issues in documentation and scripts.
 - Upgraded Go toolchain from 1.25.8 to 1.25.9 to address standard library vulnerabilities (CVE-2026-4947, CVE-2026-4946, CVE-2026-4870) in crypto/x509, crypto/tls, and html/template.
 - Upgraded pytest from 8.4.1 to 9.0.3 to resolve CVE-2025-71176 in predictor dev dependencies.

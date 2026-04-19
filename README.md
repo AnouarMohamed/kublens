@@ -94,6 +94,15 @@ npm run dev
 
 Runs in `demo` mode with mock data. No cluster required, no config needed.
 
+## Local toolchain
+
+- Node.js 20+ and npm 10+ for frontend and repo automation
+- Go 1.25+ on `PATH` for backend commands such as `npm run dev:api`, `npm run test:go`, and `npm run ci:backend`
+- Python 3.12+ for predictor tests and linting
+- `kubectl` and `helm` only for Kubernetes deployment flows
+
+Repo quality gates intentionally ignore local workspace artifacts like `.venv/`, `.postman/`, and cache directories so lint/build output stays focused on repo-owned source files.
+
 ---
 
 ## Full usage, deploy, and GitHub guide
