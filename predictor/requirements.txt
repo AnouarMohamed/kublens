@@ -2,7 +2,7 @@ fastapi==0.136.0
 uvicorn==0.44.0
 setuptools==82.0.1
 starlette==1.0.0
-protobuf==7.34.1
+protobuf==6.33.6
 opentelemetry-api==1.41.0
 opentelemetry-sdk==1.41.0
 opentelemetry-exporter-otlp==1.41.0
