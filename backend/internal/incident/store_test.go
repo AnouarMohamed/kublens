@@ -1,16 +1,18 @@
 package incident
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
 func TestIncidentStoreStepTransitions(t *testing.T) {
 	now := time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC)
-	store := NewStore(50, func() time.Time { return now })
+	store := newTestStore(t, 50, func() time.Time { return now })
 	created := store.Create(model.Incident{
 		Title:    "test incident",
 		Severity: "warning",
@@ -47,7 +49,7 @@ func TestIncidentStoreListNewestFirst(t *testing.T) {
 		time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC),
 		time.Date(2026, time.March, 10, 12, 1, 0, 0, time.UTC),
 	}
-	store := NewStore(50, func() time.Time {
+	store := newTestStore(t, 50, func() time.Time {
 		if index >= len(times) {
 			return times[len(times)-1]
 		}
@@ -68,7 +70,7 @@ func TestIncidentStoreListNewestFirst(t *testing.T) {
 }
 
 func TestIncidentStoreEvictsOldest(t *testing.T) {
-	store := NewStore(2, time.Now)
+	store := newTestStore(t, 2, time.Now)
 	first := store.Create(model.Incident{Title: "first", Severity: "warning"})
 	second := store.Create(model.Incident{Title: "second", Severity: "warning"})
 	third := store.Create(model.Incident{Title: "third", Severity: "warning"})
@@ -90,7 +92,7 @@ func TestIncidentStoreEvictsOldest(t *testing.T) {
 
 func TestIncidentStoreResolveRequiresCompletedRunbook(t *testing.T) {
 	now := time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC)
-	store := NewStore(50, func() time.Time { return now })
+	store := newTestStore(t, 50, func() time.Time { return now })
 	created := store.Create(model.Incident{
 		Title:    "test incident",
 		Severity: "warning",
@@ -126,4 +128,18 @@ func TestIncidentStoreResolveRequiresCompletedRunbook(t *testing.T) {
 	if resolved.Status != model.IncidentStatusResolved {
 		t.Fatalf("status = %s, want resolved", resolved.Status)
 	}
+}
+
+func newTestStore(t *testing.T, maxItems int, now func() time.Time) *Store {
+	t.Helper()
+
+	handle, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite test db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = handle.Close()
+	})
+
+	return NewStore(handle, maxItems, now)
 }

@@ -57,12 +57,12 @@ func (s *Server) handleAlertTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, result)
 }
 
-func (s *Server) handleListAlertLifecycle(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListAlertLifecycle(w http.ResponseWriter, r *http.Request) {
 	if s.alertLifecycle == nil {
 		writeJSON(w, http.StatusOK, []model.NodeAlertLifecycle{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.alertLifecycle.List())
+	writeJSON(w, http.StatusOK, s.alertLifecycle.List(r.Context()))
 }
 
 func (s *Server) handleUpsertAlertLifecycle(w http.ResponseWriter, r *http.Request) {
@@ -82,7 +82,7 @@ func (s *Server) handleUpsertAlertLifecycle(w http.ResponseWriter, r *http.Reque
 		actor = strings.TrimSpace(principal.User)
 	}
 
-	item, err := s.alertLifecycle.Upsert(req, actor)
+	item, err := s.alertLifecycle.Upsert(r.Context(), req, actor)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid alert lifecycle request")
 		return

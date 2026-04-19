@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -9,15 +10,24 @@ import (
 	"strings"
 	"testing"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
 func TestAlertLifecycleEndpoints(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handle, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite test db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = handle.Close()
+	})
 	server := newServer(
 		testClusterReader{},
 		nil,
 		logger,
+		WithSQLiteDB(handle),
 		WithAuth(AuthConfig{
 			Enabled: true,
 			Tokens: []AuthToken{

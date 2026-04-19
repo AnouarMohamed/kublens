@@ -1,10 +1,11 @@
 package httpapi
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"kubelens-backend/internal/model"
@@ -15,14 +16,16 @@ const defaultAlertLifecycleLimit = 2000
 var errAlertLifecycleInvalid = errors.New("invalid alert lifecycle payload")
 
 type alertLifecycleStore struct {
+	db       *sql.DB
 	now      func() time.Time
 	maxItems int
-
-	mu    sync.RWMutex
-	items map[string]model.NodeAlertLifecycle
 }
 
-func newAlertLifecycleStore(maxItems int, now func() time.Time) *alertLifecycleStore {
+func newAlertLifecycleStore(db *sql.DB, maxItems int, now func() time.Time) *alertLifecycleStore {
+	if db == nil {
+		return nil
+	}
+
 	limit := maxItems
 	if limit <= 0 {
 		limit = defaultAlertLifecycleLimit
@@ -32,26 +35,45 @@ func newAlertLifecycleStore(maxItems int, now func() time.Time) *alertLifecycleS
 		clock = time.Now
 	}
 	return &alertLifecycleStore{
+		db:       db,
 		now:      clock,
 		maxItems: limit,
-		items:    make(map[string]model.NodeAlertLifecycle, limit),
 	}
 }
 
-func (s *alertLifecycleStore) List() []model.NodeAlertLifecycle {
+func (s *alertLifecycleStore) List(ctx context.Context) []model.NodeAlertLifecycle {
 	if s == nil {
 		return nil
 	}
 
-	nowAt := s.now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT alert_id, node, rule, status, note, snoozed_until, updated_at, updated_by
+		   FROM alert_lifecycle
+		  ORDER BY updated_at DESC, alert_id DESC`,
+	)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
 
-	out := make([]model.NodeAlertLifecycle, 0, len(s.items))
-	for key, item := range s.items {
-		item = normalizeLifecycleExpiry(item, nowAt)
-		s.items[key] = item
-		out = append(out, item)
+	nowAt := s.now().UTC()
+	out := make([]model.NodeAlertLifecycle, 0, s.maxItems)
+	for rows.Next() {
+		item, scanErr := scanAlertLifecycle(rows)
+		if scanErr != nil {
+			return nil
+		}
+		normalized := normalizeLifecycleExpiry(item, nowAt)
+		if normalized != item {
+			if err := s.persistNormalized(ctx, normalized); err != nil {
+				return nil
+			}
+		}
+		out = append(out, normalized)
+	}
+	if err := rows.Err(); err != nil {
+		return nil
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
@@ -60,7 +82,11 @@ func (s *alertLifecycleStore) List() []model.NodeAlertLifecycle {
 	return out
 }
 
-func (s *alertLifecycleStore) Upsert(req model.NodeAlertLifecycleUpdateRequest, actor string) (model.NodeAlertLifecycle, error) {
+func (s *alertLifecycleStore) Upsert(
+	ctx context.Context,
+	req model.NodeAlertLifecycleUpdateRequest,
+	actor string,
+) (model.NodeAlertLifecycle, error) {
 	if s == nil {
 		return model.NodeAlertLifecycle{}, errAlertLifecycleInvalid
 	}
@@ -98,29 +124,90 @@ func (s *alertLifecycleStore) Upsert(req model.NodeAlertLifecycleUpdateRequest, 
 		out.SnoozedUntil = nowAt.Add(time.Duration(req.SnoozeMinutes) * time.Minute).Format(time.RFC3339)
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.items[id] = out
-	s.trimLocked()
+	createdAt, err := s.lookupCreatedAt(ctx, id)
+	if err != nil {
+		return model.NodeAlertLifecycle{}, err
+	}
+	if strings.TrimSpace(createdAt) == "" {
+		createdAt = out.UpdatedAt
+	}
+
+	if _, err := s.db.ExecContext(
+		ctx,
+		`INSERT OR REPLACE INTO alert_lifecycle (
+			alert_id, node, rule, status, note, snoozed_until, updated_by, created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		out.ID,
+		out.Node,
+		out.Rule,
+		string(out.Status),
+		out.Note,
+		out.SnoozedUntil,
+		out.UpdatedBy,
+		createdAt,
+		out.UpdatedAt,
+	); err != nil {
+		return model.NodeAlertLifecycle{}, err
+	}
+
+	if err := s.trim(ctx); err != nil {
+		return model.NodeAlertLifecycle{}, err
+	}
+
 	return out, nil
 }
 
-func (s *alertLifecycleStore) trimLocked() {
-	if len(s.items) <= s.maxItems {
-		return
+func (s *alertLifecycleStore) trim(ctx context.Context) error {
+	if s.maxItems <= 0 {
+		return nil
 	}
 
-	items := make([]model.NodeAlertLifecycle, 0, len(s.items))
-	for _, item := range s.items {
-		items = append(items, item)
-	}
-	sort.SliceStable(items, func(i, j int) bool {
-		return items[i].UpdatedAt > items[j].UpdatedAt
-	})
+	_, err := s.db.ExecContext(
+		ctx,
+		`DELETE FROM alert_lifecycle
+		  WHERE alert_id IN (
+				SELECT alert_id
+				  FROM alert_lifecycle
+				 ORDER BY updated_at DESC, alert_id DESC
+				 LIMIT -1 OFFSET ?
+		  )`,
+		s.maxItems,
+	)
+	return err
+}
 
-	for i := s.maxItems; i < len(items); i++ {
-		delete(s.items, items[i].ID)
+func (s *alertLifecycleStore) lookupCreatedAt(ctx context.Context, id string) (string, error) {
+	var createdAt string
+	err := s.db.QueryRowContext(ctx, `SELECT created_at FROM alert_lifecycle WHERE alert_id = ?`, id).Scan(&createdAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
+	return createdAt, err
+}
+
+func (s *alertLifecycleStore) persistNormalized(ctx context.Context, item model.NodeAlertLifecycle) error {
+	createdAt, err := s.lookupCreatedAt(ctx, item.ID)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(createdAt) == "" {
+		createdAt = item.UpdatedAt
+	}
+
+	_, err = s.db.ExecContext(
+		ctx,
+		`UPDATE alert_lifecycle
+		    SET status = ?, note = ?, snoozed_until = ?, updated_at = ?, updated_by = ?, created_at = ?
+		  WHERE alert_id = ?`,
+		string(item.Status),
+		item.Note,
+		item.SnoozedUntil,
+		item.UpdatedAt,
+		item.UpdatedBy,
+		createdAt,
+		item.ID,
+	)
+	return err
 }
 
 func normalizeLifecycleStatus(raw model.NodeAlertLifecycleStatus) model.NodeAlertLifecycleStatus {
@@ -156,4 +243,31 @@ func normalizeLifecycleExpiry(item model.NodeAlertLifecycle, nowAt time.Time) mo
 		item.UpdatedAt = nowAt.Format(time.RFC3339)
 	}
 	return item
+}
+
+type alertLifecycleScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanAlertLifecycle(scanner alertLifecycleScanner) (model.NodeAlertLifecycle, error) {
+	var (
+		item   model.NodeAlertLifecycle
+		status string
+	)
+
+	if err := scanner.Scan(
+		&item.ID,
+		&item.Node,
+		&item.Rule,
+		&status,
+		&item.Note,
+		&item.SnoozedUntil,
+		&item.UpdatedAt,
+		&item.UpdatedBy,
+	); err != nil {
+		return model.NodeAlertLifecycle{}, err
+	}
+
+	item.Status = model.NodeAlertLifecycleStatus(status)
+	return item, nil
 }

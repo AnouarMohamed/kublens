@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"log/slog"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 
 	"kubelens-backend/internal/ai"
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/events"
 	"kubelens-backend/internal/intelligence"
 	"kubelens-backend/internal/model"
@@ -55,10 +57,11 @@ type Server struct {
 	limiter        rateLimiter
 	writesOn       bool
 	anonPerms      []string
+	sqliteDB       *sql.DB
 	audit          *auditLog
 	eventBus       *events.Bus
 	alerts         alertDispatcher
-	alertLifecycle *alertLifecycleStore
+	alertLifecycle alertLifecycleStateStore
 	ai             ai.Provider
 	aiTTL          time.Duration
 	docs           docsRetriever
@@ -148,6 +151,11 @@ type alertDispatcher interface {
 	Enabled() bool
 }
 
+type alertLifecycleStateStore interface {
+	List(ctx context.Context) []model.NodeAlertLifecycle
+	Upsert(ctx context.Context, req model.NodeAlertLifecycleUpdateRequest, actor string) (model.NodeAlertLifecycle, error)
+}
+
 type Option func(*Server)
 
 func WithAIProvider(provider ai.Provider) Option {
@@ -224,6 +232,12 @@ func WithAlertDispatcher(dispatcher alertDispatcher) Option {
 	}
 }
 
+func WithSQLiteDB(handle *sql.DB) Option {
+	return func(s *Server) {
+		s.sqliteDB = handle
+	}
+}
+
 func WithEventBus(bus *events.Bus) Option {
 	return func(s *Server) {
 		s.eventBus = bus
@@ -296,7 +310,6 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 		authLogin:      newAuthLoginProtection(defaultAuthLoginProtectionConfig()),
 		audit:          newAuditLog(maxAuditLimit, "", logger),
 		eventBus:       events.NewBus(64),
-		alertLifecycle: newAlertLifecycleStore(defaultAlertLifecycleLimit, now),
 		aiTTL:          8 * time.Second,
 		predictionsTTL: 8 * time.Second,
 		buildInfo: model.BuildInfo{
@@ -326,8 +339,24 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 	if server.eventBus == nil {
 		server.eventBus = events.NewBus(64)
 	}
+	if server.alertLifecycle == nil {
+		server.alertLifecycle = server.defaultAlertLifecycleStore()
+	}
 
 	return server
+}
+
+func (s *Server) defaultAlertLifecycleStore() alertLifecycleStateStore {
+	if s.sqliteDB == nil {
+		handle, err := storesql.Open(context.Background(), ":memory:")
+		if err != nil {
+			s.logger.Error("initialize alert lifecycle sqlite store", "error", err)
+			return nil
+		}
+		s.sqliteDB = handle
+	}
+
+	return newAlertLifecycleStore(s.sqliteDB, defaultAlertLifecycleLimit, s.now)
 }
 
 func (s *Server) Router(distDir string) http.Handler {

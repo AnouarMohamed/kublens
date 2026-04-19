@@ -15,6 +15,7 @@ import (
 	"kubelens-backend/internal/chatops"
 	"kubelens-backend/internal/cluster"
 	"kubelens-backend/internal/config"
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/events"
 	"kubelens-backend/internal/httpapi"
 	"kubelens-backend/internal/incident"
@@ -43,6 +44,11 @@ type Result struct {
 func Build(cfg config.Config) (Result, error) {
 	warnings := make([]string, 0, 8)
 	eventBus := events.NewBus(64)
+
+	sqliteDB, err := storesql.Open(context.Background(), cfg.DBPath)
+	if err != nil {
+		return Result{}, fmt.Errorf("initialize sqlite store: %w", err)
+	}
 
 	shutdownTracing := func(context.Context) error { return nil }
 	if strings.TrimSpace(cfg.Tracing.Endpoint) != "" {
@@ -112,9 +118,9 @@ func Build(cfg config.Config) (Result, error) {
 		EmbeddingClient: embeddingClient,
 	})
 	memoryStore := memory.New(cfg.Memory.FilePath, nil)
-	incidentStore := incident.NewStore(incident.DefaultStoreLimit, nil)
-	remediationStore := remediation.NewStore(remediation.DefaultStoreLimit, nil)
-	postmortemStore := postmortem.NewStore(postmortem.DefaultStoreLimit, nil)
+	incidentStore := incident.NewStore(sqliteDB, incident.DefaultStoreLimit, nil)
+	remediationStore := remediation.NewStore(sqliteDB, remediation.DefaultStoreLimit, nil)
+	postmortemStore := postmortem.NewStore(sqliteDB, postmortem.DefaultStoreLimit, nil)
 	riskAnalyzer := riskguard.NewAnalyzer()
 	chatopsNotifier := chatops.NewSlackNotifier(chatops.Config{
 		SlackWebhookURL:      cfg.ChatOps.SlackWebhookURL,
@@ -159,6 +165,7 @@ func Build(cfg config.Config) (Result, error) {
 			FilePath: cfg.Audit.FilePath,
 		}),
 		httpapi.WithAlertDispatcher(alertDispatcher),
+		httpapi.WithSQLiteDB(sqliteDB),
 		httpapi.WithEventBus(eventBus),
 		httpapi.WithIntelligence(diagnosticAnalyzer),
 		httpapi.WithClusterContexts(httpapi.ClusterContextsConfig{
@@ -185,7 +192,10 @@ func Build(cfg config.Config) (Result, error) {
 		Warnings: warnings,
 		Shutdown: func(ctx context.Context) error {
 			stateCancel()
-			return shutdownTracing(ctx)
+			return errors.Join(
+				shutdownTracing(ctx),
+				sqliteDB.Close(),
+			)
 		},
 	}, nil
 }

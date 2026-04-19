@@ -27,7 +27,11 @@ func (s *Server) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	diag := s.mapDiagnosticsReport(s.runDiagnostics(r.Context()))
 	predictions := s.collectPredictionsForIncident(r.Context(), pods, nodes, events)
 	newIncident := incident.BuildIncident(r.Context(), diag, events, pods, predictions, s.now)
-	created := s.incidents.Create(newIncident)
+	created, err := createIncidentWithContext(r.Context(), s.incidents, newIncident)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist incident")
+		return
+	}
 
 	s.notifyChatOps(func(ctx context.Context) {
 		if s.chatops != nil {
@@ -38,12 +42,17 @@ func (s *Server) handleCreateIncident(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, created)
 }
 
-func (s *Server) handleListIncidents(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListIncidents(w http.ResponseWriter, r *http.Request) {
 	if s.incidents == nil {
 		writeJSON(w, http.StatusOK, []model.Incident{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.incidents.List())
+	items, err := listIncidentsWithContext(r.Context(), s.incidents)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list incidents")
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) handleGetIncident(w http.ResponseWriter, r *http.Request) {
@@ -53,7 +62,11 @@ func (s *Server) handleGetIncident(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	value, ok := s.incidents.Get(id)
+	value, ok, err := getIncidentWithContext(r.Context(), s.incidents, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load incident")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "incident not found")
 		return
@@ -80,7 +93,7 @@ func (s *Server) handlePatchIncidentStep(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	updated, err := s.incidents.PatchStepStatus(incidentID, stepID, req.Status)
+	updated, err := patchIncidentStepWithContext(r.Context(), s.incidents, incidentID, stepID, req.Status)
 	if err != nil {
 		switch {
 		case errors.Is(err, incident.ErrIncidentNotFound):
@@ -108,7 +121,7 @@ func (s *Server) handleResolveIncident(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resolved, err := s.incidents.Resolve(incidentID)
+	resolved, err := resolveIncidentWithContext(r.Context(), s.incidents, incidentID)
 	if err != nil {
 		if errors.Is(err, incident.ErrIncidentNotFound) {
 			writeError(w, http.StatusNotFound, "incident not found")
@@ -141,7 +154,11 @@ func (s *Server) handleGeneratePostmortem(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	value, ok := s.incidents.Get(incidentID)
+	value, ok, err := getIncidentWithContext(r.Context(), s.incidents, incidentID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load incident")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "incident not found")
 		return
@@ -151,13 +168,16 @@ func (s *Server) handleGeneratePostmortem(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	if existing, exists := s.postmortems.GetByIncidentID(incidentID); exists {
+	if existing, exists, err := getPostmortemByIncidentWithContext(r.Context(), s.postmortems, incidentID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load postmortem")
+		return
+	} else if exists {
 		writeError(w, http.StatusConflict, "postmortem already exists for incident: "+existing.ID)
 		return
 	}
 
 	generated := postmortem.Generate(r.Context(), value, s.ai, s.now)
-	created, err := s.postmortems.Create(generated)
+	created, err := createPostmortemWithContext(r.Context(), s.postmortems, generated)
 	if err != nil {
 		if errors.Is(err, postmortem.ErrPostmortemExists) {
 			writeError(w, http.StatusConflict, err.Error())
@@ -176,12 +196,17 @@ func (s *Server) handleGeneratePostmortem(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusCreated, created)
 }
 
-func (s *Server) handleListPostmortems(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleListPostmortems(w http.ResponseWriter, r *http.Request) {
 	if s.postmortems == nil {
 		writeJSON(w, http.StatusOK, []model.Postmortem{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.postmortems.List())
+	items, err := listPostmortemsWithContext(r.Context(), s.postmortems)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list postmortems")
+		return
+	}
+	writeJSON(w, http.StatusOK, items)
 }
 
 func (s *Server) handleGetPostmortem(w http.ResponseWriter, r *http.Request) {
@@ -190,7 +215,11 @@ func (s *Server) handleGetPostmortem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "id"))
-	value, ok := s.postmortems.Get(id)
+	value, ok, err := getPostmortemWithContext(r.Context(), s.postmortems, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load postmortem")
+		return
+	}
 	if !ok {
 		writeError(w, http.StatusNotFound, "postmortem not found")
 		return

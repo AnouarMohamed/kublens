@@ -64,6 +64,11 @@ func Load() (Config, error) {
 		SharedSecret: strings.TrimSpace(os.Getenv("PREDICTOR_SHARED_SECRET")),
 	}
 
+	cfg.DBPath = strings.TrimSpace(firstNonEmpty(
+		os.Getenv("DB_PATH"),
+		"data/kubelens.db",
+	))
+
 	cfg.Memory = MemoryConfig{
 		FilePath: strings.TrimSpace(firstNonEmpty(
 			os.Getenv("MEMORY_FILE_PATH"),

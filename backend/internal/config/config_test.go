@@ -18,6 +18,9 @@ func TestLoadDefaultsDemoMode(t *testing.T) {
 	if cfg.WriteActionsEnabled {
 		t.Fatal("write actions should be disabled by default")
 	}
+	if cfg.DBPath != "data/kubelens.db" {
+		t.Fatalf("db path = %q, want data/kubelens.db", cfg.DBPath)
+	}
 }
 
 func TestLoadProdRequiresAuth(t *testing.T) {
@@ -163,6 +166,7 @@ func clearConfigEnv(t *testing.T) {
 		"PREDICTOR_BASE_URL",
 		"PREDICTOR_TIMEOUT_SECONDS",
 		"PREDICTOR_SHARED_SECRET",
+		"DB_PATH",
 		"MEMORY_FILE_PATH",
 		"CHATOPS_SLACK_WEBHOOK_URL",
 		"CHATOPS_BASE_URL",

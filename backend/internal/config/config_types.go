@@ -32,6 +32,7 @@ type Config struct {
 
 	Assistant AssistantConfig
 	Predictor PredictorConfig
+	DBPath    string
 	Memory    MemoryConfig
 	ChatOps   ChatOpsConfig
 	Auth      AuthConfig

@@ -1,15 +1,17 @@
 package postmortem
 
 import (
+	"context"
 	"strings"
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
 func TestStoreCreateAndConflict(t *testing.T) {
-	store := NewStore(50, func() time.Time {
+	store := newTestStore(t, 50, func() time.Time {
 		return time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC)
 	})
 
@@ -39,7 +41,7 @@ func TestStoreCreateAndConflict(t *testing.T) {
 }
 
 func TestStoreEvictsOldest(t *testing.T) {
-	store := NewStore(2, time.Now)
+	store := newTestStore(t, 2, time.Now)
 	first, _ := store.Create(model.Postmortem{IncidentID: "inc-1", IncidentTitle: "one"})
 	second, _ := store.Create(model.Postmortem{IncidentID: "inc-2", IncidentTitle: "two"})
 	third, _ := store.Create(model.Postmortem{IncidentID: "inc-3", IncidentTitle: "three"})
@@ -53,4 +55,18 @@ func TestStoreEvictsOldest(t *testing.T) {
 	if _, ok := store.Get(third.ID); !ok {
 		t.Fatalf("expected third postmortem %s", third.ID)
 	}
+}
+
+func newTestStore(t *testing.T, maxItems int, now func() time.Time) *Store {
+	t.Helper()
+
+	handle, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite test db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = handle.Close()
+	})
+
+	return NewStore(handle, maxItems, now)
 }

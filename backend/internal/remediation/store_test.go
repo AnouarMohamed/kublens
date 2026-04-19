@@ -1,15 +1,17 @@
 package remediation
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
 func TestStoreLifecycle(t *testing.T) {
 	now := time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC)
-	store := NewStore(100, func() time.Time { return now })
+	store := newTestStore(t, 100, func() time.Time { return now })
 
 	saved := store.SaveProposals([]model.RemediationProposal{
 		{
@@ -48,7 +50,7 @@ func TestStoreRejectAndCap(t *testing.T) {
 		time.Date(2026, time.March, 10, 12, 1, 0, 0, time.UTC),
 		time.Date(2026, time.March, 10, 12, 2, 0, 0, time.UTC),
 	}
-	store := NewStore(2, func() time.Time {
+	store := newTestStore(t, 2, func() time.Time {
 		if index >= len(times) {
 			return times[len(times)-1]
 		}
@@ -78,7 +80,7 @@ func TestStoreRejectAndCap(t *testing.T) {
 
 func TestStoreSaveProposalsDedupesActiveItems(t *testing.T) {
 	now := time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC)
-	store := NewStore(100, func() time.Time { return now })
+	store := newTestStore(t, 100, func() time.Time { return now })
 
 	first := store.SaveProposals([]model.RemediationProposal{
 		{
@@ -118,4 +120,18 @@ func TestStoreSaveProposalsDedupesActiveItems(t *testing.T) {
 	if len(list) != 1 {
 		t.Fatalf("store should contain one active deduped proposal, got %d", len(list))
 	}
+}
+
+func newTestStore(t *testing.T, maxItems int, now func() time.Time) *Store {
+	t.Helper()
+
+	handle, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite test db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = handle.Close()
+	})
+
+	return NewStore(handle, maxItems, now)
 }

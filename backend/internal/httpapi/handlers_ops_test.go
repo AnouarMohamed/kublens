@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/incident"
 	"kubelens-backend/internal/memory"
 	"kubelens-backend/internal/model"
@@ -20,9 +22,10 @@ import (
 )
 
 func TestIncidentStepTransitionsAndFinalVerificationRules(t *testing.T) {
+	handle := newOpsTestDB(t)
 	router := newOpsTestServer(
 		t,
-		WithIncidentStore(incident.NewStore(incident.DefaultStoreLimit, nil)),
+		WithIncidentStore(incident.NewStore(handle, incident.DefaultStoreLimit, nil)),
 	).Router("")
 
 	created := createIncidentForTest(t, router)
@@ -88,7 +91,8 @@ func TestRemediationFourEyesEnforcement(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			remStore := remediation.NewStore(remediation.DefaultStoreLimit, nil)
+			handle := newOpsTestDB(t)
+			remStore := remediation.NewStore(handle, remediation.DefaultStoreLimit, nil)
 			seed := remStore.SaveProposals([]model.RemediationProposal{
 				{
 					Kind:         model.RemediationKindRestartPod,
@@ -137,6 +141,7 @@ func TestRemediationFourEyesEnforcement(t *testing.T) {
 
 func TestProposedRemediationLinksToOpenIncident(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handle := newOpsTestDB(t)
 	router := newServer(
 		notReadyClusterReader{testClusterReader{}},
 		nil,
@@ -150,8 +155,9 @@ func TestProposedRemediationLinksToOpenIncident(t *testing.T) {
 				{Token: "admin-token", User: "admin", Role: "admin"},
 			},
 		}),
-		WithIncidentStore(incident.NewStore(incident.DefaultStoreLimit, nil)),
-		WithRemediationStore(remediation.NewStore(remediation.DefaultStoreLimit, nil)),
+		WithSQLiteDB(handle),
+		WithIncidentStore(incident.NewStore(handle, incident.DefaultStoreLimit, nil)),
+		WithRemediationStore(remediation.NewStore(handle, remediation.DefaultStoreLimit, nil)),
 	).Router("")
 
 	created := createIncidentForTest(t, router)
@@ -243,10 +249,12 @@ func TestApplyResourceYAMLRiskGuardForceFlow(t *testing.T) {
 }
 
 func TestPostmortemGenerationFlow(t *testing.T) {
+	handle := newOpsTestDB(t)
 	router := newOpsTestServer(
 		t,
-		WithIncidentStore(incident.NewStore(incident.DefaultStoreLimit, nil)),
-		WithPostmortemStore(postmortem.NewStore(postmortem.DefaultStoreLimit, nil)),
+		WithSQLiteDB(handle),
+		WithIncidentStore(incident.NewStore(handle, incident.DefaultStoreLimit, nil)),
+		WithPostmortemStore(postmortem.NewStore(handle, postmortem.DefaultStoreLimit, nil)),
 	).Router("")
 
 	created := createIncidentForTest(t, router)
@@ -372,7 +380,9 @@ func newOpsTestServer(t *testing.T, opts ...Option) *Server {
 	t.Helper()
 
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	handle := newOpsTestDB(t)
 	base := []Option{
+		WithSQLiteDB(handle),
 		WithWriteActionsEnabled(true),
 		WithAuth(AuthConfig{
 			Enabled: true,
@@ -385,6 +395,20 @@ func newOpsTestServer(t *testing.T, opts ...Option) *Server {
 	}
 	base = append(base, opts...)
 	return newServer(testClusterReader{}, nil, logger, base...)
+}
+
+func newOpsTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+
+	handle, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite test db: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = handle.Close()
+	})
+
+	return handle
 }
 
 func createIncidentForTest(t *testing.T, router http.Handler) model.Incident {
