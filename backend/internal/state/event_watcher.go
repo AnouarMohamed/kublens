@@ -30,6 +30,7 @@ func (c *ClusterCache) onEventAdd(obj any) {
 	}
 
 	info := mapEventInfo(evt)
+	now := time.Now().UTC()
 	c.mu.Lock()
 	c.state.Events = append(c.state.Events, info)
 	if len(c.state.Events) > maxEventItems {
@@ -38,6 +39,9 @@ func (c *ClusterCache) onEventAdd(obj any) {
 	sort.SliceStable(c.state.Events, func(i, j int) bool {
 		return c.state.Events[i].LastTimestamp.After(c.state.Events[j].LastTimestamp)
 	})
+	if strings.EqualFold(info.InvolvedObjectKind, "Pod") {
+		c.refreshPodRecentRestartsLocked(info.Namespace, info.InvolvedObjectName, now)
+	}
 	c.setLastUpdated()
 	c.mu.Unlock()
 
@@ -51,6 +55,7 @@ func (c *ClusterCache) onEventUpdate(oldObj, newObj any) {
 		return
 	}
 	info := mapEventInfo(evt)
+	now := time.Now().UTC()
 
 	c.mu.Lock()
 	c.state.Events = append(c.state.Events, info)
@@ -60,6 +65,9 @@ func (c *ClusterCache) onEventUpdate(oldObj, newObj any) {
 	sort.SliceStable(c.state.Events, func(i, j int) bool {
 		return c.state.Events[i].LastTimestamp.After(c.state.Events[j].LastTimestamp)
 	})
+	if strings.EqualFold(info.InvolvedObjectKind, "Pod") {
+		c.refreshPodRecentRestartsLocked(info.Namespace, info.InvolvedObjectName, now)
+	}
 	c.setLastUpdated()
 	c.mu.Unlock()
 
@@ -73,6 +81,7 @@ func (c *ClusterCache) onEventDelete(obj any) {
 		return
 	}
 
+	now := time.Now().UTC()
 	c.mu.Lock()
 	trimmed := make([]EventInfo, 0, len(c.state.Events))
 	for _, item := range c.state.Events {
@@ -82,6 +91,9 @@ func (c *ClusterCache) onEventDelete(obj any) {
 		trimmed = append(trimmed, item)
 	}
 	c.state.Events = trimmed
+	if strings.EqualFold(evt.InvolvedObject.Kind, "Pod") {
+		c.refreshPodRecentRestartsLocked(evt.Namespace, evt.InvolvedObject.Name, now)
+	}
 	c.setLastUpdated()
 	c.mu.Unlock()
 }

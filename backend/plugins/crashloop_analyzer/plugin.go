@@ -34,6 +34,18 @@ func (Plugin) Analyze(snapshot state.ClusterState) []intelligence.Diagnostic {
 			continue
 		}
 
+		if pod.RecentRestarts >= 3 {
+			diagnostics = append(diagnostics, intelligence.Diagnostic{
+				Severity:       intelligence.SeverityWarning,
+				Resource:       pod.Name,
+				Namespace:      pod.Namespace,
+				Message:        "Pod restart velocity is high",
+				Evidence:       buildPodEvidence(pod, fmt.Sprintf("%d restart-related warning events observed in the last 15 minutes.", pod.RecentRestarts)),
+				Recommendation: "Inspect recent events, probes, and dependency outages to stop repeated restarts before the workload degrades further.",
+			})
+			continue
+		}
+
 		if rules.IsCrashLoop(pod) {
 			diagnostics = append(diagnostics, intelligence.Diagnostic{
 				Severity:       intelligence.SeverityWarning,

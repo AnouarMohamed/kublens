@@ -19,6 +19,7 @@ All notable changes to this project are documented here.
 - Assistant context now includes top team runbooks from memory search on every query and increments usage counters for surfaced entries.
 - Resource YAML apply now supports risk-guard `202 Accepted` responses requiring explicit `force=true` override for high-risk manifests.
 - Backend HTTP contract/OpenAPI expanded to document all new operational APIs and schemas.
+- Diagnostics now detect probe-related pod failures, evictions, unschedulable scheduler blocks, terminating pods, high restart velocity, missing running-pod resource requests, node CPU saturation, and stale cordoned nodes with richer event-backed evidence.
 - Release metadata bumped to `v0.4.0` across package, Docker, Compose, Helm, and Kubernetes manifests.
 
 ### Fixed

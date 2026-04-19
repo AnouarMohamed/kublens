@@ -3,6 +3,7 @@ package resource_analyzer
 
 import (
 	"fmt"
+	"strings"
 
 	"kubelens-backend/internal/intelligence"
 	"kubelens-backend/internal/state"
@@ -23,6 +24,21 @@ func (Plugin) Analyze(snapshot state.ClusterState) []intelligence.Diagnostic {
 	for _, pod := range snapshot.Pods {
 		limits := pod.ResourceLimits
 		requests := pod.ResourceRequests
+
+		if strings.EqualFold(pod.Phase, "Running") && requests.CPUMilli == 0 && requests.MemoryBytes == 0 {
+			evidence := []string{"CPU and memory requests are not set for this running pod."}
+			if limits.CPUMilli == 0 && limits.MemoryBytes == 0 {
+				evidence = append(evidence, "CPU and memory limits are also unset.")
+			}
+			diagnostics = append(diagnostics, intelligence.Diagnostic{
+				Severity:       intelligence.SeverityWarning,
+				Resource:       pod.Name,
+				Namespace:      pod.Namespace,
+				Message:        "Running pod has no resource requests",
+				Evidence:       evidence,
+				Recommendation: "Define CPU and memory requests and set matching limits to improve scheduling accuracy and protect cluster stability.",
+			})
+		}
 
 		if limits.MemoryBytes == 0 {
 			diagnostics = append(diagnostics, intelligence.Diagnostic{

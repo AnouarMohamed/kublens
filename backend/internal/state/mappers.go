@@ -43,22 +43,28 @@ func mapPodInfo(pod *corev1.Pod) PodInfo {
 	if pod.Status.StartTime != nil {
 		start = pod.Status.StartTime.Time
 	}
+	var deletionTimestamp *time.Time
+	if pod.DeletionTimestamp != nil {
+		timestamp := pod.DeletionTimestamp.Time
+		deletionTimestamp = &timestamp
+	}
 
 	return PodInfo{
-		UID:              string(pod.UID),
-		Name:             pod.Name,
-		Namespace:        pod.Namespace,
-		Phase:            string(pod.Status.Phase),
-		StatusReason:     pod.Status.Reason,
-		StatusMessage:    pod.Status.Message,
-		NodeName:         pod.Spec.NodeName,
-		StartTime:        start,
-		Restarts:         restarts,
-		Conditions:       conditions,
-		Containers:       containers,
-		QoSClass:         string(pod.Status.QOSClass),
-		ResourceRequests: reqs,
-		ResourceLimits:   limits,
+		UID:               string(pod.UID),
+		Name:              pod.Name,
+		Namespace:         pod.Namespace,
+		Phase:             string(pod.Status.Phase),
+		StatusReason:      pod.Status.Reason,
+		StatusMessage:     pod.Status.Message,
+		NodeName:          pod.Spec.NodeName,
+		StartTime:         start,
+		DeletionTimestamp: deletionTimestamp,
+		Restarts:          restarts,
+		Conditions:        conditions,
+		Containers:        containers,
+		QoSClass:          string(pod.Status.QOSClass),
+		ResourceRequests:  reqs,
+		ResourceLimits:    limits,
 	}
 }
 

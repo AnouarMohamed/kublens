@@ -29,6 +29,7 @@ import (
 	"kubelens-backend/plugins/crashloop_analyzer"
 	"kubelens-backend/plugins/image_pull_analyzer"
 	"kubelens-backend/plugins/node_health_analyzer"
+	"kubelens-backend/plugins/pod_health_analyzer"
 	"kubelens-backend/plugins/resource_analyzer"
 	"kubelens-backend/plugins/scheduling_analyzer"
 )
@@ -194,6 +195,7 @@ func buildAnalyzer() *intelligence.Analyzer {
 		crashloop_analyzer.New(),
 		image_pull_analyzer.New(),
 		node_health_analyzer.New(),
+		pod_health_analyzer.New(),
 		resource_analyzer.New(),
 		scheduling_analyzer.New(),
 	}

@@ -35,22 +35,24 @@ type ContainerInfo struct {
 }
 
 type PodInfo struct {
-	UID              string
-	Name             string
-	Namespace        string
-	Phase            string
-	StatusReason     string
-	StatusMessage    string
-	NodeName         string
-	StartTime        time.Time
-	Restarts         int32
-	Conditions       []ConditionInfo
-	Containers       []ContainerInfo
-	QoSClass         string
-	ResourceRequests ResourceQuantities
-	ResourceLimits   ResourceQuantities
-	Usage            ResourceQuantities
-	UsageHistory     []UsagePoint
+	UID               string
+	Name              string
+	Namespace         string
+	Phase             string
+	StatusReason      string
+	StatusMessage     string
+	NodeName          string
+	StartTime         time.Time
+	DeletionTimestamp *time.Time
+	Restarts          int32
+	RecentRestarts    int
+	Conditions        []ConditionInfo
+	Containers        []ContainerInfo
+	QoSClass          string
+	ResourceRequests  ResourceQuantities
+	ResourceLimits    ResourceQuantities
+	Usage             ResourceQuantities
+	UsageHistory      []UsagePoint
 }
 
 type NodeInfo struct {
@@ -106,6 +108,10 @@ type ClusterState struct {
 
 func (p PodInfo) clone() PodInfo {
 	out := p
+	if p.DeletionTimestamp != nil {
+		deletionTimestamp := *p.DeletionTimestamp
+		out.DeletionTimestamp = &deletionTimestamp
+	}
 	out.Conditions = append([]ConditionInfo(nil), p.Conditions...)
 	out.Containers = append([]ContainerInfo(nil), p.Containers...)
 	out.UsageHistory = append([]UsagePoint(nil), p.UsageHistory...)

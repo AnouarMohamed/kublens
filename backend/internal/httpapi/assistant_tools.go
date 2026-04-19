@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"kubelens-backend/internal/ai"
-	"kubelens-backend/internal/diagnostics"
 	"kubelens-backend/internal/model"
 )
 
@@ -188,8 +187,7 @@ func (s *Server) executeAssistantTool(ctx context.Context, call ai.ToolCall) str
 		}
 		return marshalToolResult(events)
 	case toolRunDiagnostics:
-		pods, nodes := s.cluster.Snapshot(ctx)
-		return marshalToolResult(diagnostics.BuildDiagnostics(pods, nodes))
+		return marshalToolResult(s.mapDiagnosticsReport(s.runDiagnostics(ctx)))
 	default:
 		return marshalToolError("unknown tool", fmt.Errorf("tool %s not supported", call.Name))
 	}
