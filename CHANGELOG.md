@@ -13,6 +13,7 @@ All notable changes to this project are documented here.
 - Postmortem Generator with deterministic incident summaries, optional AI root-cause/prevention enrichment, conflict-safe one-postmortem-per-incident handling, and list/detail APIs.
 - ChatOps Slack integration using Block Kit notifications, 5-minute dedupe rate limiting, async non-blocking dispatch, and configurable notification toggles.
 - New frontend operational views for incidents, remediation, memory, risk guard, and postmortems, fully wired to typed API contracts.
+- Live pod log streaming over Server-Sent Events with per-line delivery, stop control, 10-minute server cap, and snapshot fallback support.
 
 ### Changed
 
@@ -20,6 +21,7 @@ All notable changes to this project are documented here.
 - Resource YAML apply now supports risk-guard `202 Accepted` responses requiring explicit `force=true` override for high-risk manifests.
 - Backend HTTP contract/OpenAPI expanded to document all new operational APIs and schemas.
 - Diagnostics now detect probe-related pod failures, evictions, unschedulable scheduler blocks, terminating pods, high restart velocity, missing running-pod resource requests, node CPU saturation, and stale cordoned nodes with richer event-backed evidence.
+- Incident, remediation, postmortem, and alert lifecycle state now persist in SQLite via a shared backend database configured by `DB_PATH` instead of process-local in-memory stores.
 - Release metadata bumped to `v0.4.0` across package, Docker, Compose, Helm, and Kubernetes manifests.
 
 ### Fixed

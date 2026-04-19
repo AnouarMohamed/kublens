@@ -121,7 +121,7 @@ func (b benchmarkClusterReader) PodLogs(context.Context, string, string, string,
 	return b.logs
 }
 
-func (b benchmarkClusterReader) StreamPodLogs(context.Context, string, string, string, int) (io.ReadCloser, error) {
+func (b benchmarkClusterReader) StreamPodLogs(context.Context, string, string, string, int, bool) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader(b.logs)), nil
 }
 

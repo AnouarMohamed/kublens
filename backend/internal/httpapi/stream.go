@@ -159,13 +159,13 @@ func trimEvents(items []model.K8sEvent, limit int) []model.K8sEvent {
 	return append([]model.K8sEvent(nil), items[:limit]...)
 }
 
-func timeoutUnlessPath(timeout time.Duration, skipPrefix string) func(http.Handler) http.Handler {
+func timeoutUnlessPath(timeout time.Duration, skip func(path string) bool) func(http.Handler) http.Handler {
 	base := middleware.Timeout(timeout)
 	return func(next http.Handler) http.Handler {
 		withTimeout := base(next)
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.HasPrefix(r.URL.Path, skipPrefix) {
+			if skip != nil && skip(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

@@ -606,7 +606,7 @@ func (testClusterReader) PodLogs(context.Context, string, string, string, int) s
 	return "dependency connection timeout"
 }
 
-func (testClusterReader) StreamPodLogs(context.Context, string, string, string, int) (io.ReadCloser, error) {
+func (testClusterReader) StreamPodLogs(context.Context, string, string, string, int, bool) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("streamed logs")), nil
 }
 

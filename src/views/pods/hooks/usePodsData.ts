@@ -17,6 +17,9 @@ const defaultCreateForm: PodCreateRequest = {
   image: "nginx:latest",
 };
 
+const defaultLogTailLines = 100;
+const maxLogLines = 500;
+
 /**
  * UI state and actions for the pods view.
  */
@@ -31,7 +34,7 @@ interface UsePodsDataResult {
   namespaceFilter: string;
   selectedPod: PodDetail | null;
   activeTab: PodDetailTab;
-  logText: string | null;
+  logLines: string[];
   logPodName: string;
   logStreaming: boolean;
   logError: string | null;
@@ -49,14 +52,28 @@ interface UsePodsDataResult {
   updateCreateFormField: (field: keyof PodCreateRequest, value: string) => void;
   load: () => Promise<void>;
   openDetail: (namespace: string, podName: string) => Promise<void>;
-  openLogs: (namespace: string, podName: string) => Promise<void>;
-  streamLogs: (namespace: string, podName: string) => Promise<void>;
+  openLogs: (namespace: string, podName: string, container?: string) => Promise<void>;
+  startLogStream: (namespace: string, podName: string, container?: string) => void;
   stopLogStream: () => void;
   closeLogs: () => void;
   createPod: () => Promise<void>;
   restartPod: (namespace: string, podName: string) => Promise<void>;
   requestDelete: (pod: Pod) => Promise<void>;
   clearSelectedPod: () => void;
+}
+
+function splitLogText(logs: string): string[] {
+  if (logs.trim() === "") {
+    return [];
+  }
+  return logs.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+}
+
+function trimLogLines(lines: string[]): string[] {
+  if (lines.length <= maxLogLines) {
+    return lines;
+  }
+  return lines.slice(-maxLogLines);
 }
 
 /**
@@ -73,7 +90,7 @@ export function usePodsData(): UsePodsDataResult {
   const [namespaceFilter, setNamespaceFilterState] = useState("All");
   const [selectedPod, setSelectedPod] = useState<PodDetail | null>(null);
   const [activeTab, setActiveTabState] = useState<PodDetailTab>("specs");
-  const [logText, setLogText] = useState<string | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
   const [logPodName, setLogPodName] = useState("");
   const [logStreaming, setLogStreaming] = useState(false);
   const [logError, setLogError] = useState<string | null>(null);
@@ -85,8 +102,8 @@ export function usePodsData(): UsePodsDataResult {
   const [error, setError] = useState<string | null>(null);
   const canRead = can("read");
   const canWrite = can("write");
-  const logAbortRef = useRef<AbortController | null>(null);
-  const maxLogChars = 20000;
+  const logStreamRef = useRef<EventSource | null>(null);
+  const logStreamTokenRef = useRef(0);
 
   const setSearch = useCallback((value: string) => {
     setSearchState(value);
@@ -110,6 +127,13 @@ export function usePodsData(): UsePodsDataResult {
 
   const updateCreateFormField = useCallback((field: keyof PodCreateRequest, value: string) => {
     setCreateForm((state) => ({ ...state, [field]: value }));
+  }, []);
+
+  const stopLogStream = useCallback(() => {
+    logStreamTokenRef.current += 1;
+    logStreamRef.current?.close();
+    logStreamRef.current = null;
+    setLogStreaming(false);
   }, []);
 
   const load = useCallback(async () => {
@@ -141,9 +165,9 @@ export function usePodsData(): UsePodsDataResult {
 
   useEffect(() => {
     return () => {
-      logAbortRef.current?.abort();
+      stopLogStream();
     };
-  }, []);
+  }, [stopLogStream]);
 
   useStreamRefresh({
     enabled: canRead,
@@ -192,22 +216,20 @@ export function usePodsData(): UsePodsDataResult {
   );
 
   const openLogs = useCallback(
-    async (namespace: string, podName: string) => {
+    async (namespace: string, podName: string, container?: string) => {
       if (!canRead) {
         setError("Authenticate to view pod logs.");
         return;
       }
 
-      logAbortRef.current?.abort();
-      logAbortRef.current = null;
-      setLogStreaming(false);
+      stopLogStream();
       setLogError(null);
       setConfirmingDeleteId(null);
       setIsBusy(true);
       try {
-        const logs = await api.getPodLogs(namespace, podName, 50);
+        const logs = await api.getPodLogs(namespace, podName, defaultLogTailLines, container);
         setLogPodName(`${namespace}/${podName}`);
-        setLogText(logs);
+        setLogLines(trimLogLines(splitLogText(logs)));
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load pod logs");
@@ -215,77 +237,75 @@ export function usePodsData(): UsePodsDataResult {
         setIsBusy(false);
       }
     },
-    [canRead],
+    [canRead, stopLogStream],
   );
 
-  const streamLogs = useCallback(
-    async (namespace: string, podName: string) => {
+  const startLogStream = useCallback(
+    (namespace: string, podName: string, container?: string) => {
       if (!canRead) {
         setError("Authenticate to view pod logs.");
         return;
       }
 
-      logAbortRef.current?.abort();
-      const controller = new AbortController();
-      logAbortRef.current = controller;
+      if (typeof EventSource === "undefined") {
+        void openLogs(namespace, podName, container);
+        return;
+      }
+
+      stopLogStream();
+      const streamToken = logStreamTokenRef.current + 1;
+      logStreamTokenRef.current = streamToken;
+
+      const source = new EventSource(api.getPodLogStreamURL(namespace, podName, defaultLogTailLines, container, true));
+      logStreamRef.current = source;
+
+      setLogPodName(`${namespace}/${podName}`);
+      setLogLines([]);
       setLogStreaming(true);
       setLogError(null);
       setConfirmingDeleteId(null);
-      setIsBusy(true);
-      setLogPodName(`${namespace}/${podName}`);
-      setLogText("");
+      setError(null);
 
-      try {
-        const response = await api.streamPodLogs(namespace, podName, 50, undefined, controller.signal);
-        if (!response.ok) {
-          throw new Error(`Log stream failed with status ${response.status}`);
-        }
-        if (!response.body) {
-          throw new Error("Log stream not available");
+      source.onmessage = (event) => {
+        if (logStreamTokenRef.current !== streamToken) {
+          return;
         }
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        while (true) {
-          const { value, done } = await reader.read();
-          if (done) {
-            break;
+        if (event.data === "[stream-timeout]") {
+          if (logStreamRef.current === source) {
+            logStreamRef.current = null;
           }
-          if (value) {
-            const chunk = decoder.decode(value, { stream: true });
-            setLogText((prev) => {
-              const next = (prev ?? "") + chunk;
-              if (next.length > maxLogChars) {
-                return next.slice(-maxLogChars);
-              }
-              return next;
-            });
-          }
+          logStreamTokenRef.current += 1;
+          source.close();
+          setLogStreaming(false);
+          setLogError("Log stream reached the 10-minute limit.");
+          return;
         }
-      } catch (err) {
-        if (!controller.signal.aborted) {
-          setLogError(err instanceof Error ? err.message : "Log stream failed");
+
+        setLogLines((current) => trimLogLines([...current, event.data]));
+      };
+
+      source.onerror = () => {
+        if (logStreamTokenRef.current !== streamToken) {
+          return;
         }
-      } finally {
-        if (logAbortRef.current === controller) {
-          logAbortRef.current = null;
+
+        if (logStreamRef.current === source) {
+          logStreamRef.current = null;
         }
+        logStreamTokenRef.current += 1;
+        source.close();
         setLogStreaming(false);
-        setIsBusy(false);
-      }
+        setLogError((current) => current ?? "Log stream disconnected.");
+      };
     },
-    [canRead],
+    [canRead, openLogs, stopLogStream],
   );
-
-  const stopLogStream = useCallback(() => {
-    logAbortRef.current?.abort();
-    logAbortRef.current = null;
-    setLogStreaming(false);
-  }, []);
 
   const closeLogs = useCallback(() => {
     stopLogStream();
-    setLogText(null);
+    setLogLines([]);
+    setLogPodName("");
     setLogError(null);
   }, [stopLogStream]);
 
@@ -390,7 +410,7 @@ export function usePodsData(): UsePodsDataResult {
     namespaceFilter,
     selectedPod,
     activeTab,
-    logText,
+    logLines,
     logPodName,
     logStreaming,
     logError,
@@ -409,7 +429,7 @@ export function usePodsData(): UsePodsDataResult {
     load,
     openDetail,
     openLogs,
-    streamLogs,
+    startLogStream,
     stopLogStream,
     closeLogs,
     createPod,

@@ -132,25 +132,29 @@ func (s *Service) PodLogs(ctx context.Context, namespace, name, container string
 	return string(body)
 }
 
-func (s *Service) StreamPodLogs(ctx context.Context, namespace, name, container string, lines int) (io.ReadCloser, error) {
+func (s *Service) StreamPodLogs(
+	ctx context.Context,
+	namespace,
+	name,
+	container string,
+	tailLines int,
+	follow bool,
+) (io.ReadCloser, error) {
 	if s.inMockMode() {
 		return io.NopCloser(strings.NewReader(mockPodLogs(name))), nil
 	}
 
-	callCtx, cancel := s.withTimeout(ctx)
-	defer cancel()
-
-	if lines <= 0 {
-		lines = 150
+	if tailLines <= 0 {
+		tailLines = 100
 	}
-	tailLines := int64(lines)
+	lines := int64(tailLines)
 	opts := &corev1.PodLogOptions{
-		Follow:    true,
-		TailLines: &tailLines,
+		Follow:    follow,
+		TailLines: &lines,
 	}
 	if trimmed := strings.TrimSpace(container); trimmed != "" {
 		opts.Container = trimmed
 	}
 	req := s.client.CoreV1().Pods(namespace).GetLogs(name, opts)
-	return req.Stream(callCtx)
+	return req.Stream(ctx)
 }

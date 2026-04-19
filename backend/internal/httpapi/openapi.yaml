@@ -364,22 +364,28 @@ paths:
           schema:
             type: string
         - in: query
-          name: lines
+          name: tailLines
           required: false
           schema:
             type: integer
             minimum: 1
-            default: 50
+            default: 100
         - in: query
           name: container
           required: false
           schema:
             type: string
+        - in: query
+          name: follow
+          required: false
+          schema:
+            type: boolean
+            default: true
       responses:
         "200":
           description: Streaming log output
           content:
-            text/plain:
+            text/event-stream:
               schema:
                 type: string
   /pods/{namespace}/{name}/describe:

@@ -11,8 +11,8 @@ interface PodsTableProps {
   isLoading: boolean;
   confirmingDeleteId: string | null;
   onOpenDetail: (namespace: string, podName: string) => Promise<void>;
-  onOpenLogs: (namespace: string, podName: string) => Promise<void>;
-  onStreamLogs: (namespace: string, podName: string) => Promise<void>;
+  onOpenLogs: (namespace: string, podName: string) => void;
+  onOpenSnapshot: (namespace: string, podName: string) => Promise<void>;
   onRestartPod: (namespace: string, podName: string) => Promise<void>;
   onRequestDelete: (pod: Pod) => Promise<void>;
 }
@@ -25,7 +25,7 @@ export function PodsTable({
   confirmingDeleteId,
   onOpenDetail,
   onOpenLogs,
-  onStreamLogs,
+  onOpenSnapshot,
   onRestartPod,
   onRequestDelete,
 }: PodsTableProps) {
@@ -73,11 +73,11 @@ export function PodsTable({
                     Logs
                   </button>
                   <button
-                    onClick={() => void onStreamLogs(pod.namespace, pod.name)}
+                    onClick={() => void onOpenSnapshot(pod.namespace, pod.name)}
                     className="text-xs font-mono text-[#444444] hover:text-[#e8e8e8] transition-colors"
                     disabled={!canRead}
                   >
-                    Stream
+                    Snapshot
                   </button>
                   <button
                     onClick={() => void onRestartPod(pod.namespace, pod.name)}

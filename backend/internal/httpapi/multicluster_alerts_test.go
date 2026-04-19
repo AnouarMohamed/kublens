@@ -149,7 +149,7 @@ func (altClusterReader) PodLogs(context.Context, string, string, string, int) st
 	return ""
 }
 
-func (altClusterReader) StreamPodLogs(context.Context, string, string, string, int) (io.ReadCloser, error) {
+func (altClusterReader) StreamPodLogs(context.Context, string, string, string, int, bool) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("")), nil
 }
 

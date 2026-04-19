@@ -19,7 +19,7 @@ export default function Pods() {
     namespaceFilter,
     selectedPod,
     activeTab,
-    logText,
+    logLines,
     logPodName,
     logStreaming,
     logError,
@@ -38,7 +38,7 @@ export default function Pods() {
     load,
     openDetail,
     openLogs,
-    streamLogs,
+    startLogStream,
     stopLogStream,
     closeLogs,
     createPod,
@@ -92,14 +92,14 @@ export default function Pods() {
         isLoading={isLoading}
         confirmingDeleteId={confirmingDeleteId}
         onOpenDetail={openDetail}
-        onOpenLogs={openLogs}
-        onStreamLogs={streamLogs}
+        onOpenLogs={startLogStream}
+        onOpenSnapshot={openLogs}
         onRestartPod={restartPod}
         onRequestDelete={requestDelete}
       />
 
       <PodLogsModal
-        logText={logText}
+        logLines={logLines}
         logPodName={logPodName}
         logStreaming={logStreaming}
         logError={logError}

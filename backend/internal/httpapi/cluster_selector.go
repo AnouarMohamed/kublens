@@ -227,12 +227,19 @@ func (r *routedCluster) PodLogs(ctx context.Context, namespace, name, container 
 	return reader.PodLogs(ctx, namespace, name, container, lines)
 }
 
-func (r *routedCluster) StreamPodLogs(ctx context.Context, namespace, name, container string, lines int) (io.ReadCloser, error) {
+func (r *routedCluster) StreamPodLogs(
+	ctx context.Context,
+	namespace,
+	name,
+	container string,
+	tailLines int,
+	follow bool,
+) (io.ReadCloser, error) {
 	reader := r.selectReader(ctx)
 	if reader == nil {
 		return nil, nil
 	}
-	return reader.StreamPodLogs(ctx, namespace, name, container, lines)
+	return reader.StreamPodLogs(ctx, namespace, name, container, tailLines, follow)
 }
 
 func (r *routedCluster) PodDetail(ctx context.Context, namespace, name string) (model.PodDetail, error) {

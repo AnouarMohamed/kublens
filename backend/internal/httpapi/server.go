@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -35,7 +36,7 @@ type ClusterReader interface {
 	RollbackResource(ctx context.Context, kind, namespace, name string) (model.ActionResult, error)
 	PodEvents(ctx context.Context, namespace, name string) []model.K8sEvent
 	PodLogs(ctx context.Context, namespace, name, container string, lines int) string
-	StreamPodLogs(ctx context.Context, namespace, name, container string, lines int) (io.ReadCloser, error)
+	StreamPodLogs(ctx context.Context, namespace, name, container string, tailLines int, follow bool) (io.ReadCloser, error)
 	PodDetail(ctx context.Context, namespace, name string) (model.PodDetail, error)
 	NodeDetail(ctx context.Context, name string) (model.NodeDetail, error)
 	CreatePod(ctx context.Context, req model.PodCreateRequest) (model.ActionResult, error)
@@ -364,7 +365,9 @@ func (s *Server) Router(distDir string) http.Handler {
 	r.Use(middleware.RequestID)
 	r.Use(s.securityHeadersMiddleware)
 	r.Use(middleware.Recoverer)
-	r.Use(timeoutUnlessPath(20*time.Second, apiStreamPrefix))
+	r.Use(timeoutUnlessPath(20*time.Second, func(path string) bool {
+		return strings.HasPrefix(path, apiStreamPrefix) || strings.HasSuffix(path, apiPodLogsStreamSuffix)
+	}))
 	r.Use(s.limiter.middlewareWithKey(s.now, s.clientIPFromRequest))
 	r.Use(s.metrics.middleware(s.logger))
 	r.Use(s.authMiddleware)
