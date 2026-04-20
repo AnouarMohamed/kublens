@@ -322,13 +322,16 @@ function buildShiftBriefMarkdown({
     "",
     `### Active Incidents (${openIncidents.length})`,
     ...toMarkdownList(
-      openIncidents.map((incident) => `- [${incident.status}] ${incident.title} — started ${formatRelativeTime(incident.openedAt)}`),
+      openIncidents.map(
+        (incident) => `- [${incident.status}] ${incident.title} — started ${formatRelativeTime(incident.openedAt)}`,
+      ),
     ),
     "",
     `### Pending Remediations (${pendingRemediations.length})`,
     ...toMarkdownList(
       pendingRemediations.map(
-        (item) => `- [${item.riskLevel}] ${item.resource || "unknown resource"} — ${item.reason || "No reason provided"}`,
+        (item) =>
+          `- [${item.riskLevel}] ${item.resource || "unknown resource"} — ${item.reason || "No reason provided"}`,
       ),
     ),
     "",

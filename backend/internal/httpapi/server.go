@@ -126,6 +126,8 @@ type remediationStore interface {
 	Approve(id string, user string) (model.RemediationProposal, error)
 	Reject(id string, user string, reason string) (model.RemediationProposal, error)
 	MarkExecuted(id string, user string, result string) (model.RemediationProposal, error)
+	GetGitOpsArtifact(proposalID string) (model.RemediationGitOpsArtifact, bool)
+	UpsertGitOpsArtifact(proposalID string, artifact model.GitOpsArtifact, generatedBy string) (model.RemediationGitOpsArtifact, error)
 }
 
 type riskAnalyzer interface {
@@ -393,6 +395,7 @@ func (s *Server) Router(distDir string) http.Handler {
 		api.Get("/metrics", s.handleMetrics)
 		api.Get("/metrics/prometheus", s.handlePrometheusMetrics)
 		api.Get("/slo", s.handleSLOOverview)
+		api.Get("/rightsizing", s.handleRightsizingOverview)
 		api.Post("/alerts/dispatch", s.handleAlertDispatch)
 		api.Post("/alerts/test", s.handleAlertTest)
 		api.Get("/alerts/lifecycle", s.handleListAlertLifecycle)
@@ -444,6 +447,8 @@ func (s *Server) Router(distDir string) http.Handler {
 		api.Get("/postmortems/{id}", s.handleGetPostmortem)
 		api.Post("/remediation/propose", s.handleProposeRemediation)
 		api.Get("/remediation", s.handleListRemediation)
+		api.Get("/remediation/{id}/gitops", s.handleGetRemediationGitOps)
+		api.Post("/remediation/{id}/gitops", s.handleGenerateRemediationGitOps)
 		api.Post("/remediation/{id}/approve", s.handleApproveRemediation)
 		api.Post("/remediation/{id}/execute", s.handleExecuteRemediation)
 		api.Post("/remediation/{id}/reject", s.handleRejectRemediation)

@@ -33,6 +33,7 @@ const VALID_VIEWS = new Set<View>([
   "rbac",
   "metrics",
   "slo",
+  "rightsizing",
   "audit",
   "predictions",
   "diagnostics",
@@ -97,6 +98,7 @@ function mapPathToView(pathname: string): View | null {
     { prefix: "/riskguard", view: "riskguard" },
     { prefix: "/postmortems", view: "postmortems" },
     { prefix: "/slo", view: "slo" },
+    { prefix: "/rightsizing", view: "rightsizing" },
     { prefix: "/assistant", view: "assistant" },
   ];
   for (const item of mapping) {

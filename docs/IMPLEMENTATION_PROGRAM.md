@@ -95,6 +95,6 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | SLO and error-budget control center        | shipped | TBD   | Phase 1      |
 | Policy preflight in Risk Guard             | shipped | TBD   | Phase 1      |
 | Incident replay and evidence bundles       | shipped | TBD   | Phase 1      |
-| GitOps remediation mode                    | planned | TBD   | Phase 2      |
-| Cost and rightsizing advisor               | planned | TBD   | Phase 2      |
+| GitOps remediation mode                    | shipped | TBD   | Phase 2      |
+| Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | planned | TBD   | Phase 3      |

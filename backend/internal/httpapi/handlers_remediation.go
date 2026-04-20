@@ -169,6 +169,56 @@ func (s *Server) handleRejectRemediation(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, updated)
 }
 
+func (s *Server) handleGetRemediationGitOps(w http.ResponseWriter, r *http.Request) {
+	if s.remediations == nil {
+		writeError(w, http.StatusServiceUnavailable, "remediation store is not configured")
+		return
+	}
+
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	item, ok, err := getRemediationGitOpsArtifactWithContext(r.Context(), s.remediations, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load remediation gitops artifact")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "remediation gitops artifact not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleGenerateRemediationGitOps(w http.ResponseWriter, r *http.Request) {
+	if s.remediations == nil {
+		writeError(w, http.StatusServiceUnavailable, "remediation store is not configured")
+		return
+	}
+
+	id := strings.TrimSpace(chi.URLParam(r, "id"))
+	proposal, ok, err := getRemediationWithContext(r.Context(), s.remediations, id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load remediation proposal")
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusNotFound, "remediation proposal not found")
+		return
+	}
+
+	principal, _ := auth.PrincipalFromContext(r.Context())
+	artifact := remediation.BuildGitOpsArtifact(proposal, collectGitOpsWorkloadInventory(r.Context(), s.cluster), s.now())
+	stored, err := upsertRemediationGitOpsArtifactWithContext(r.Context(), s.remediations, proposal.ID, artifact, principal.User)
+	if err != nil {
+		if errors.Is(err, remediation.ErrProposalNotFound) {
+			writeError(w, http.StatusNotFound, "remediation proposal not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to persist remediation gitops artifact")
+		return
+	}
+	writeJSON(w, http.StatusOK, stored)
+}
+
 func (s *Server) associateExecutedProposalWithIncidents(ctx context.Context, proposal model.RemediationProposal) {
 	if s.incidents == nil {
 		return

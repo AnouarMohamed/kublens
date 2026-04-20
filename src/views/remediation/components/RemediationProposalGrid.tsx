@@ -11,6 +11,7 @@ interface RemediationProposalGridProps {
   onSelectProposal: (id: string) => void;
   onApprove: (id: string) => void;
   onApproveAndQueueExecute: (proposal: RemediationProposal) => void;
+  onRequestGitOps: (proposal: RemediationProposal) => void;
   onRequestReject: (id: string) => void;
   onRequestExecute: (proposal: RemediationProposal) => void;
 }
@@ -25,6 +26,7 @@ export function RemediationProposalGrid({
   onSelectProposal,
   onApprove,
   onApproveAndQueueExecute,
+  onRequestGitOps,
   onRequestReject,
   onRequestExecute,
 }: RemediationProposalGridProps) {
@@ -76,6 +78,17 @@ export function RemediationProposalGrid({
                 className="btn-sm border-zinc-600"
               >
                 Approve
+              </button>
+
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onRequestGitOps(proposal);
+                }}
+                disabled={!canRead || isActing}
+                className="btn-sm border-zinc-600"
+              >
+                Prepare GitOps
               </button>
 
               <button

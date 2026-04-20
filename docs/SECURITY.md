@@ -36,6 +36,7 @@
 
 - Per-request audit records with actor, route, status, and latency
 - Action-specific audit labels for critical operations
+- Persisted remediation GitOps artifacts with actor/timestamp linkage for governed change review
 - Optional OpenTelemetry traces for backend and predictor paths
 
 ## Continuous assurance

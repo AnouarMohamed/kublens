@@ -218,6 +218,12 @@ export const VIEW_SECTIONS: ViewSection[] = [
         kubectlCommand: "kubectl get --raw /metrics",
       },
       {
+        id: "rightsizing",
+        label: "Rightsizing",
+        description: "Cost and resource-efficiency recommendations with GitOps-ready patches.",
+        kubectlCommand: "kubectl top pods -A",
+      },
+      {
         id: "audit",
         label: "Audit Trail",
         description: "Live request and action history with operator attribution.",

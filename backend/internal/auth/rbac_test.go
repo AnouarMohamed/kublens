@@ -17,6 +17,7 @@ func TestRequiredRole(t *testing.T) {
 		{name: "assistant feedback post", method: http.MethodPost, path: "/api/assistant/references/feedback", want: RoleViewer},
 		{name: "incident create", method: http.MethodPost, path: "/api/incidents", want: RoleViewer},
 		{name: "remediation propose", method: http.MethodPost, path: "/api/remediation/propose", want: RoleViewer},
+		{name: "remediation gitops", method: http.MethodPost, path: "/api/remediation/rem-1/gitops", want: RoleViewer},
 		{name: "remediation reject", method: http.MethodPost, path: "/api/remediation/rem-1/reject", want: RoleViewer},
 		{name: "risk analyze", method: http.MethodPost, path: "/api/risk-guard/analyze", want: RoleViewer},
 		{name: "memory write", method: http.MethodPost, path: "/api/memory/runbooks", want: RoleOperator},

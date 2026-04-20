@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { runAsyncAction, runReadLoad } from "../../../app/hooks/asyncTask";
 import { useAuthSession } from "../../../context/AuthSessionContext";
+import { ApiError } from "../../../lib/api";
 import { api } from "../../../lib/api";
-import type { RemediationProposal } from "../../../types";
+import type { RemediationGitOpsArtifact, RemediationProposal } from "../../../types";
 import { compareProposalPriority, normalizeRisk, type RiskFilter, type StatusFilter } from "../utils";
 
 interface RemediationStats {
@@ -25,6 +26,9 @@ interface UseRemediationDataResult {
   rejectingID: string | null;
   rejectReason: string;
   executing: RemediationProposal | null;
+  gitopsArtifact: RemediationGitOpsArtifact | null;
+  gitopsLoading: boolean;
+  gitopsError: string | null;
   isLoading: boolean;
   isActing: boolean;
   error: string | null;
@@ -45,9 +49,11 @@ interface UseRemediationDataResult {
   setRiskFilter: (risk: RiskFilter) => void;
   setSearchQuery: (query: string) => void;
   refresh: () => Promise<void>;
+  refreshGitOpsArtifact: (proposalID: string) => Promise<void>;
   propose: () => Promise<void>;
   approve: (id: string) => Promise<RemediationProposal | null>;
   approveAndPrepareExecute: (proposal: RemediationProposal) => Promise<void>;
+  generateGitOpsArtifact: (proposal: RemediationProposal) => Promise<void>;
   execute: (proposal: RemediationProposal) => Promise<void>;
   reject: (id: string, reason: string) => Promise<void>;
 }
@@ -67,6 +73,9 @@ export function useRemediationData(): UseRemediationDataResult {
   const [rejectingID, setRejectingIDState] = useState<string | null>(null);
   const [rejectReason, setRejectReasonState] = useState("");
   const [executing, setExecutingState] = useState<RemediationProposal | null>(null);
+  const [gitopsArtifact, setGitOpsArtifact] = useState<RemediationGitOpsArtifact | null>(null);
+  const [gitopsLoading, setGitOpsLoading] = useState(false);
+  const [gitopsError, setGitOpsError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +180,51 @@ export function useRemediationData(): UseRemediationDataResult {
     return items.find((item) => item.id === selectedID) ?? null;
   }, [items, selectedID]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadGitOpsArtifact(id: string) {
+      setGitOpsLoading(true);
+      try {
+        const artifact = await api.getRemediationGitOpsArtifact(id);
+        if (cancelled) {
+          return;
+        }
+        setGitOpsArtifact(artifact);
+        setGitOpsError(null);
+      } catch (err) {
+        if (cancelled) {
+          return;
+        }
+        if (err instanceof ApiError && err.status === 404) {
+          setGitOpsArtifact(null);
+          setGitOpsError(null);
+          return;
+        }
+        setGitOpsArtifact(null);
+        setGitOpsError(err instanceof Error ? err.message : "Failed to load GitOps artifact");
+      } finally {
+        if (!cancelled) {
+          setGitOpsLoading(false);
+        }
+      }
+    }
+
+    if (!canRead || !selectedProposal) {
+      setGitOpsArtifact(null);
+      setGitOpsError(null);
+      setGitOpsLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadGitOpsArtifact(selectedProposal.id);
+    return () => {
+      cancelled = true;
+    };
+  }, [canRead, selectedProposal]);
+
   const queueHead = useMemo(
     () => sortedItems.find((item) => item.status === "proposed" || item.status === "approved") ?? null,
     [sortedItems],
@@ -186,6 +240,31 @@ export function useRemediationData(): UseRemediationDataResult {
     ).length;
     return { total: items.length, proposed, approved, executed, rejected, highRiskOpen };
   }, [items]);
+
+  const refreshGitOpsArtifact = useCallback(
+    async (proposalID: string) => {
+      if (!canRead || proposalID.trim() === "") {
+        return;
+      }
+      setGitOpsLoading(true);
+      try {
+        const artifact = await api.getRemediationGitOpsArtifact(proposalID);
+        setGitOpsArtifact(artifact);
+        setGitOpsError(null);
+      } catch (err) {
+        if (err instanceof ApiError && err.status === 404) {
+          setGitOpsArtifact(null);
+          setGitOpsError(null);
+          return;
+        }
+        setGitOpsArtifact(null);
+        setGitOpsError(err instanceof Error ? err.message : "Failed to load GitOps artifact");
+      } finally {
+        setGitOpsLoading(false);
+      }
+    },
+    [canRead],
+  );
 
   const propose = useCallback(async () => {
     await runAsyncAction({
@@ -234,6 +313,28 @@ export function useRemediationData(): UseRemediationDataResult {
       setMessage(`Proposal ${proposal.id} approved. Confirm execution next.`);
     },
     [approve],
+  );
+
+  const generateGitOpsArtifact = useCallback(
+    async (proposal: RemediationProposal) => {
+      if (!canRead) {
+        return;
+      }
+      await runAsyncAction({
+        setBusy: setIsActing,
+        setError,
+        fallbackError: "Failed to generate GitOps artifact",
+        action: async () => {
+          const artifact = await api.generateRemediationGitOpsArtifact(proposal.id);
+          setGitOpsArtifact(artifact);
+          setGitOpsError(null);
+          setSelectedIDState(proposal.id);
+          setMessage(`Prepared GitOps artifact for ${proposal.id}.`);
+          setError(null);
+        },
+      });
+    },
+    [canRead],
   );
 
   const execute = useCallback(
@@ -287,6 +388,9 @@ export function useRemediationData(): UseRemediationDataResult {
     rejectingID,
     rejectReason,
     executing,
+    gitopsArtifact,
+    gitopsLoading,
+    gitopsError,
     isLoading,
     isActing,
     error,
@@ -307,9 +411,11 @@ export function useRemediationData(): UseRemediationDataResult {
     setRiskFilter,
     setSearchQuery,
     refresh,
+    refreshGitOpsArtifact,
     propose,
     approve,
     approveAndPrepareExecute,
+    generateGitOpsArtifact,
     execute,
     reject,
   };

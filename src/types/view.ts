@@ -22,6 +22,7 @@ export type View =
   | "rbac"
   | "metrics"
   | "slo"
+  | "rightsizing"
   | "audit"
   | "predictions"
   | "diagnostics"

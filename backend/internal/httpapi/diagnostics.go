@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"kubelens-backend/internal/ai"
+	"kubelens-backend/internal/diagnostics"
 	"kubelens-backend/internal/intelligence"
 	"kubelens-backend/internal/model"
 	"kubelens-backend/internal/state"
@@ -11,7 +12,8 @@ import (
 
 func (s *Server) runDiagnostics(ctx context.Context) intelligence.Report {
 	if s.intel == nil {
-		return intelligence.NewAnalyzer(s.now).Analyze(state.ClusterState{})
+		pods, nodes := s.cluster.Snapshot(ctx)
+		return intelligenceReportFromDiagnosticsResult(diagnostics.BuildDiagnostics(pods, nodes))
 	}
 
 	if snapshot, ok := s.cluster.StateSnapshot(ctx); ok {
@@ -22,6 +24,29 @@ func (s *Server) runDiagnostics(ctx context.Context) intelligence.Report {
 	pods, nodes := s.cluster.Snapshot(ctx)
 	minimal := buildStateFromSummaries(pods, nodes)
 	return s.intel.Analyze(minimal)
+}
+
+func intelligenceReportFromDiagnosticsResult(result model.DiagnosticsResult) intelligence.Report {
+	diags := make([]intelligence.Diagnostic, 0, len(result.Issues))
+	for _, issue := range result.Issues {
+		diags = append(diags, intelligence.Diagnostic{
+			Severity:       intelligence.Severity(issue.Severity),
+			Resource:       issue.Resource,
+			Namespace:      issue.Namespace,
+			Message:        issue.Message,
+			Evidence:       append([]string(nil), issue.Evidence...),
+			Recommendation: issue.Recommendation,
+			Source:         issue.Source,
+		})
+	}
+	return intelligence.Report{
+		GeneratedAt:    result.Timestamp,
+		Diagnostics:    diags,
+		CriticalIssues: result.CriticalIssues,
+		WarningIssues:  result.WarningIssues,
+		HealthScore:    result.HealthScore,
+		Summary:        result.Summary,
+	}
 }
 
 func (s *Server) mapDiagnosticsReport(report intelligence.Report) model.DiagnosticsResult {

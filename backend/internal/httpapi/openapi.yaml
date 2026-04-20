@@ -100,6 +100,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SLOOverview"
+  /rightsizing:
+    get:
+      operationId: getRightsizingOverview
+      summary: Cost and rightsizing advisor overview
+      responses:
+        "200":
+          description: Rightsizing recommendations and GitOps previews
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RightsizingOverview"
   /auth/session:
     get:
       operationId: getAuthSession
@@ -1105,6 +1116,39 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/RemediationProposal"
+  /remediation/{id}/gitops:
+    get:
+      operationId: getRemediationGitOpsArtifact
+      summary: Get persisted GitOps artifact for a remediation proposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Persisted remediation GitOps artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemediationGitOpsArtifact"
+    post:
+      operationId: postRemediationGitOpsArtifact
+      summary: Generate or refresh a GitOps artifact for a remediation proposal
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Generated remediation GitOps artifact
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RemediationGitOpsArtifact"
   /remediation/{id}/approve:
     post:
       operationId: postRemediationApprove
@@ -2052,6 +2096,65 @@ components:
         status:
           type: string
           enum: [pending, in_progress, done, skipped]
+    GitOpsArtifact:
+      type: object
+      required:
+        [
+          supportLevel,
+          strategy,
+          summary,
+          branchName,
+          prTitle,
+          commitMessage,
+          targetPath,
+          format,
+          artifactBody,
+          instructions,
+        ]
+      properties:
+        supportLevel:
+          type: string
+          enum: [patch_ready, advisory]
+        strategy:
+          type: string
+        summary:
+          type: string
+        branchName:
+          type: string
+        prTitle:
+          type: string
+        commitMessage:
+          type: string
+        targetPath:
+          type: string
+        targetKind:
+          type: string
+        targetNamespace:
+          type: string
+        targetName:
+          type: string
+        format:
+          type: string
+        artifactBody:
+          type: string
+        instructions:
+          type: array
+          items:
+            type: string
+    RemediationGitOpsArtifact:
+      type: object
+      required: [proposalId, artifact, generatedBy, generatedAt, updatedAt]
+      properties:
+        proposalId:
+          type: string
+        artifact:
+          $ref: "#/components/schemas/GitOpsArtifact"
+        generatedBy:
+          type: string
+        generatedAt:
+          type: string
+        updatedAt:
+          type: string
     RemediationProposal:
       type: object
       required:
@@ -2116,6 +2219,116 @@ components:
           type: string
         executedAt:
           type: string
+    RightsizingRecommendation:
+      type: object
+      required:
+        [
+          id,
+          namespace,
+          pod,
+          status,
+          riskLevel,
+          summary,
+          containerCount,
+          cpuUsage,
+          memoryUsage,
+          requestCpu,
+          requestMemory,
+          limitCpu,
+          limitMemory,
+          recommendedRequestCpu,
+          recommendedRequestMemory,
+          recommendedLimitCpu,
+          recommendedLimitMemory,
+          reclaimableCpu,
+          reclaimableMemory,
+          confidence,
+        ]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        pod:
+          type: string
+        workloadKind:
+          type: string
+        workloadName:
+          type: string
+        status:
+          type: string
+          enum: [overprovisioned, underprovisioned, missing_guardrails, balanced]
+        riskLevel:
+          type: string
+        summary:
+          type: string
+        qosClass:
+          type: string
+        containerCount:
+          type: integer
+        cpuUsage:
+          type: string
+        memoryUsage:
+          type: string
+        requestCpu:
+          type: string
+        requestMemory:
+          type: string
+        limitCpu:
+          type: string
+        limitMemory:
+          type: string
+        recommendedRequestCpu:
+          type: string
+        recommendedRequestMemory:
+          type: string
+        recommendedLimitCpu:
+          type: string
+        recommendedLimitMemory:
+          type: string
+        reclaimableCpu:
+          type: string
+        reclaimableMemory:
+          type: string
+        confidence:
+          type: integer
+        artifact:
+          $ref: "#/components/schemas/GitOpsArtifact"
+    RightsizingOverview:
+      type: object
+      required:
+        [
+          generatedAt,
+          summary,
+          savingsOpportunities,
+          underprovisioned,
+          missingGuardrails,
+          balanced,
+          reclaimableCpu,
+          reclaimableMemory,
+          items,
+        ]
+      properties:
+        generatedAt:
+          type: string
+        summary:
+          type: string
+        savingsOpportunities:
+          type: integer
+        underprovisioned:
+          type: integer
+        missingGuardrails:
+          type: integer
+        balanced:
+          type: integer
+        reclaimableCpu:
+          type: string
+        reclaimableMemory:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RightsizingRecommendation"
     RemediationRejectRequest:
       type: object
       required: [reason]

@@ -22,6 +22,13 @@ type remediationContextStore interface {
 	ApproveContext(ctx context.Context, id string, user string) (model.RemediationProposal, error)
 	RejectContext(ctx context.Context, id string, user string, reason string) (model.RemediationProposal, error)
 	MarkExecutedContext(ctx context.Context, id string, user string, result string) (model.RemediationProposal, error)
+	GetGitOpsArtifactContext(ctx context.Context, proposalID string) (model.RemediationGitOpsArtifact, bool, error)
+	UpsertGitOpsArtifactContext(
+		ctx context.Context,
+		proposalID string,
+		artifact model.GitOpsArtifact,
+		generatedBy string,
+	) (model.RemediationGitOpsArtifact, error)
 }
 
 type postmortemContextStore interface {
@@ -151,6 +158,31 @@ func executeRemediationWithContext(
 		return contextual.MarkExecutedContext(ctx, id, user, result)
 	}
 	return store.MarkExecuted(id, user, result)
+}
+
+func getRemediationGitOpsArtifactWithContext(
+	ctx context.Context,
+	store remediationStore,
+	proposalID string,
+) (model.RemediationGitOpsArtifact, bool, error) {
+	if contextual, ok := store.(remediationContextStore); ok {
+		return contextual.GetGitOpsArtifactContext(ctx, proposalID)
+	}
+	item, ok := store.GetGitOpsArtifact(proposalID)
+	return item, ok, nil
+}
+
+func upsertRemediationGitOpsArtifactWithContext(
+	ctx context.Context,
+	store remediationStore,
+	proposalID string,
+	artifact model.GitOpsArtifact,
+	generatedBy string,
+) (model.RemediationGitOpsArtifact, error) {
+	if contextual, ok := store.(remediationContextStore); ok {
+		return contextual.UpsertGitOpsArtifactContext(ctx, proposalID, artifact, generatedBy)
+	}
+	return store.UpsertGitOpsArtifact(proposalID, artifact, generatedBy)
 }
 
 func createPostmortemWithContext(

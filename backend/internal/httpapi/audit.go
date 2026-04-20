@@ -303,6 +303,8 @@ func actionForRequest(method, path string) string {
 		return "postmortem.generate"
 	case m == http.MethodPost && path == apiMountPrefix+"/remediation/propose":
 		return "remediation.propose"
+	case m == http.MethodPost && strings.HasPrefix(path, apiMountPrefix+"/remediation/") && strings.HasSuffix(path, "/gitops"):
+		return "remediation.gitops.generate"
 	case m == http.MethodPost && strings.HasPrefix(path, apiMountPrefix+"/remediation/") && strings.HasSuffix(path, "/approve"):
 		return "remediation.approve"
 	case m == http.MethodPost && strings.HasPrefix(path, apiMountPrefix+"/remediation/") && strings.HasSuffix(path, "/execute"):
@@ -317,6 +319,8 @@ func actionForRequest(method, path string) string {
 		return "memory.fix.record"
 	case m == http.MethodPost && path == apiMountPrefix+"/risk-guard/analyze":
 		return "riskguard.analyze"
+	case m == http.MethodGet && path == apiMountPrefix+"/rightsizing":
+		return "rightsizing.view"
 	case m == http.MethodPost && path == apiMountPrefix+"/alerts/lifecycle":
 		return "alert.lifecycle.update"
 	case m == http.MethodPost && path == apiMountPrefix+"/pods":

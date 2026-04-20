@@ -34,7 +34,9 @@ export function useAssistantChat() {
 
   useEffect(() => {
     if (activeSession) {
-      setMessages((state) => (areMessagesEqual(state, activeSession.messages) ? state : cloneMessages(activeSession.messages)));
+      setMessages((state) =>
+        areMessagesEqual(state, activeSession.messages) ? state : cloneMessages(activeSession.messages),
+      );
       return;
     }
 
@@ -133,10 +135,7 @@ export function useAssistantChat() {
           timestamp: new Date().toISOString(),
           hints: ["Show cluster health", "What should I fix first?"],
         };
-        const next = [
-          ...state,
-          errorMessage,
-        ];
+        const next = [...state, errorMessage];
         saveSession(sessionID, next);
         return next;
       });

@@ -35,6 +35,27 @@ type MemoryRunbook = {
   title: string;
 };
 
+type RemediationProposal = {
+  id: string;
+  kind: "restart_pod" | "cordon_node" | "rollback_deployment";
+};
+
+type RemediationGitOpsArtifact = {
+  proposalId: string;
+  artifact: {
+    supportLevel: "patch_ready" | "advisory";
+    artifactBody: string;
+  };
+};
+
+type RightsizingOverview = {
+  items: Array<{
+    id: string;
+    status: "overprovisioned" | "underprovisioned" | "missing_guardrails" | "balanced";
+    artifact?: { supportLevel: "patch_ready" | "advisory" };
+  }>;
+};
+
 type MemoryFix = {
   id: string;
   incidentId: string;
@@ -133,6 +154,49 @@ test("incident lifecycle and memory flow remain operational", async ({ request }
   expect(evidence.incidentId).toBe(currentIncident.id);
   expect(evidence.audit.length).toBeGreaterThan(0);
   expect(evidence.markdown).toContain("Incident Evidence Bundle");
+
+  const proposals = await expectJSON<RemediationProposal[]>(
+    await request.post("/api/remediation/propose", {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+      data: {},
+    }),
+    200,
+  );
+  const restartProposal = proposals.find((item) => item.kind === "restart_pod");
+  expect(restartProposal).toBeTruthy();
+
+  const generatedArtifact = await expectJSON<RemediationGitOpsArtifact>(
+    await request.post(`/api/remediation/${encodeURIComponent(restartProposal!.id)}/gitops`, {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+      data: {},
+    }),
+    200,
+  );
+  expect(generatedArtifact.proposalId).toBe(restartProposal!.id);
+  expect(generatedArtifact.artifact.artifactBody.length).toBeGreaterThan(0);
+
+  const fetchedArtifact = await expectJSON<RemediationGitOpsArtifact>(
+    await request.get(`/api/remediation/${encodeURIComponent(restartProposal!.id)}/gitops`, {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+    }),
+    200,
+  );
+  expect(fetchedArtifact.proposalId).toBe(restartProposal!.id);
+
+  const rightsizing = await expectJSON<RightsizingOverview>(
+    await request.get("/api/rightsizing", {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+    }),
+    200,
+  );
+  expect(rightsizing.items.length).toBeGreaterThan(0);
+  expect(
+    rightsizing.items.some(
+      (item) =>
+        item.status !== "balanced" &&
+        (item.artifact?.supportLevel === "patch_ready" || item.artifact?.supportLevel === "advisory"),
+    ),
+  ).toBeTruthy();
 
   const runbookName = `e2e-runbook-${Date.now()}`;
   const createdRunbook = await expectJSON<MemoryRunbook>(

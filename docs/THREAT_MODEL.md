@@ -35,6 +35,7 @@ This document captures high-risk abuse paths and implemented controls for the cu
 | Rate-limit bypass                            | API exhaustion                        | Central limiter on `/api/*` requests                                             |
 | Proxy-header spoofing                        | Rate-limit and audit evasion          | Trusted proxy CIDR allowlist for `X-Forwarded-For` trust                         |
 | Remediation self-approval/execution in prod  | Separation-of-duties failure          | Four-eyes enforcement in remediation execute path (`prod`)                       |
+| Unsafe or misleading GitOps artifact output  | Bad patch/advisory enters change flow | Deterministic artifact builders, persisted artifacts, audit trail, human review  |
 | Prompt/knowledge injection in assistant flow | Misleading recommendations            | Deterministic context backbone, optional references, explicit source attribution |
 | Webhook integration abuse                    | Exfiltration or spam                  | Explicitly configured webhook endpoints and auth-gated dispatch/test endpoints   |
 | Audit poisoning                              | Forensics degradation                 | Structured audit schema, bounded storage, sanitized fields                       |

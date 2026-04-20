@@ -47,6 +47,7 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /metrics`
 - `GET /metrics/prometheus`
 - `GET /slo`
+- `GET /rightsizing`
 
 ## Auth and cluster context
 
@@ -130,6 +131,8 @@ Notes:
 - `GET /postmortems/{id}`
 - `POST /remediation/propose`
 - `GET /remediation`
+- `GET /remediation/{id}/gitops`
+- `POST /remediation/{id}/gitops`
 - `POST /remediation/{id}/approve`
 - `POST /remediation/{id}/execute`
 - `POST /remediation/{id}/reject`
@@ -191,6 +194,22 @@ curl -s http://localhost:3000/api/slo \
 
 ```bash
 curl -s http://localhost:3000/api/incidents/<incident-id>/evidence \
+  -H "Authorization: Bearer viewer-token"
+```
+
+### Generate remediation GitOps artifact
+
+```bash
+curl -X POST http://localhost:3000/api/remediation/<proposal-id>/gitops \
+  -H "Authorization: Bearer viewer-token" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+### Review rightsizing recommendations
+
+```bash
+curl -s http://localhost:3000/api/rightsizing \
   -H "Authorization: Bearer viewer-token"
 ```
 

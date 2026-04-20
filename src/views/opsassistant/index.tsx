@@ -1,5 +1,9 @@
 import { useEffect } from "react";
-import { VIEW_NAVIGATE_EVENT, consumePendingViewNavigationDetail, type ViewNavigateDetail } from "../../app/viewNavigation";
+import {
+  VIEW_NAVIGATE_EVENT,
+  consumePendingViewNavigationDetail,
+  type ViewNavigateDetail,
+} from "../../app/viewNavigation";
 import { intentOptions } from "./constants";
 import { OpsAssistantComposer } from "./components/OpsAssistantComposer";
 import { OpsAssistantHeader } from "./components/OpsAssistantHeader";

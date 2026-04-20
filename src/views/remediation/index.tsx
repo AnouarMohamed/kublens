@@ -1,4 +1,5 @@
 import { RemediationFilters } from "./components/RemediationFilters";
+import { RemediationGitOpsPanel } from "./components/RemediationGitOpsPanel";
 import { RemediationGuidance } from "./components/RemediationGuidance";
 import { RemediationHeader } from "./components/RemediationHeader";
 import { ExecuteModal, RejectModal } from "./components/RemediationModals";
@@ -14,6 +15,9 @@ export default function RemediationView() {
     rejectingID,
     rejectReason,
     executing,
+    gitopsArtifact,
+    gitopsLoading,
+    gitopsError,
     isLoading,
     isActing,
     error,
@@ -33,9 +37,11 @@ export default function RemediationView() {
     setRiskFilter,
     setSearchQuery,
     refresh,
+    refreshGitOpsArtifact,
     propose,
     approve,
     approveAndPrepareExecute,
+    generateGitOpsArtifact,
     execute,
     reject,
   } = useRemediationData();
@@ -83,11 +89,23 @@ export default function RemediationView() {
         onSelectProposal={setSelectedID}
         onApprove={(id) => void approve(id)}
         onApproveAndQueueExecute={(proposal) => void approveAndPrepareExecute(proposal)}
+        onRequestGitOps={(proposal) => void generateGitOpsArtifact(proposal)}
         onRequestReject={(id) => {
           setRejectingID(id);
           setRejectReason("");
         }}
         onRequestExecute={setExecuting}
+      />
+
+      <RemediationGitOpsPanel
+        proposal={selectedProposal}
+        artifact={gitopsArtifact}
+        gitopsLoading={gitopsLoading}
+        gitopsError={gitopsError}
+        isActing={isActing}
+        canRead={canRead}
+        onGenerate={(proposal) => void generateGitOpsArtifact(proposal)}
+        onRefresh={(proposalID) => void refreshGitOpsArtifact(proposalID)}
       />
 
       <RejectModal

@@ -31,14 +31,17 @@ export function useChatSessions() {
     return id;
   }, []);
 
-  const selectSession = useCallback((id: string) => {
-    setActiveSessionId((current) => {
-      if (sessions.some((session) => session.id === id)) {
-        return id;
-      }
-      return current;
-    });
-  }, [sessions]);
+  const selectSession = useCallback(
+    (id: string) => {
+      setActiveSessionId((current) => {
+        if (sessions.some((session) => session.id === id)) {
+          return id;
+        }
+        return current;
+      });
+    },
+    [sessions],
+  );
 
   const saveSession = useCallback((id: string, messages: AssistantMessage[]) => {
     const firstUserMessage = messages.find((message) => message.role === "user" && message.content.trim() !== "");
@@ -108,7 +111,9 @@ function normalizeSession(value: unknown): ChatSession | null {
   const id = typeof candidate.id === "string" ? candidate.id.trim() : "";
   const title = typeof candidate.title === "string" ? candidate.title.trim() : "";
   const startedAt = normalizeTimestamp(typeof candidate.startedAt === "string" ? candidate.startedAt : "");
-  const messages = Array.isArray(candidate.messages) ? candidate.messages.filter(isAssistantMessage).map(cloneMessage) : [];
+  const messages = Array.isArray(candidate.messages)
+    ? candidate.messages.filter(isAssistantMessage).map(cloneMessage)
+    : [];
 
   if (id === "" || title === "" || messages.length === 0) {
     return null;

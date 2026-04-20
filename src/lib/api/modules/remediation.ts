@@ -3,6 +3,7 @@ import type {
   MemoryFixPattern,
   MemoryRunbook,
   MemoryRunbookUpsertRequest,
+  RemediationGitOpsArtifact,
   RemediationProposal,
   RemediationRejectRequest,
   RiskAnalyzeRequest,
@@ -17,6 +18,13 @@ export const remediationApi = {
       body: JSON.stringify({}),
     }),
   listRemediation: () => requestJson<RemediationProposal[]>(apiRoute("/remediation")),
+  getRemediationGitOpsArtifact: (id: string) =>
+    requestJson<RemediationGitOpsArtifact>(apiRoute("/remediation/{id}/gitops", { id })),
+  generateRemediationGitOpsArtifact: (id: string) =>
+    requestJson<RemediationGitOpsArtifact>(apiRoute("/remediation/{id}/gitops", { id }), {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
   approveRemediation: (id: string) =>
     requestJson<RemediationProposal>(apiRoute("/remediation/{id}/approve", { id }), {
       method: "POST",

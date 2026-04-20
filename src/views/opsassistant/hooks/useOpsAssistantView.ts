@@ -86,17 +86,23 @@ export function useOpsAssistantView(): UseOpsAssistantViewResult {
     setCopiedMessageID(null);
   }, [clear]);
 
-  const selectSession = useCallback((id: string) => {
-    selectStoredSession(id);
-    setReferenceFeedback({});
-    setCopiedMessageID(null);
-  }, [selectStoredSession]);
+  const selectSession = useCallback(
+    (id: string) => {
+      selectStoredSession(id);
+      setReferenceFeedback({});
+      setCopiedMessageID(null);
+    },
+    [selectStoredSession],
+  );
 
-  const deleteSession = useCallback((id: string) => {
-    deleteStoredSession(id);
-    setReferenceFeedback({});
-    setCopiedMessageID(null);
-  }, [deleteStoredSession]);
+  const deleteSession = useCallback(
+    (id: string) => {
+      deleteStoredSession(id);
+      setReferenceFeedback({});
+      setCopiedMessageID(null);
+    },
+    [deleteStoredSession],
+  );
 
   useEffect(() => {
     if (scrollRef.current) {

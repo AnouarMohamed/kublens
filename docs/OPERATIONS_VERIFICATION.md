@@ -71,8 +71,20 @@ Verify:
 - Execution only allowed after approval
 - In `prod`, approver and executor must differ (four-eyes)
 - Executed proposal links back to incidents where applicable
+- `POST /api/remediation/{id}/gitops` stores a retrievable artifact at `GET /api/remediation/{id}/gitops`
+- Audit log includes `remediation.gitops.generate` entries when artifacts are produced
 
-## 7) Alerting and lifecycle checks
+## 7) Rightsizing advisor checks
+
+- `GET /api/rightsizing`
+
+Verify:
+
+- Response contains at least one recommendation with current and recommended requests/limits
+- Non-balanced recommendations include a GitOps artifact preview or advisory
+- Summary totals expose reclaimable CPU/memory strings for operator review
+
+## 8) Alerting and lifecycle checks
 
 - `POST /api/alerts/test` or `/api/alerts/dispatch`
 - `GET /api/alerts/lifecycle`
@@ -83,7 +95,7 @@ Verify:
 - Channel dispatch result contains per-channel outcome
 - Lifecycle status transitions are persisted and returned correctly
 
-## 8) API contract and backend quality checks
+## 9) API contract and backend quality checks
 
 ```bash
 npm run test:go
@@ -98,7 +110,7 @@ Critical suites include:
 - Auth/audit/security tests
 - Handler policy tests (including remediation operations)
 
-## 9) Frontend and e2e checks
+## 10) Frontend and e2e checks
 
 ```bash
 npm run lint
@@ -112,7 +124,7 @@ Verify:
 - Node/pod maintenance flows succeed
 - Audit stream and assistant view load without regressions
 
-## 10) Tracing verification (optional)
+## 11) Tracing verification (optional)
 
 If OTEL export is enabled:
 
@@ -120,14 +132,14 @@ If OTEL export is enabled:
 2. Trigger a prediction request and an assistant request.
 3. Verify end-to-end span continuity: browser -> API -> cluster/predictor/assistant paths.
 
-## 11) Observability overlay verification (optional)
+## 12) Observability overlay verification (optional)
 
 If `k8s/overlays/observability` is installed:
 
 1. Port-forward Grafana and Prometheus services.
 2. Confirm API request rate, latency, and status panels update during active usage.
 
-## 12) Security headers and WebSocket origin checks
+## 13) Security headers and WebSocket origin checks
 
 - Call `GET /api/healthz` and verify response headers include:
   - `Content-Security-Policy`
@@ -136,7 +148,7 @@ If `k8s/overlays/observability` is installed:
 - For HTTPS traffic, verify `Strict-Transport-Security` is present.
 - Attempt `/api/stream/ws` with cross-origin `Origin` and verify `403`.
 
-## 13) Supply chain and secret-rotation controls
+## 14) Supply chain and secret-rotation controls
 
 Before production release:
 
@@ -146,7 +158,7 @@ Before production release:
 4. Validate no expired security exceptions exist for signing/SBOM/rotation controls.
 5. Confirm automated CD deploy jobs succeeded for `dev` and `staging` before approving production promotion.
 
-## 14) Documentation governance controls
+## 15) Documentation governance controls
 
 Before merge/release:
 

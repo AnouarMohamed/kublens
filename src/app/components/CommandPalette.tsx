@@ -257,7 +257,9 @@ export function CommandPalette({ paletteOpen, setPaletteOpen, sections, searchab
                 <p className="px-2 py-2 text-[10px] uppercase tracking-[0.24em] text-zinc-500">{group}</p>
                 <div className="space-y-1">
                   {items.map((item) => {
-                    const absoluteIndex = results.findIndex((result) => result.id === item.id && result.group === item.group);
+                    const absoluteIndex = results.findIndex(
+                      (result) => result.id === item.id && result.group === item.group,
+                    );
                     const Icon = item.icon;
                     const selected = absoluteIndex === selectedIndex;
 

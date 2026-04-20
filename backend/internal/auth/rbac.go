@@ -67,6 +67,8 @@ func RequiredRole(method, path string) Role {
 		return RoleViewer
 	case cleanMethod == http.MethodPost && cleanPath == "/api/remediation/propose":
 		return RoleViewer
+	case cleanMethod == http.MethodPost && strings.HasPrefix(cleanPath, "/api/remediation/") && strings.HasSuffix(cleanPath, "/gitops"):
+		return RoleViewer
 	case cleanMethod == http.MethodPost && cleanPath == "/api/risk-guard/analyze":
 		return RoleViewer
 	case cleanMethod == http.MethodPost && strings.HasPrefix(cleanPath, "/api/remediation/") && strings.HasSuffix(cleanPath, "/reject"):

@@ -456,6 +456,178 @@ func TestSLOOverviewEndpoint(t *testing.T) {
 	}
 }
 
+func TestRemediationGitOpsArtifactEndpoints(t *testing.T) {
+	handle := newOpsTestDB(t)
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	router := newServer(
+		gitOpsArtifactClusterReader{},
+		nil,
+		logger,
+		WithSQLiteDB(handle),
+		WithWriteActionsEnabled(true),
+		WithAuth(AuthConfig{
+			Enabled: true,
+			Tokens: []AuthToken{
+				{Token: "viewer-token", User: "viewer", Role: "viewer"},
+				{Token: "operator-token", User: "operator", Role: "operator"},
+				{Token: "admin-token", User: "admin", Role: "admin"},
+			},
+		}),
+		WithRemediationStore(remediation.NewStore(handle, remediation.DefaultStoreLimit, nil)),
+	).Router("")
+
+	proposeReq := httptest.NewRequest(http.MethodPost, "/api/remediation/propose", strings.NewReader(`{}`))
+	proposeReq.Header.Set("Authorization", "Bearer viewer-token")
+	proposeReq.Header.Set("Content-Type", "application/json")
+	proposeResp := httptest.NewRecorder()
+	router.ServeHTTP(proposeResp, proposeReq)
+	if proposeResp.Code != http.StatusOK {
+		t.Fatalf("propose status = %d, want 200", proposeResp.Code)
+	}
+
+	var proposals []model.RemediationProposal
+	if err := json.NewDecoder(proposeResp.Body).Decode(&proposals); err != nil {
+		t.Fatalf("decode proposals: %v", err)
+	}
+	if len(proposals) == 0 {
+		t.Fatal("expected remediation proposals")
+	}
+
+	var restartProposal model.RemediationProposal
+	foundRestart := false
+	for _, proposal := range proposals {
+		if proposal.Kind == model.RemediationKindRestartPod {
+			restartProposal = proposal
+			foundRestart = true
+			break
+		}
+	}
+	if !foundRestart {
+		t.Fatalf("expected restart proposal, got %#v", proposals)
+	}
+
+	generateReq := httptest.NewRequest(http.MethodPost, "/api/remediation/"+restartProposal.ID+"/gitops", strings.NewReader(`{}`))
+	generateReq.Header.Set("Authorization", "Bearer viewer-token")
+	generateReq.Header.Set("Content-Type", "application/json")
+	generateResp := httptest.NewRecorder()
+	router.ServeHTTP(generateResp, generateReq)
+	if generateResp.Code != http.StatusOK {
+		t.Fatalf("gitops generate status = %d, want 200", generateResp.Code)
+	}
+
+	var generated model.RemediationGitOpsArtifact
+	if err := json.NewDecoder(generateResp.Body).Decode(&generated); err != nil {
+		t.Fatalf("decode generated gitops artifact: %v", err)
+	}
+	if generated.ProposalID != restartProposal.ID {
+		t.Fatalf("proposal id = %s, want %s", generated.ProposalID, restartProposal.ID)
+	}
+	if generated.Artifact.SupportLevel != model.GitOpsSupportPatchReady {
+		t.Fatalf("support level = %s, want %s", generated.Artifact.SupportLevel, model.GitOpsSupportPatchReady)
+	}
+	if !strings.Contains(generated.Artifact.ArtifactBody, "kubectl.kubernetes.io/restartedAt") {
+		t.Fatalf("expected rollout restart annotation patch, got %q", generated.Artifact.ArtifactBody)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/remediation/"+restartProposal.ID+"/gitops", nil)
+	getReq.Header.Set("Authorization", "Bearer viewer-token")
+	getResp := httptest.NewRecorder()
+	router.ServeHTTP(getResp, getReq)
+	if getResp.Code != http.StatusOK {
+		t.Fatalf("gitops get status = %d, want 200", getResp.Code)
+	}
+
+	var fetched model.RemediationGitOpsArtifact
+	if err := json.NewDecoder(getResp.Body).Decode(&fetched); err != nil {
+		t.Fatalf("decode fetched gitops artifact: %v", err)
+	}
+	if fetched.ProposalID != restartProposal.ID {
+		t.Fatalf("fetched proposal id = %s, want %s", fetched.ProposalID, restartProposal.ID)
+	}
+
+	auditReq := httptest.NewRequest(http.MethodGet, "/api/audit?limit=20", nil)
+	auditReq.Header.Set("Authorization", "Bearer admin-token")
+	auditResp := httptest.NewRecorder()
+	router.ServeHTTP(auditResp, auditReq)
+	if auditResp.Code != http.StatusOK {
+		t.Fatalf("audit status = %d, want 200", auditResp.Code)
+	}
+
+	var audit model.AuditLogResponse
+	if err := json.NewDecoder(auditResp.Body).Decode(&audit); err != nil {
+		t.Fatalf("decode audit log: %v", err)
+	}
+	foundAction := false
+	for _, entry := range audit.Items {
+		if entry.Action == "remediation.gitops.generate" {
+			foundAction = true
+			break
+		}
+	}
+	if !foundAction {
+		t.Fatal("expected remediation.gitops.generate audit entry")
+	}
+}
+
+func TestRightsizingOverviewEndpoint(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	router := newServer(
+		rightsizingClusterReader{},
+		nil,
+		logger,
+		WithAuth(AuthConfig{
+			Enabled: true,
+			Tokens: []AuthToken{
+				{Token: "viewer-token", User: "viewer", Role: "viewer"},
+				{Token: "operator-token", User: "operator", Role: "operator"},
+				{Token: "admin-token", User: "admin", Role: "admin"},
+			},
+		}),
+	).Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/rightsizing", nil)
+	req.Header.Set("Authorization", "Bearer viewer-token")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("rightsizing status = %d, want 200", resp.Code)
+	}
+
+	var overview model.RightsizingOverview
+	if err := json.NewDecoder(resp.Body).Decode(&overview); err != nil {
+		t.Fatalf("decode rightsizing overview: %v", err)
+	}
+	if overview.SavingsOpportunities < 1 {
+		t.Fatalf("savings opportunities = %d, want >= 1", overview.SavingsOpportunities)
+	}
+	if overview.Underprovisioned < 1 {
+		t.Fatalf("underprovisioned = %d, want >= 1", overview.Underprovisioned)
+	}
+	if overview.MissingGuardrails < 1 {
+		t.Fatalf("missing guardrails = %d, want >= 1", overview.MissingGuardrails)
+	}
+	if len(overview.Items) < 3 {
+		t.Fatalf("items = %d, want >= 3", len(overview.Items))
+	}
+
+	foundPatchReady := false
+	for _, item := range overview.Items {
+		if item.Status == model.RightsizingStatusOverprovisioned && item.Artifact != nil {
+			if item.Artifact.SupportLevel != model.GitOpsSupportPatchReady {
+				t.Fatalf("artifact support level = %s, want %s", item.Artifact.SupportLevel, model.GitOpsSupportPatchReady)
+			}
+			if !strings.Contains(item.Artifact.ArtifactBody, "resources:") {
+				t.Fatalf("expected patch artifact body, got %q", item.Artifact.ArtifactBody)
+			}
+			foundPatchReady = true
+			break
+		}
+	}
+	if !foundPatchReady {
+		t.Fatal("expected at least one patch-ready rightsizing artifact")
+	}
+}
+
 func TestMemoryEndpointsCRUD(t *testing.T) {
 	tempDir := t.TempDir()
 	store := memory.New(filepath.Join(tempDir, "memory.json"), slog.New(slog.NewJSONHandler(io.Discard, nil)))
@@ -679,4 +851,137 @@ func (notReadyClusterReader) Snapshot(context.Context) ([]model.PodSummary, []mo
 		}, []model.NodeSummary{
 			{Name: "node-1", Status: model.NodeStatusNotReady},
 		}
+}
+
+type gitOpsArtifactClusterReader struct {
+	testClusterReader
+}
+
+func (gitOpsArtifactClusterReader) Snapshot(context.Context) ([]model.PodSummary, []model.NodeSummary) {
+	return []model.PodSummary{
+			{Name: "payment-gateway-85fd88d5d6-abcde", Namespace: "production", Status: model.PodStatusFailed, Restarts: 2},
+		}, []model.NodeSummary{
+			{Name: "node-1", Status: model.NodeStatusReady},
+		}
+}
+
+func (gitOpsArtifactClusterReader) ListResources(_ context.Context, kind string) ([]model.ResourceRecord, error) {
+	switch kind {
+	case "deployments":
+		return []model.ResourceRecord{{ID: "deploy-1", Name: "payment-gateway", Namespace: "production", Status: "3/3 Ready", Age: "8d"}}, nil
+	case "statefulsets", "daemonsets":
+		return nil, nil
+	default:
+		return testClusterReader{}.ListResources(context.Background(), kind)
+	}
+}
+
+type rightsizingClusterReader struct {
+	testClusterReader
+}
+
+func (rightsizingClusterReader) Snapshot(context.Context) ([]model.PodSummary, []model.NodeSummary) {
+	return []model.PodSummary{
+			{
+				ID:        "pod-1",
+				Name:      "payment-gateway-85fd88d5d6-abcde",
+				Namespace: "production",
+				Status:    model.PodStatusRunning,
+				CPU:       "40m",
+				Memory:    "96Mi",
+				Restarts:  0,
+			},
+			{
+				ID:        "pod-2",
+				Name:      "redis-master-0",
+				Namespace: "production",
+				Status:    model.PodStatusRunning,
+				CPU:       "180m",
+				Memory:    "480Mi",
+				Restarts:  1,
+			},
+			{
+				ID:        "pod-3",
+				Name:      "checkout-api-7f46bd9946-jd28m",
+				Namespace: "production",
+				Status:    model.PodStatusRunning,
+				CPU:       "35m",
+				Memory:    "80Mi",
+				Restarts:  0,
+			},
+		}, []model.NodeSummary{
+			{Name: "node-1", Status: model.NodeStatusReady},
+		}
+}
+
+func (rightsizingClusterReader) ListResources(_ context.Context, kind string) ([]model.ResourceRecord, error) {
+	switch kind {
+	case "deployments":
+		return []model.ResourceRecord{
+			{ID: "deploy-1", Name: "payment-gateway", Namespace: "production", Status: "3/3 Ready", Age: "8d"},
+			{ID: "deploy-2", Name: "checkout-api", Namespace: "production", Status: "2/2 Ready", Age: "4d"},
+		}, nil
+	case "statefulsets":
+		return []model.ResourceRecord{{ID: "st-1", Name: "redis-master", Namespace: "production", Status: "1/1 Ready", Age: "20d"}}, nil
+	case "daemonsets":
+		return nil, nil
+	default:
+		return testClusterReader{}.ListResources(context.Background(), kind)
+	}
+}
+
+func (rightsizingClusterReader) PodDetail(_ context.Context, namespace string, name string) (model.PodDetail, error) {
+	switch namespace + "/" + name {
+	case "production/payment-gateway-85fd88d5d6-abcde":
+		return model.PodDetail{
+			PodSummary: model.PodSummary{
+				Name:      name,
+				Namespace: namespace,
+				Status:    model.PodStatusRunning,
+				CPU:       "40m",
+				Memory:    "96Mi",
+			},
+			Containers: []model.ContainerSpec{
+				{
+					Name: "main",
+					Resources: &model.ContainerResources{
+						Requests: &model.ResourcePairs{CPU: "400m", Memory: "512Mi"},
+						Limits:   &model.ResourcePairs{CPU: "800m", Memory: "1024Mi"},
+					},
+				},
+			},
+		}, nil
+	case "production/redis-master-0":
+		return model.PodDetail{
+			PodSummary: model.PodSummary{
+				Name:      name,
+				Namespace: namespace,
+				Status:    model.PodStatusRunning,
+				CPU:       "180m",
+				Memory:    "480Mi",
+			},
+			Containers: []model.ContainerSpec{
+				{
+					Name: "redis",
+					Resources: &model.ContainerResources{
+						Requests: &model.ResourcePairs{CPU: "100m", Memory: "256Mi"},
+						Limits:   &model.ResourcePairs{CPU: "200m", Memory: "512Mi"},
+					},
+				},
+			},
+		}, nil
+	case "production/checkout-api-7f46bd9946-jd28m":
+		return model.PodDetail{
+			PodSummary: model.PodSummary{
+				Name:      name,
+				Namespace: namespace,
+				Status:    model.PodStatusRunning,
+				CPU:       "35m",
+				Memory:    "80Mi",
+			},
+			Containers: []model.ContainerSpec{{Name: "api"}},
+		}, nil
+	default:
+		return model.PodDetail{}, nil
+	}
 }
