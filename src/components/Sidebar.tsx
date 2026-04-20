@@ -1,85 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  AlarmClock,
-  Archive,
-  BookOpen,
-  Bot,
-  BrainCircuit,
-  Boxes,
-  Briefcase,
-  ClipboardList,
-  Clock3,
-  Copy,
-  Cpu,
-  Database,
-  FolderTree,
-  Globe,
-  HardDrive,
-  KeyRound,
-  Layers,
-  LayoutDashboard,
-  LineChart,
-  Network,
-  Rocket,
-  ScanSearch,
-  ScrollText,
-  Server,
-  Shield,
-  ShieldAlert,
-  ShieldCheck,
-  Siren,
-  SlidersHorizontal,
-  TrendingUp,
-  Users,
-  Wrench,
-  Zap,
-  type LucideIcon,
-} from "lucide-react";
 import { VIEW_SECTIONS, type ViewSection } from "../features/viewCatalog";
 import { ApiError, api } from "../lib/api";
 import type { BuildInfo, ClusterStats, View } from "../types";
+import { VIEW_ICON } from "./viewIcons";
 
 interface SidebarProps {
   currentView: View;
   onViewChange: (view: View) => void;
   sections?: ViewSection[];
 }
-
-const VIEW_ICON: Record<View, LucideIcon> = {
-  overview: LayoutDashboard,
-  pods: Boxes,
-  deployments: Rocket,
-  replicasets: Copy,
-  statefulsets: Database,
-  daemonsets: Server,
-  jobs: Briefcase,
-  cronjobs: Clock3,
-  services: Network,
-  ingresses: Globe,
-  networkpolicies: Shield,
-  configmaps: SlidersHorizontal,
-  secrets: KeyRound,
-  persistentvolumes: HardDrive,
-  persistentvolumeclaims: Archive,
-  storageclasses: Layers,
-  nodes: Cpu,
-  namespaces: FolderTree,
-  events: Zap,
-  serviceaccounts: Users,
-  rbac: ShieldCheck,
-  metrics: LineChart,
-  audit: ScrollText,
-  predictions: TrendingUp,
-  diagnostics: ScanSearch,
-  shiftbrief: AlarmClock,
-  playbooks: BookOpen,
-  incidents: Siren,
-  remediation: Wrench,
-  memory: BrainCircuit,
-  riskguard: ShieldAlert,
-  postmortems: ClipboardList,
-  assistant: Bot,
-};
 
 export default function Sidebar({ currentView, onViewChange, sections = VIEW_SECTIONS }: SidebarProps) {
   const [isReal, setIsReal] = useState(false);
@@ -214,7 +143,7 @@ export default function Sidebar({ currentView, onViewChange, sections = VIEW_SEC
         <footer className="px-4 py-3 border-t border-zinc-700 bg-zinc-900">
           <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Operator Tip</p>
           <p className="mt-1 text-[11px] text-zinc-400 prose-text">
-            Press <span className="font-mono text-zinc-300">/</span> to jump into command search.
+            Press <span className="font-mono text-zinc-300">⌘K</span> to open the command palette.
           </p>
           <div className="mt-2 border border-zinc-700 bg-zinc-950 px-2 py-1.5">
             <p className="text-[10px] uppercase tracking-[0.2em] text-zinc-500">Backend Build</p>

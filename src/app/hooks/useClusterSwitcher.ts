@@ -31,6 +31,10 @@ export function useClusterSwitcher({ clusterContexts, setClusterContexts, onMess
     };
   }, []);
 
+  const refreshCluster = () => {
+    setClusterRefreshKey((value) => value + 1);
+  };
+
   const selectCluster = async (nextCluster: string) => {
     if (!clusterContexts || nextCluster === clusterContexts.selected) {
       return;
@@ -50,7 +54,7 @@ export function useClusterSwitcher({ clusterContexts, setClusterContexts, onMess
             }
           : current,
       );
-      setClusterRefreshKey((value) => value + 1);
+      refreshCluster();
       onMessage(`Switched to cluster: ${response.selected}`);
     } catch (err) {
       if (mountedRef.current) {
@@ -66,6 +70,7 @@ export function useClusterSwitcher({ clusterContexts, setClusterContexts, onMess
   return {
     clusterRefreshKey,
     isSwitchingCluster,
+    refreshCluster,
     selectCluster,
   };
 }

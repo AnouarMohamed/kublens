@@ -59,4 +59,23 @@ describe("useClusterSwitcher", () => {
 
     expect(onMessage).toHaveBeenCalledWith("selection failed");
   });
+
+  it("exposes a manual refresh trigger", () => {
+    const setClusterContexts = vi.fn();
+    const onMessage = vi.fn();
+
+    const { result } = renderHook(() =>
+      useClusterSwitcher({
+        clusterContexts: { selected: "default", items: [{ name: "default", isRealCluster: false }] },
+        setClusterContexts,
+        onMessage,
+      }),
+    );
+
+    act(() => {
+      result.current.refreshCluster();
+    });
+
+    expect(result.current.clusterRefreshKey).toBe(1);
+  });
 });

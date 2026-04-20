@@ -5,6 +5,7 @@ import { Suspense, lazy, useEffect, useMemo, useRef, useState, type ReactElement
 import Sidebar from "../components/Sidebar";
 import { getViewItem } from "../features/viewCatalog";
 import { useAuthSession } from "../context/AuthSessionContext";
+import { CommandPalette } from "./components/CommandPalette";
 import { HeaderBar } from "./components/HeaderBar";
 import { WorkspacePanels } from "./components/WorkspacePanels";
 import { useCurrentView } from "./hooks/useCurrentView";
@@ -16,7 +17,7 @@ import { useClusterSwitcher } from "./hooks/useClusterSwitcher";
 import { useSearchNavigation } from "./hooks/useSearchNavigation";
 import { blockedViewMessage, useViewAccess } from "./hooks/useViewAccess";
 import { useTransientMessage } from "./hooks/useTransientMessage";
-import { VIEW_NAVIGATE_EVENT, type ViewNavigateDetail } from "./viewNavigation";
+import { CLUSTER_REFRESH_EVENT, VIEW_NAVIGATE_EVENT, type ViewNavigateDetail } from "./viewNavigation";
 import type { View } from "../types";
 import Dashboard from "../views/dashboard";
 
@@ -58,6 +59,7 @@ export function AppShell() {
   const { currentView, setCurrentView } = useCurrentView();
   const { settings, setSettings, resetSettings } = useUserSettings();
   const [panel, setPanel] = useState<Panel>("none");
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [authToken, setAuthToken] = useState("");
   const [authMessage, setAuthMessage] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -100,7 +102,7 @@ export function AppShell() {
     setCurrentView,
     onMessage: (message) => showMessage(message, 1500),
   });
-  const { clusterRefreshKey, isSwitchingCluster, selectCluster } = useClusterSwitcher({
+  const { clusterRefreshKey, isSwitchingCluster, refreshCluster, selectCluster } = useClusterSwitcher({
     clusterContexts,
     setClusterContexts,
     onMessage: (message) => showMessage(message, 1800),
@@ -111,6 +113,12 @@ export function AppShell() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen(true);
+        setPanel("none");
+        return;
+      }
       if (event.key === "/" && document.activeElement !== searchRef.current) {
         event.preventDefault();
         searchRef.current?.focus();
@@ -118,6 +126,7 @@ export function AppShell() {
       }
       if (event.key === "Escape") {
         setPanel("none");
+        setPaletteOpen(false);
       }
     };
 
@@ -148,11 +157,24 @@ export function AppShell() {
       }
       setCurrentView(targetView);
       setPanel("none");
+      setPaletteOpen(false);
     };
 
     window.addEventListener(VIEW_NAVIGATE_EVENT, onNavigate as EventListener);
     return () => window.removeEventListener(VIEW_NAVIGATE_EVENT, onNavigate as EventListener);
   }, [isAllowed, setCurrentView, showMessage]);
+
+  useEffect(() => {
+    const onRefresh = () => {
+      refreshCluster();
+      setPanel("none");
+      setPaletteOpen(false);
+      showMessage("Cluster view refreshed.", 1500);
+    };
+
+    window.addEventListener(CLUSTER_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(CLUSTER_REFRESH_EVENT, onRefresh);
+  }, [refreshCluster, showMessage]);
 
   useEffect(() => {
     if (inactivityTimerRef.current !== null) {
@@ -287,6 +309,15 @@ export function AppShell() {
               setPanel("none");
             }}
           />
+
+          {paletteOpen && (
+            <CommandPalette
+              paletteOpen={paletteOpen}
+              setPaletteOpen={setPaletteOpen}
+              sections={sections}
+              searchableItems={searchableItems}
+            />
+          )}
         </div>
       </main>
     </div>

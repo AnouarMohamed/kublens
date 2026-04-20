@@ -1,6 +1,7 @@
 import type { View } from "../types";
 
 export const VIEW_NAVIGATE_EVENT = "kubelens:navigate-view";
+export const CLUSTER_REFRESH_EVENT = "kubelens:refresh-cluster";
 
 export interface ViewNavigateDetail {
   view: View;
@@ -15,4 +16,8 @@ export function navigateToView(view: View): void {
       detail: { view },
     }),
   );
+}
+
+export function requestClusterRefresh(): void {
+  window.dispatchEvent(new Event(CLUSTER_REFRESH_EVENT));
 }
