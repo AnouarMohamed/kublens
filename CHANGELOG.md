@@ -14,6 +14,7 @@ All notable changes to this project are documented here.
 - ChatOps Slack integration using Block Kit notifications, 5-minute dedupe rate limiting, async non-blocking dispatch, and configurable notification toggles.
 - New frontend operational views for incidents, remediation, memory, risk guard, and postmortems, fully wired to typed API contracts.
 - Live pod log streaming over Server-Sent Events with per-line delivery, stop control, 10-minute server cap, and snapshot fallback support.
+- Client-side Ops Assistant chat session persistence with recent-session recovery across reloads, localStorage-backed history, quick new-chat creation, and sidebar session switching/deletion.
 
 ### Changed
 
