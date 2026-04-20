@@ -21,4 +21,9 @@ test("dashboard loads and navigates between core views", async ({ page }) => {
   await page.getByRole("button", { name: "Execute search" }).click();
   await expect(page.getByRole("heading", { name: "Predictions" })).toBeVisible();
   await expect(page.getByText("kubectl get events -A --sort-by=.metadata.creationTimestamp")).toBeVisible();
+
+  await search.fill("slo");
+  await page.getByRole("button", { name: "Execute search" }).click();
+  await expect(page.getByRole("heading", { name: "SLO Center" })).toBeVisible();
+  await expect(page.getByText(/Error-budget posture/i)).toBeVisible();
 });

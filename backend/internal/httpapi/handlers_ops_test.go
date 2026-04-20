@@ -248,6 +248,47 @@ func TestApplyResourceYAMLRiskGuardForceFlow(t *testing.T) {
 	}
 }
 
+func TestRiskGuardIncludesPolicyPreflightChecks(t *testing.T) {
+	router := newServer(
+		riskPolicyClusterReader{},
+		nil,
+		slog.New(slog.NewJSONHandler(io.Discard, nil)),
+		WithRiskAnalyzer(riskguard.NewAnalyzer()),
+	).Router("")
+
+	body := `{"manifest":"apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: payment-gateway\n  namespace: production\nspec:\n  replicas: 2\n  template:\n    spec:\n      serviceAccountName: missing-runner\n      containers:\n      - name: app\n        image: ghcr.io/example/payment-gateway:v1.2.3\n        imagePullPolicy: IfNotPresent\n        resources:\n          requests:\n            cpu: 200m\n            memory: 256Mi\n          limits:\n            cpu: 500m\n            memory: 512Mi\n        readinessProbe:\n          httpGet:\n            path: /ready\n            port: 8080\n        livenessProbe:\n          httpGet:\n            path: /health\n            port: 8080\n        securityContext:\n          privileged: false\n          runAsNonRoot: true\n          allowPrivilegeEscalation: false\n"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/risk-guard/analyze", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer viewer-token")
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("riskguard status = %d, want 200", resp.Code)
+	}
+
+	var report model.RiskReport
+	if err := json.NewDecoder(resp.Body).Decode(&report); err != nil {
+		t.Fatalf("decode risk report: %v", err)
+	}
+
+	foundPolicyCheck := false
+	foundMissingServiceAccount := false
+	for _, check := range report.Checks {
+		if check.Category == "Policy preflight" {
+			foundPolicyCheck = true
+		}
+		if check.Name == "Service account binding" && !check.Passed {
+			foundMissingServiceAccount = true
+		}
+	}
+	if !foundPolicyCheck {
+		t.Fatal("expected policy preflight checks in risk report")
+	}
+	if !foundMissingServiceAccount {
+		t.Fatal("expected missing service account preflight failure")
+	}
+}
+
 func TestPostmortemGenerationFlow(t *testing.T) {
 	handle := newOpsTestDB(t)
 	router := newOpsTestServer(
@@ -296,6 +337,123 @@ func TestPostmortemGenerationFlow(t *testing.T) {
 		t.Fatalf("second postmortem status = %d, want 409", secondResp.Code)
 	}
 	assertErrorContains(t, secondResp, "postmortem already exists for incident:")
+}
+
+func TestIncidentReplayAndEvidenceEndpoints(t *testing.T) {
+	handle := newOpsTestDB(t)
+	router := newOpsTestServer(
+		t,
+		WithSQLiteDB(handle),
+		WithIncidentStore(incident.NewStore(handle, incident.DefaultStoreLimit, nil)),
+		WithPostmortemStore(postmortem.NewStore(handle, postmortem.DefaultStoreLimit, nil)),
+	).Router("")
+
+	created := createIncidentForTest(t, router)
+	completeIncidentRunbookForTest(t, router, created.ID)
+
+	resolveReq := httptest.NewRequest(http.MethodPost, "/api/incidents/"+created.ID+"/resolve", strings.NewReader(`{}`))
+	resolveReq.Header.Set("Authorization", "Bearer operator-token")
+	resolveReq.Header.Set("Content-Type", "application/json")
+	resolveResp := httptest.NewRecorder()
+	router.ServeHTTP(resolveResp, resolveReq)
+	if resolveResp.Code != http.StatusOK {
+		t.Fatalf("resolve status = %d, want 200", resolveResp.Code)
+	}
+
+	postmortemReq := httptest.NewRequest(http.MethodPost, "/api/incidents/"+created.ID+"/postmortem", strings.NewReader(`{}`))
+	postmortemReq.Header.Set("Authorization", "Bearer operator-token")
+	postmortemReq.Header.Set("Content-Type", "application/json")
+	postmortemResp := httptest.NewRecorder()
+	router.ServeHTTP(postmortemResp, postmortemReq)
+	if postmortemResp.Code != http.StatusCreated {
+		t.Fatalf("postmortem status = %d, want 201", postmortemResp.Code)
+	}
+
+	replayReq := httptest.NewRequest(http.MethodGet, "/api/incidents/"+created.ID+"/replay", nil)
+	replayReq.Header.Set("Authorization", "Bearer viewer-token")
+	replayResp := httptest.NewRecorder()
+	router.ServeHTTP(replayResp, replayReq)
+	if replayResp.Code != http.StatusOK {
+		t.Fatalf("replay status = %d, want 200", replayResp.Code)
+	}
+
+	var replay model.IncidentReplay
+	if err := json.NewDecoder(replayResp.Body).Decode(&replay); err != nil {
+		t.Fatalf("decode replay: %v", err)
+	}
+	if replay.IncidentID != created.ID {
+		t.Fatalf("replay incident id = %s, want %s", replay.IncidentID, created.ID)
+	}
+	if len(replay.Frames) == 0 {
+		t.Fatal("expected replay frames")
+	}
+
+	evidenceReq := httptest.NewRequest(http.MethodGet, "/api/incidents/"+created.ID+"/evidence", nil)
+	evidenceReq.Header.Set("Authorization", "Bearer viewer-token")
+	evidenceResp := httptest.NewRecorder()
+	router.ServeHTTP(evidenceResp, evidenceReq)
+	if evidenceResp.Code != http.StatusOK {
+		t.Fatalf("evidence status = %d, want 200", evidenceResp.Code)
+	}
+
+	var bundle model.IncidentEvidenceBundle
+	if err := json.NewDecoder(evidenceResp.Body).Decode(&bundle); err != nil {
+		t.Fatalf("decode evidence bundle: %v", err)
+	}
+	if bundle.IncidentID != created.ID {
+		t.Fatalf("bundle incident id = %s, want %s", bundle.IncidentID, created.ID)
+	}
+	if len(bundle.Audit) == 0 {
+		t.Fatal("expected related audit entries in evidence bundle")
+	}
+	if bundle.Postmortem == nil {
+		t.Fatal("expected related postmortem in evidence bundle")
+	}
+	if !strings.Contains(bundle.Markdown, "Incident Evidence Bundle") {
+		t.Fatalf("expected markdown bundle header, got %q", bundle.Markdown)
+	}
+}
+
+func TestSLOOverviewEndpoint(t *testing.T) {
+	router := newOpsTestServer(t).Router("")
+
+	assistantReq := httptest.NewRequest(http.MethodPost, "/api/assistant", strings.NewReader(`{"message":"show cluster health"}`))
+	assistantReq.Header.Set("Authorization", "Bearer viewer-token")
+	assistantReq.Header.Set("Content-Type", "application/json")
+	assistantResp := httptest.NewRecorder()
+	router.ServeHTTP(assistantResp, assistantReq)
+	if assistantResp.Code != http.StatusOK {
+		t.Fatalf("assistant status = %d, want 200", assistantResp.Code)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/slo", nil)
+	req.Header.Set("Authorization", "Bearer viewer-token")
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("slo status = %d, want 200", resp.Code)
+	}
+
+	var overview model.SLOOverview
+	if err := json.NewDecoder(resp.Body).Decode(&overview); err != nil {
+		t.Fatalf("decode slo overview: %v", err)
+	}
+	if len(overview.Objectives) < 4 {
+		t.Fatalf("objective count = %d, want >= 4", len(overview.Objectives))
+	}
+	if strings.TrimSpace(overview.Summary) == "" {
+		t.Fatal("expected slo summary")
+	}
+	foundAvailability := false
+	for _, objective := range overview.Objectives {
+		if objective.Name == "API Availability" {
+			foundAvailability = true
+			break
+		}
+	}
+	if !foundAvailability {
+		t.Fatal("expected API Availability objective")
+	}
 }
 
 func TestMemoryEndpointsCRUD(t *testing.T) {
@@ -409,6 +567,25 @@ func newOpsTestDB(t *testing.T) *sql.DB {
 	})
 
 	return handle
+}
+
+type riskPolicyClusterReader struct {
+	testClusterReader
+}
+
+func (riskPolicyClusterReader) ListResources(_ context.Context, kind string) ([]model.ResourceRecord, error) {
+	switch kind {
+	case "namespaces":
+		return []model.ResourceRecord{{ID: "ns-1", Name: "production", Status: "Active", Age: "10d"}}, nil
+	case "deployments":
+		return []model.ResourceRecord{{ID: "deploy-1", Name: "payment-gateway", Namespace: "production", Status: "2/2 Ready", Age: "8d"}}, nil
+	case "serviceaccounts":
+		return []model.ResourceRecord{{ID: "sa-1", Name: "payment-runner", Namespace: "production", Status: "Active", Age: "8d"}}, nil
+	case "networkpolicies":
+		return []model.ResourceRecord{{ID: "np-1", Name: "default-deny", Namespace: "production", Status: "Active", Age: "8d"}}, nil
+	default:
+		return []model.ResourceRecord{{ID: "generic-1", Name: "sample", Status: "ok", Age: "1m"}}, nil
+	}
 }
 
 func createIncidentForTest(t *testing.T, router http.Handler) model.Incident {

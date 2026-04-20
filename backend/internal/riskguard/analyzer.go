@@ -65,6 +65,7 @@ func (a *Analyzer) Analyze(manifest string, pods []model.PodSummary, nodes []mod
 	if err != nil {
 		check := model.RiskCheck{
 			Name:       "Manifest parse",
+			Category:   "Manifest hygiene",
 			Passed:     false,
 			Detail:     fmt.Sprintf("manifest could not be parsed: %v", err),
 			Suggestion: "Validate YAML structure and required indentation before retrying.",
@@ -128,6 +129,7 @@ func parseManifest(manifest string) (manifestSpec, error) {
 func checkKindAndMetadata(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Kind and metadata",
+		Category:   "Manifest hygiene",
 		Passed:     true,
 		Detail:     "Kind, name, and namespace are present.",
 		Suggestion: "Keep metadata explicit to avoid accidental cross-namespace deployment.",
@@ -144,6 +146,7 @@ func checkKindAndMetadata(spec manifestSpec, _ []model.PodSummary, _ []model.Nod
 func checkReplicaSafety(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Replica safety",
+		Category:   "Availability",
 		Passed:     true,
 		Detail:     "Replica count supports baseline availability.",
 		Suggestion: "Use at least 2 replicas for user-facing workloads.",
@@ -159,6 +162,7 @@ func checkReplicaSafety(spec manifestSpec, _ []model.PodSummary, _ []model.NodeS
 func checkContainerImages(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Image tagging",
+		Category:   "Manifest hygiene",
 		Passed:     true,
 		Detail:     "Container images use explicit immutable tags.",
 		Suggestion: "Pin images to immutable version tags; avoid :latest.",
@@ -178,6 +182,7 @@ func checkContainerImages(spec manifestSpec, _ []model.PodSummary, _ []model.Nod
 func checkResourceRequests(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Resource requests",
+		Category:   "Capacity",
 		Passed:     true,
 		Detail:     "CPU and memory requests are declared for all containers.",
 		Suggestion: "Define cpu/memory requests to stabilize scheduling and autoscaling behavior.",
@@ -196,6 +201,7 @@ func checkResourceRequests(spec manifestSpec, _ []model.PodSummary, _ []model.No
 func checkResourceLimits(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Resource limits",
+		Category:   "Capacity",
 		Passed:     true,
 		Detail:     "CPU and memory limits are declared for all containers.",
 		Suggestion: "Set realistic cpu/memory limits to avoid noisy-neighbor impact and OOM surprises.",
@@ -214,6 +220,7 @@ func checkResourceLimits(spec manifestSpec, _ []model.PodSummary, _ []model.Node
 func checkHealthProbes(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Health probes",
+		Category:   "Availability",
 		Passed:     true,
 		Detail:     "Readiness and liveness probes are defined for all containers.",
 		Suggestion: "Add readiness and liveness probes so rollouts and restarts are safe.",
@@ -232,6 +239,7 @@ func checkHealthProbes(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSu
 func checkContainerSecurity(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Container security context",
+		Category:   "Security",
 		Passed:     true,
 		Detail:     "Security context settings avoid privileged escalation by default.",
 		Suggestion: "Set runAsNonRoot=true, privileged=false, allowPrivilegeEscalation=false.",
@@ -260,6 +268,7 @@ func checkContainerSecurity(spec manifestSpec, _ []model.PodSummary, _ []model.N
 func checkImagePullPolicy(spec manifestSpec, _ []model.PodSummary, _ []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Image pull policy",
+		Category:   "Manifest hygiene",
 		Passed:     true,
 		Detail:     "Image pull policy is explicit and aligns with immutable tags.",
 		Suggestion: "Use IfNotPresent for immutable tags and Always for frequently changing tags.",
@@ -284,6 +293,7 @@ func checkImagePullPolicy(spec manifestSpec, _ []model.PodSummary, _ []model.Nod
 func checkNodeSelectorCompatibility(spec manifestSpec, _ []model.PodSummary, nodes []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Node selector compatibility",
+		Category:   "Capacity",
 		Passed:     true,
 		Detail:     "Node selector appears compatible with current cluster nodes.",
 		Suggestion: "Validate nodeSelector values against actual node labels in target cluster.",
@@ -306,6 +316,7 @@ func checkNodeSelectorCompatibility(spec manifestSpec, _ []model.PodSummary, nod
 func checkClusterPressureCompatibility(_ manifestSpec, pods []model.PodSummary, nodes []model.NodeSummary) model.RiskCheck {
 	check := model.RiskCheck{
 		Name:       "Cluster pressure compatibility",
+		Category:   "Capacity",
 		Passed:     true,
 		Detail:     "Current cluster pressure is within safe bounds for additional rollout load.",
 		Suggestion: "Avoid high-risk deploys during elevated pending/failed pod or NotReady node conditions.",

@@ -89,6 +89,17 @@ paths:
             text/plain:
               schema:
                 type: string
+  /slo:
+    get:
+      operationId: getSLOOverview
+      summary: Error budget and service objective overview
+      responses:
+        "200":
+          description: SLO control center snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SLOOverview"
   /auth/session:
     get:
       operationId: getAuthSession
@@ -930,6 +941,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Incident"
+  /incidents/{id}/replay:
+    get:
+      operationId: getIncidentReplay
+      summary: Deterministic incident replay frames
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident replay
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentReplay"
+  /incidents/{id}/evidence:
+    get:
+      operationId: getIncidentEvidence
+      summary: Audit-backed incident evidence bundle
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Incident evidence bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IncidentEvidenceBundle"
   /incidents/{id}/steps/{step}:
     patch:
       operationId: patchIncidentStep
@@ -1900,6 +1945,106 @@ components:
           type: array
           items:
             type: string
+    IncidentReplayFrame:
+      type: object
+      required: [timestamp, offsetMinutes, kind, source, summary, resource, severity]
+      properties:
+        timestamp:
+          type: string
+        offsetMinutes:
+          type: integer
+        kind:
+          type: string
+          enum: [diagnostic, event, prediction, action]
+        source:
+          type: string
+        summary:
+          type: string
+        resource:
+          type: string
+        severity:
+          type: string
+    IncidentReplay:
+      type: object
+      required: [incidentId, incidentTitle, status, generatedAt, startedAt, endedAt, duration, frames]
+      properties:
+        incidentId:
+          type: string
+        incidentTitle:
+          type: string
+        status:
+          type: string
+          enum: [open, resolved]
+        generatedAt:
+          type: string
+        startedAt:
+          type: string
+        endedAt:
+          type: string
+        duration:
+          type: string
+        frames:
+          type: array
+          items:
+            $ref: "#/components/schemas/IncidentReplayFrame"
+    IncidentEvidenceBundle:
+      type: object
+      required:
+        [
+          incidentId,
+          incidentTitle,
+          generatedAt,
+          summary,
+          affectedResources,
+          diagnostics,
+          events,
+          predictions,
+          actions,
+          audit,
+          remediations,
+          markdown,
+        ]
+      properties:
+        incidentId:
+          type: string
+        incidentTitle:
+          type: string
+        generatedAt:
+          type: string
+        summary:
+          type: string
+        affectedResources:
+          type: array
+          items:
+            type: string
+        diagnostics:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
+        predictions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
+        actions:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
+        audit:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditEntry"
+        remediations:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemediationProposal"
+        postmortem:
+          $ref: "#/components/schemas/Postmortem"
+        markdown:
+          type: string
     IncidentStepStatusPatch:
       type: object
       required: [status]
@@ -2062,6 +2207,8 @@ components:
       required: [name, passed, detail, suggestion, score]
       properties:
         name:
+          type: string
+        category:
           type: string
         passed:
           type: boolean
@@ -2411,6 +2558,89 @@ components:
             $ref: "#/components/schemas/ApiRouteMetrics"
         rag:
           $ref: "#/components/schemas/RAGMetricsSummary"
+    SLOSignal:
+      type: object
+      required: [label, value, tone]
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+        tone:
+          type: string
+    SLOObjective:
+      type: object
+      required:
+        [
+          id,
+          name,
+          category,
+          summary,
+          window,
+          status,
+          targetValue,
+          currentValue,
+          targetPercent,
+          currentPercent,
+          errorBudgetUsedPercent,
+          budgetRemainingPercent,
+          burnRate,
+          signals,
+        ]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        category:
+          type: string
+        summary:
+          type: string
+        window:
+          type: string
+        status:
+          type: string
+          enum: [healthy, at_risk, breached]
+        targetValue:
+          type: string
+        currentValue:
+          type: string
+        targetPercent:
+          type: number
+        currentPercent:
+          type: number
+        errorBudgetUsedPercent:
+          type: number
+        budgetRemainingPercent:
+          type: number
+        burnRate:
+          type: number
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/SLOSignal"
+    SLOOverview:
+      type: object
+      required: [generatedAt, summary, healthyObjectives, atRiskObjectives, breachedObjectives, alerts, objectives]
+      properties:
+        generatedAt:
+          type: string
+        summary:
+          type: string
+        healthyObjectives:
+          type: integer
+        atRiskObjectives:
+          type: integer
+        breachedObjectives:
+          type: integer
+        alerts:
+          type: array
+          items:
+            type: string
+        objectives:
+          type: array
+          items:
+            $ref: "#/components/schemas/SLOObjective"
     AuditEntry:
       type: object
       properties:

@@ -4,6 +4,8 @@ import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
 import type {
   Incident,
+  IncidentEvidenceBundle,
+  IncidentReplay,
   MemoryFixCreateRequest,
   RemediationProposal,
   RunbookStep,
@@ -39,6 +41,8 @@ interface UseIncidentDataResult {
   canWrite: boolean;
   incidents: Incident[];
   selected: Incident | null;
+  replay: IncidentReplay | null;
+  evidence: IncidentEvidenceBundle | null;
   remediations: RemediationProposal[];
   isLoading: boolean;
   isActing: boolean;
@@ -65,12 +69,14 @@ interface UseIncidentDataResult {
   updateFixFormField: (field: keyof MemoryFixCreateRequest, value: string) => void;
   dismissFixPrompt: () => void;
   refreshIncidents: () => Promise<void>;
+  refreshIncidentArtifacts: () => Promise<void>;
   loadIncidentDetail: (id: string) => Promise<void>;
   triggerIncident: () => Promise<void>;
   applyStepStatus: (step: RunbookStep, target: RunbookStepStatus) => Promise<void>;
   resolveIncident: () => Promise<void>;
   generatePostmortem: () => Promise<void>;
   saveFix: () => Promise<void>;
+  copyEvidenceMarkdown: () => Promise<void>;
 }
 
 /**
@@ -85,6 +91,8 @@ export function useIncidentData(): UseIncidentDataResult {
 
   const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selected, setSelected] = useState<Incident | null>(null);
+  const [replay, setReplay] = useState<IncidentReplay | null>(null);
+  const [evidence, setEvidence] = useState<IncidentEvidenceBundle | null>(null);
   const [remediations, setRemediations] = useState<RemediationProposal[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
@@ -115,6 +123,8 @@ export function useIncidentData(): UseIncidentDataResult {
 
   const clearSelected = useCallback(() => {
     setSelected(null);
+    setReplay(null);
+    setEvidence(null);
   }, []);
 
   const updateFixFormField = useCallback((field: keyof MemoryFixCreateRequest, value: string) => {
@@ -136,6 +146,8 @@ export function useIncidentData(): UseIncidentDataResult {
       onDenied: () => {
         setIncidents([]);
         setSelected(null);
+        setReplay(null);
+        setEvidence(null);
       },
       load: async () => {
         const data = await api.listIncidents();
@@ -150,11 +162,46 @@ export function useIncidentData(): UseIncidentDataResult {
     });
   }, [canRead, selected?.id]);
 
+  const loadIncidentArtifacts = useCallback(async (id: string) => {
+    const [replayResult, evidenceResult] = await Promise.allSettled([
+      api.getIncidentReplay(id),
+      api.getIncidentEvidence(id),
+    ]);
+    if (replayResult.status === "fulfilled") {
+      setReplay(replayResult.value);
+    } else {
+      setReplay(null);
+    }
+    if (evidenceResult.status === "fulfilled") {
+      setEvidence(evidenceResult.value);
+    } else {
+      setEvidence(null);
+    }
+  }, []);
+
+  const refreshIncidentArtifacts = useCallback(async () => {
+    if (!selected) {
+      return;
+    }
+    await loadIncidentArtifacts(selected.id);
+  }, [loadIncidentArtifacts, selected]);
+
   const loadIncidentDetail = useCallback(async (id: string) => {
     setIsActing(true);
     try {
-      const data = await api.getIncident(id);
-      setSelected(data);
+      const [incidentResult, replayResult, evidenceResult] = await Promise.allSettled([
+        api.getIncident(id),
+        api.getIncidentReplay(id),
+        api.getIncidentEvidence(id),
+      ]);
+
+      if (incidentResult.status !== "fulfilled") {
+        throw incidentResult.reason;
+      }
+
+      setSelected(incidentResult.value);
+      setReplay(replayResult.status === "fulfilled" ? replayResult.value : null);
+      setEvidence(evidenceResult.status === "fulfilled" ? evidenceResult.value : null);
       setFixPromptDismissed(false);
       setTimelineFilterState("all");
       setError(null);
@@ -241,6 +288,7 @@ export function useIncidentData(): UseIncidentDataResult {
       try {
         const updated = await api.updateIncidentStep(selected.id, step.id, { status: target });
         setSelected(updated);
+        await loadIncidentArtifacts(updated.id);
         setMessage(`Step ${step.id} updated to ${target}.`);
         await refreshIncidents();
         setError(null);
@@ -250,7 +298,7 @@ export function useIncidentData(): UseIncidentDataResult {
         setIsActing(false);
       }
     },
-    [canWrite, refreshIncidents, selected],
+    [canWrite, loadIncidentArtifacts, refreshIncidents, selected],
   );
 
   const resolveIncident = useCallback(async () => {
@@ -261,6 +309,7 @@ export function useIncidentData(): UseIncidentDataResult {
     try {
       const updated = await api.resolveIncident(selected.id);
       setSelected(updated);
+      await loadIncidentArtifacts(updated.id);
       setMessage(`Incident ${updated.id} resolved.`);
       await refreshIncidents();
       await refreshRemediations();
@@ -270,7 +319,7 @@ export function useIncidentData(): UseIncidentDataResult {
     } finally {
       setIsActing(false);
     }
-  }, [canWrite, refreshIncidents, refreshRemediations, selected]);
+  }, [canWrite, loadIncidentArtifacts, refreshIncidents, refreshRemediations, selected]);
 
   const generatePostmortem = useCallback(async () => {
     if (!selected || !canWrite) {
@@ -279,6 +328,7 @@ export function useIncidentData(): UseIncidentDataResult {
     setIsActing(true);
     try {
       const created = await api.generatePostmortem(selected.id);
+      await loadIncidentArtifacts(selected.id);
       setMessage(`Postmortem ${created.id} generated (${created.method.toUpperCase()}).`);
       setError(null);
     } catch (err) {
@@ -286,7 +336,7 @@ export function useIncidentData(): UseIncidentDataResult {
     } finally {
       setIsActing(false);
     }
-  }, [canWrite, selected]);
+  }, [canWrite, loadIncidentArtifacts, selected]);
 
   const saveFix = useCallback(async () => {
     if (!fixForm || !canWrite) {
@@ -372,11 +422,26 @@ export function useIncidentData(): UseIncidentDataResult {
     return selected.runbook.every((step) => step.status === "done" || step.status === "skipped");
   }, [selected]);
 
+  const copyEvidenceMarkdown = useCallback(async () => {
+    if (!evidence?.markdown) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(evidence.markdown);
+      setMessage("Incident evidence bundle copied.");
+      setError(null);
+    } catch {
+      setError("Failed to copy incident evidence bundle.");
+    }
+  }, [evidence?.markdown]);
+
   return {
     canRead,
     canWrite,
     incidents,
     selected,
+    replay,
+    evidence,
     remediations,
     isLoading,
     isActing,
@@ -403,11 +468,13 @@ export function useIncidentData(): UseIncidentDataResult {
     updateFixFormField,
     dismissFixPrompt,
     refreshIncidents,
+    refreshIncidentArtifacts,
     loadIncidentDetail,
     triggerIncident,
     applyStepStatus,
     resolveIncident,
     generatePostmortem,
     saveFix,
+    copyEvidenceMarkdown,
   };
 }

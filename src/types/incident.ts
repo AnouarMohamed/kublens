@@ -125,3 +125,40 @@ export interface Postmortem {
   timeline: TimelineEntry[];
   runbook: RunbookStep[];
 }
+
+export interface IncidentReplayFrame {
+  timestamp: string;
+  offsetMinutes: number;
+  kind: TimelineEntryKind;
+  source: string;
+  summary: string;
+  resource: string;
+  severity: string;
+}
+
+export interface IncidentReplay {
+  incidentId: string;
+  incidentTitle: string;
+  status: IncidentStatus;
+  generatedAt: string;
+  startedAt: string;
+  endedAt: string;
+  duration: string;
+  frames: IncidentReplayFrame[];
+}
+
+export interface IncidentEvidenceBundle {
+  incidentId: string;
+  incidentTitle: string;
+  generatedAt: string;
+  summary: string;
+  affectedResources: string[];
+  diagnostics: TimelineEntry[];
+  events: TimelineEntry[];
+  predictions: TimelineEntry[];
+  actions: TimelineEntry[];
+  audit: import("./audit").AuditEntry[];
+  remediations: RemediationProposal[];
+  postmortem?: Postmortem;
+  markdown: string;
+}

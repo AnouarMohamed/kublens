@@ -1,5 +1,6 @@
 export interface RiskCheck {
   name: string;
+  category?: string;
   passed: boolean;
   detail: string;
   suggestion: string;

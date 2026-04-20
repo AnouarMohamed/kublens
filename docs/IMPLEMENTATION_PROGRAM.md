@@ -92,9 +92,9 @@ Every epic and sub-feature must satisfy all checks below before merge:
 
 | Epic                                       | Status  | Owner | Target phase |
 | ------------------------------------------ | ------- | ----- | ------------ |
-| SLO and error-budget control center        | planned | TBD   | Phase 1      |
-| Policy preflight in Risk Guard             | planned | TBD   | Phase 1      |
-| Incident replay and evidence bundles       | planned | TBD   | Phase 1      |
+| SLO and error-budget control center        | shipped | TBD   | Phase 1      |
+| Policy preflight in Risk Guard             | shipped | TBD   | Phase 1      |
+| Incident replay and evidence bundles       | shipped | TBD   | Phase 1      |
 | GitOps remediation mode                    | planned | TBD   | Phase 2      |
 | Cost and rightsizing advisor               | planned | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | planned | TBD   | Phase 3      |

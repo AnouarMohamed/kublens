@@ -19,6 +19,17 @@ type Postmortem = {
   incidentId: string;
 };
 
+type IncidentReplay = {
+  incidentId: string;
+  frames: Array<{ offsetMinutes: number }>;
+};
+
+type IncidentEvidenceBundle = {
+  incidentId: string;
+  audit: Array<{ id: string }>;
+  markdown: string;
+};
+
 type MemoryRunbook = {
   id: string;
   title: string;
@@ -103,6 +114,25 @@ test("incident lifecycle and memory flow remain operational", async ({ request }
     201,
   );
   expect(postmortem.incidentId).toBe(currentIncident.id);
+
+  const replay = await expectJSON<IncidentReplay>(
+    await request.get(`/api/incidents/${encodeURIComponent(currentIncident.id)}/replay`, {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+    }),
+    200,
+  );
+  expect(replay.incidentId).toBe(currentIncident.id);
+  expect(replay.frames.length).toBeGreaterThan(0);
+
+  const evidence = await expectJSON<IncidentEvidenceBundle>(
+    await request.get(`/api/incidents/${encodeURIComponent(currentIncident.id)}/evidence`, {
+      headers: { Authorization: `Bearer ${viewerToken}` },
+    }),
+    200,
+  );
+  expect(evidence.incidentId).toBe(currentIncident.id);
+  expect(evidence.audit.length).toBeGreaterThan(0);
+  expect(evidence.markdown).toContain("Incident Evidence Bundle");
 
   const runbookName = `e2e-runbook-${Date.now()}`;
   const createdRunbook = await expectJSON<MemoryRunbook>(

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { api } from "../../lib/api";
-import type { RiskReport } from "../../types";
+import type { RiskCheck, RiskReport } from "../../types";
 
 const DEFAULT_MANIFEST = `apiVersion: apps/v1
 kind: Deployment
@@ -40,6 +40,8 @@ export default function RiskGuardView() {
     return report.checks.filter((check) => !check.passed);
   }, [report, showAllChecks]);
 
+  const groupedChecks = useMemo(() => groupChecksByCategory(checks), [checks]);
+
   const analyze = async () => {
     if (!canRead) {
       return;
@@ -62,7 +64,7 @@ export default function RiskGuardView() {
         <div>
           <h2 className="text-2xl font-semibold text-zinc-100 tracking-tight">Change Risk Guard</h2>
           <p className="text-sm text-zinc-400 mt-1">
-            Pre-deploy YAML risk analysis with actionable checks and mitigation guidance.
+            Pre-deploy YAML risk analysis with cluster-aware policy preflight and mitigation guidance.
           </p>
         </div>
         <button onClick={() => void analyze()} disabled={!canRead || isAnalyzing} className="btn-primary">
@@ -98,26 +100,45 @@ export default function RiskGuardView() {
             </button>
           </div>
 
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {groupedChecks.map(([category, items]) => (
+              <div key={category} className="border border-zinc-700 bg-zinc-950 px-3 py-2">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{category}</p>
+                <p className="mt-1 text-lg font-semibold text-zinc-100">
+                  {items.filter((item) => item.passed).length}/{items.length}
+                </p>
+                <p className="text-xs text-zinc-400">{items.filter((item) => !item.passed).length} flagged checks</p>
+              </div>
+            ))}
+          </div>
+
           <div className="my-4 border-t border-zinc-700" />
 
-          <div className="space-y-3">
-            {checks.map((check) => (
-              <details
-                key={check.name}
-                open={!check.passed}
-                className="rounded-md border border-zinc-700 bg-zinc-900/70 p-3"
-              >
-                <summary className="cursor-pointer flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-zinc-100">
-                    {check.passed ? "✅" : "❌"} {check.name}
-                  </span>
-                  <span className="text-xs text-zinc-500">Score +{check.score}</span>
-                </summary>
-                <p className="mt-2 text-sm text-zinc-300">{check.detail}</p>
-                <p className="mt-1 text-sm text-zinc-200">
-                  <span className="font-semibold">Fix:</span> {check.suggestion}
-                </p>
-              </details>
+          <div className="space-y-5">
+            {groupedChecks.map(([category, items]) => (
+              <section key={category}>
+                <p className="mb-3 text-[11px] uppercase tracking-[0.22em] text-zinc-500">{category}</p>
+                <div className="space-y-3">
+                  {items.map((check) => (
+                    <details
+                      key={`${category}-${check.name}`}
+                      open={!check.passed}
+                      className="rounded-md border border-zinc-700 bg-zinc-900/70 p-3"
+                    >
+                      <summary className="cursor-pointer flex items-center justify-between gap-2">
+                        <span className="text-sm font-semibold text-zinc-100">
+                          {check.passed ? "[pass]" : "[flag]"} {check.name}
+                        </span>
+                        <span className="text-xs text-zinc-500">Score +{check.score}</span>
+                      </summary>
+                      <p className="mt-2 text-sm text-zinc-300">{check.detail}</p>
+                      <p className="mt-1 text-sm text-zinc-200">
+                        <span className="font-semibold">Fix:</span> {check.suggestion}
+                      </p>
+                    </details>
+                  ))}
+                </div>
+              </section>
             ))}
             {checks.length === 0 && <p className="text-sm text-zinc-500">No failed checks.</p>}
           </div>
@@ -138,4 +159,15 @@ function scoreColor(score: number): string {
     return "text-[var(--amber)]";
   }
   return "text-[#34c759]";
+}
+
+function groupChecksByCategory(checks: RiskCheck[]): Array<[string, RiskCheck[]]> {
+  const groups = new Map<string, RiskCheck[]>();
+  for (const check of checks) {
+    const key = check.category?.trim() || "General";
+    const current = groups.get(key) ?? [];
+    current.push(check);
+    groups.set(key, current);
+  }
+  return Array.from(groups.entries());
 }

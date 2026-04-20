@@ -21,6 +21,7 @@ export type View =
   | "serviceaccounts"
   | "rbac"
   | "metrics"
+  | "slo"
   | "audit"
   | "predictions"
   | "diagnostics"

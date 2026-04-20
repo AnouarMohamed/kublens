@@ -46,6 +46,7 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /runtime`
 - `GET /metrics`
 - `GET /metrics/prometheus`
+- `GET /slo`
 
 ## Auth and cluster context
 
@@ -120,6 +121,8 @@ Notes:
 - `POST /incidents`
 - `GET /incidents`
 - `GET /incidents/{id}`
+- `GET /incidents/{id}/replay`
+- `GET /incidents/{id}/evidence`
 - `PATCH /incidents/{id}/steps/{step}`
 - `POST /incidents/{id}/resolve`
 - `POST /incidents/{id}/postmortem`
@@ -175,6 +178,20 @@ curl -X POST http://localhost:3000/api/risk-guard/analyze \
   -H "Authorization: Bearer viewer-token" \
   -H "Content-Type: application/json" \
   -d '{"manifest":"apiVersion: apps/v1\nkind: Deployment\n..."}'
+```
+
+### Inspect error-budget posture
+
+```bash
+curl -s http://localhost:3000/api/slo \
+  -H "Authorization: Bearer viewer-token"
+```
+
+### Export incident evidence
+
+```bash
+curl -s http://localhost:3000/api/incidents/<incident-id>/evidence \
+  -H "Authorization: Bearer viewer-token"
 ```
 
 ## Environment keys that affect API behavior

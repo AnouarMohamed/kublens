@@ -7,6 +7,8 @@ export default function IncidentView() {
     canRead,
     canWrite,
     selected,
+    replay,
+    evidence,
     isLoading,
     isActing,
     error,
@@ -30,18 +32,22 @@ export default function IncidentView() {
     updateFixFormField,
     dismissFixPrompt,
     refreshIncidents,
+    refreshIncidentArtifacts,
     loadIncidentDetail,
     triggerIncident,
     applyStepStatus,
     resolveIncident,
     generatePostmortem,
     saveFix,
+    copyEvidenceMarkdown,
   } = useIncidentData();
 
   if (selected) {
     return (
       <IncidentDetailView
         selected={selected}
+        replay={replay}
+        evidence={evidence}
         canWrite={canWrite}
         isActing={isActing}
         message={message}
@@ -54,6 +60,7 @@ export default function IncidentView() {
         canResolve={canResolve}
         onBack={clearSelected}
         onRefresh={() => void loadIncidentDetail(selected.id)}
+        onRefreshArtifacts={() => void refreshIncidentArtifacts()}
         onApplyStepStatus={(step, target) => void applyStepStatus(step, target)}
         onResolveIncident={() => void resolveIncident()}
         onGeneratePostmortem={() => void generatePostmortem()}
@@ -61,6 +68,7 @@ export default function IncidentView() {
         onFixFormFieldChange={updateFixFormField}
         onSaveFix={() => void saveFix()}
         onDismissFixPrompt={dismissFixPrompt}
+        onCopyEvidence={() => void copyEvidenceMarkdown()}
       />
     );
   }

@@ -1,5 +1,13 @@
-import type { Incident, MemoryFixCreateRequest, RunbookStep, RunbookStepStatus, TimelineEntry } from "../../../types";
-import { stepIcon, timelineFilters, type TimelineFilter } from "../utils";
+import type {
+  Incident,
+  IncidentEvidenceBundle,
+  IncidentReplay,
+  MemoryFixCreateRequest,
+  RunbookStep,
+  RunbookStepStatus,
+  TimelineEntry,
+} from "../../../types";
+import { formatTimestamp, stepIcon, timelineFilters, type TimelineFilter } from "../utils";
 import { Banner, StatTile, TimelineCard } from "./IncidentPrimitives";
 
 interface IncidentRunbookStats {
@@ -13,6 +21,8 @@ interface IncidentRunbookStats {
 
 interface IncidentDetailViewProps {
   selected: Incident;
+  replay: IncidentReplay | null;
+  evidence: IncidentEvidenceBundle | null;
   canWrite: boolean;
   isActing: boolean;
   message: string | null;
@@ -25,6 +35,7 @@ interface IncidentDetailViewProps {
   canResolve: boolean;
   onBack: () => void;
   onRefresh: () => void;
+  onRefreshArtifacts: () => void;
   onApplyStepStatus: (step: RunbookStep, target: RunbookStepStatus) => void;
   onResolveIncident: () => void;
   onGeneratePostmortem: () => void;
@@ -32,10 +43,13 @@ interface IncidentDetailViewProps {
   onFixFormFieldChange: (field: keyof MemoryFixCreateRequest, value: string) => void;
   onSaveFix: () => void;
   onDismissFixPrompt: () => void;
+  onCopyEvidence: () => void;
 }
 
 export function IncidentDetailView({
   selected,
+  replay,
+  evidence,
   canWrite,
   isActing,
   message,
@@ -48,6 +62,7 @@ export function IncidentDetailView({
   canResolve,
   onBack,
   onRefresh,
+  onRefreshArtifacts,
   onApplyStepStatus,
   onResolveIncident,
   onGeneratePostmortem,
@@ -55,6 +70,7 @@ export function IncidentDetailView({
   onFixFormFieldChange,
   onSaveFix,
   onDismissFixPrompt,
+  onCopyEvidence,
 }: IncidentDetailViewProps) {
   return (
     <div className="space-y-4">
@@ -170,6 +186,123 @@ export function IncidentDetailView({
         </section>
       )}
 
+      <section className="grid gap-4 xl:grid-cols-2">
+        <article className="surface p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wide">Incident Replay</h3>
+              <p className="mt-1 text-xs text-zinc-400">
+                Deterministic playback of the incident timeline from detection to resolution.
+              </p>
+            </div>
+            <button onClick={onRefreshArtifacts} disabled={isActing} className="btn-sm border-zinc-600">
+              Refresh Replay
+            </button>
+          </div>
+
+          {replay ? (
+            <>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <StatTile label="Frames" value={String(replay.frames.length)} tone="neutral" />
+                <StatTile label="Window" value={replay.duration} tone="accent" />
+                <StatTile
+                  label="Status"
+                  value={replay.status.toUpperCase()}
+                  tone={replay.status === "resolved" ? "good" : "warn"}
+                />
+              </div>
+              <div className="mt-3 space-y-3">
+                {replay.frames.map((frame, index) => (
+                  <div key={`${frame.timestamp}-${index}`} className="border border-zinc-700 bg-zinc-900/70 px-3 py-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold text-zinc-100">
+                        T+{frame.offsetMinutes}m · {frame.kind}
+                      </p>
+                      <span className="text-[11px] uppercase text-zinc-500">{frame.source}</span>
+                    </div>
+                    <p className="mt-1 text-sm text-zinc-300">{frame.summary}</p>
+                    <p className="mt-1 text-xs text-zinc-500">
+                      {formatTimestamp(frame.timestamp)}
+                      {frame.resource ? ` · ${frame.resource}` : ""}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-500">Replay data is unavailable for this incident.</p>
+          )}
+        </article>
+
+        <article className="surface p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold text-zinc-100 uppercase tracking-wide">Evidence Bundle</h3>
+              <p className="mt-1 text-xs text-zinc-400">
+                Audit-backed snapshot of findings, actions, and linked remediation context.
+              </p>
+            </div>
+            <button onClick={onCopyEvidence} disabled={!evidence || isActing} className="btn-sm border-zinc-600">
+              Copy Bundle
+            </button>
+          </div>
+
+          {evidence ? (
+            <>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                <StatTile label="Diagnostics" value={String(evidence.diagnostics.length)} tone="bad" />
+                <StatTile label="Audit items" value={String(evidence.audit.length)} tone="neutral" />
+                <StatTile label="Remediations" value={String(evidence.remediations.length)} tone="accent" />
+              </div>
+
+              <div className="mt-3 border border-zinc-700 bg-zinc-900/70 px-3 py-2">
+                <p className="text-xs uppercase tracking-[0.18em] text-zinc-500">Bundle Summary</p>
+                <p className="mt-2 text-sm text-zinc-300">{evidence.summary}</p>
+                <p className="mt-1 text-xs text-zinc-500">Generated {formatTimestamp(evidence.generatedAt)}</p>
+              </div>
+
+              <div className="mt-3 space-y-3">
+                <EvidenceList
+                  title="Recent Audit"
+                  items={evidence.audit.slice(-5).map((entry) => ({
+                    key: `${entry.id}-${entry.timestamp}`,
+                    title: entry.action || `${entry.method} ${entry.path}`,
+                    detail: `${formatTimestamp(entry.timestamp)} · ${entry.status}`,
+                  }))}
+                  emptyText="No related audit entries."
+                />
+                <EvidenceList
+                  title="Linked Remediation"
+                  items={evidence.remediations.map((proposal) => ({
+                    key: proposal.id,
+                    title: `${proposal.namespace ? `${proposal.namespace}/` : ""}${proposal.resource}`,
+                    detail: `${proposal.status.toUpperCase()} · ${proposal.reason}`,
+                  }))}
+                  emptyText="No linked remediations."
+                />
+                <EvidenceList
+                  title="Postmortem"
+                  items={
+                    evidence.postmortem
+                      ? [
+                          {
+                            key: evidence.postmortem.id,
+                            title: evidence.postmortem.rootCause,
+                            detail: `${evidence.postmortem.method.toUpperCase()} · ${formatTimestamp(evidence.postmortem.generatedAt)}`,
+                          },
+                        ]
+                      : []
+                  }
+                  emptyText="Postmortem not generated."
+                />
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-sm text-zinc-500">Evidence bundle data is unavailable for this incident.</p>
+          )}
+        </article>
+      </section>
+
       <section className="grid gap-4 lg:grid-cols-2">
         <article className="surface p-4">
           <div className="flex items-center justify-between gap-3">
@@ -268,6 +401,31 @@ export function IncidentDetailView({
           </div>
         </article>
       </section>
+    </div>
+  );
+}
+
+function EvidenceList({
+  title,
+  items,
+  emptyText,
+}: {
+  title: string;
+  items: Array<{ key: string; title: string; detail: string }>;
+  emptyText: string;
+}) {
+  return (
+    <div>
+      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{title}</p>
+      <div className="mt-2 space-y-2">
+        {items.map((item) => (
+          <div key={item.key} className="border border-zinc-700 bg-zinc-950 px-3 py-2">
+            <p className="text-sm text-zinc-100">{item.title}</p>
+            <p className="mt-1 text-xs text-zinc-500">{item.detail}</p>
+          </div>
+        ))}
+        {items.length === 0 && <p className="text-sm text-zinc-500">{emptyText}</p>}
+      </div>
     </div>
   );
 }

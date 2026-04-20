@@ -212,6 +212,12 @@ export const VIEW_SECTIONS: ViewSection[] = [
         kubectlCommand: "kubectl top pods -A",
       },
       {
+        id: "slo",
+        label: "SLO Center",
+        description: "Error budget posture, burn rate, and incident response guardrails.",
+        kubectlCommand: "kubectl get --raw /metrics",
+      },
+      {
         id: "audit",
         label: "Audit Trail",
         description: "Live request and action history with operator attribution.",

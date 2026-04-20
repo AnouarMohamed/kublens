@@ -1,4 +1,10 @@
-import type { Incident, IncidentStepStatusPatch, Postmortem } from "../../../types";
+import type {
+  Incident,
+  IncidentEvidenceBundle,
+  IncidentReplay,
+  IncidentStepStatusPatch,
+  Postmortem,
+} from "../../../types";
 import { apiRoute, requestJson } from "../core";
 
 export const incidentsApi = {
@@ -9,6 +15,9 @@ export const incidentsApi = {
     }),
   listIncidents: () => requestJson<Incident[]>(apiRoute("/incidents")),
   getIncident: (id: string) => requestJson<Incident>(apiRoute("/incidents/{id}", { id })),
+  getIncidentReplay: (id: string) => requestJson<IncidentReplay>(apiRoute("/incidents/{id}/replay", { id })),
+  getIncidentEvidence: (id: string) =>
+    requestJson<IncidentEvidenceBundle>(apiRoute("/incidents/{id}/evidence", { id })),
   updateIncidentStep: (id: string, stepID: string, payload: IncidentStepStatusPatch) =>
     requestJson<Incident>(apiRoute("/incidents/{id}/steps/{step}", { id, step: stepID }), {
       method: "PATCH",

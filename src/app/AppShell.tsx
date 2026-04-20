@@ -22,6 +22,7 @@ import type { View } from "../types";
 import Dashboard from "../views/dashboard";
 
 const Metrics = lazy(() => import("../views/metrics"));
+const SLOCenter = lazy(() => import("../views/slo"));
 const Audit = lazy(() => import("../views/audit"));
 const Pods = lazy(() => import("../views/pods"));
 const Deployments = lazy(() => import("../views/deployments"));
@@ -368,6 +369,12 @@ function renderView(view: View): ReactElement {
       return (
         <Suspense fallback={<ViewLoadingState label="Loading metrics..." />}>
           <Metrics />
+        </Suspense>
+      );
+    case "slo":
+      return (
+        <Suspense fallback={<ViewLoadingState label="Loading slo center..." />}>
+          <SLOCenter />
         </Suspense>
       );
     case "audit":

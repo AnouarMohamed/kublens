@@ -71,6 +71,7 @@ type DiagnosticsResult struct {
 
 type RiskCheck struct {
 	Name       string `json:"name"`
+	Category   string `json:"category,omitempty"`
 	Passed     bool   `json:"passed"`
 	Detail     string `json:"detail"`
 	Suggestion string `json:"suggestion"`

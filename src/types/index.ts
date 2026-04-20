@@ -12,5 +12,6 @@ export * from "./diagnostics";
 export * from "./incident";
 export * from "./predictions";
 export * from "./risk";
+export * from "./slo";
 export * from "./system";
 export * from "./view";
