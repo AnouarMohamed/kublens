@@ -44,18 +44,18 @@ func Load() (Config, error) {
 	}
 
 	cfg.Assistant = AssistantConfig{
-		Provider:         strings.ToLower(strings.TrimSpace(defaultIfEmpty(os.Getenv("ASSISTANT_PROVIDER"), "none"))),
-		Timeout:          parseSecondsAsDuration(os.Getenv("ASSISTANT_TIMEOUT_SECONDS"), 8*time.Second),
-		APIBaseURL:       strings.TrimSpace(defaultIfEmpty(os.Getenv("ASSISTANT_API_BASE_URL"), "https://api.openai.com/v1")),
-		APIKey:           strings.TrimSpace(os.Getenv("ASSISTANT_API_KEY")),
-		Model:            strings.TrimSpace(os.Getenv("ASSISTANT_MODEL")),
-		Temperature:      parseFloatDefault(os.Getenv("ASSISTANT_TEMPERATURE"), 0.2),
-		MaxTokens:        parseIntDefault(os.Getenv("ASSISTANT_MAX_TOKENS"), 700),
-		RAGEnabled:       parseBoolDefault(os.Getenv("ASSISTANT_RAG_ENABLED"), p.ragEnabled),
-		PromptTimeout:    parseSecondsAsDuration(os.Getenv("ASSISTANT_PROMPT_TIMEOUT_SECONDS"), 8*time.Second),
-		EmbeddingModel:   embeddingModel,
-		EmbeddingBaseURL: embeddingBaseURL,
-		EmbeddingAPIKey:  embeddingAPIKey,
+		Provider:           strings.ToLower(strings.TrimSpace(defaultIfEmpty(os.Getenv("ASSISTANT_PROVIDER"), "none"))),
+		Timeout:            parseSecondsAsDuration(os.Getenv("ASSISTANT_TIMEOUT_SECONDS"), 8*time.Second),
+		APIBaseURL:         strings.TrimSpace(defaultIfEmpty(os.Getenv("ASSISTANT_API_BASE_URL"), "https://api.openai.com/v1")),
+		APIKey:             strings.TrimSpace(os.Getenv("ASSISTANT_API_KEY")),
+		Model:              strings.TrimSpace(os.Getenv("ASSISTANT_MODEL")),
+		Temperature:        parseFloatDefault(os.Getenv("ASSISTANT_TEMPERATURE"), 0.2),
+		AssistantMaxTokens: getEnvInt("ASSISTANT_MAX_TOKENS", 2048),
+		RAGEnabled:         parseBoolDefault(os.Getenv("ASSISTANT_RAG_ENABLED"), p.ragEnabled),
+		PromptTimeout:      parseSecondsAsDuration(os.Getenv("ASSISTANT_PROMPT_TIMEOUT_SECONDS"), 8*time.Second),
+		EmbeddingModel:     embeddingModel,
+		EmbeddingBaseURL:   embeddingBaseURL,
+		EmbeddingAPIKey:    embeddingAPIKey,
 	}
 
 	cfg.Predictor = PredictorConfig{
@@ -190,6 +190,10 @@ func Load() (Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func getEnvInt(key string, fallback int) int {
+	return parseIntDefault(os.Getenv(key), fallback)
 }
 
 func validate(cfg Config) error {

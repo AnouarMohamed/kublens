@@ -21,6 +21,9 @@ func TestLoadDefaultsDemoMode(t *testing.T) {
 	if cfg.DBPath != "data/kubelens.db" {
 		t.Fatalf("db path = %q, want data/kubelens.db", cfg.DBPath)
 	}
+	if cfg.Assistant.AssistantMaxTokens != 2048 {
+		t.Fatalf("assistant max tokens = %d, want 2048", cfg.Assistant.AssistantMaxTokens)
+	}
 }
 
 func TestLoadProdRequiresAuth(t *testing.T) {
@@ -133,6 +136,19 @@ func TestLoadOllamaEmbeddingDefaults(t *testing.T) {
 	}
 	if cfg.Assistant.EmbeddingModel != "nomic-embed-text" {
 		t.Fatalf("embedding model = %q, want nomic-embed-text", cfg.Assistant.EmbeddingModel)
+	}
+}
+
+func TestLoadAssistantMaxTokensOverride(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("ASSISTANT_MAX_TOKENS", "4096")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Assistant.AssistantMaxTokens != 4096 {
+		t.Fatalf("assistant max tokens = %d, want 4096", cfg.Assistant.AssistantMaxTokens)
 	}
 }
 

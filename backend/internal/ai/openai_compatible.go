@@ -50,7 +50,7 @@ func NewOpenAICompatibleProvider(cfg OpenAICompatibleConfig) (*OpenAICompatibleP
 	}
 	maxTokens := cfg.MaxTokens
 	if maxTokens <= 0 {
-		maxTokens = 700
+		maxTokens = 2048
 	}
 
 	client := cfg.HTTPClient

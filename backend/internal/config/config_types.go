@@ -51,18 +51,18 @@ type ClusterConfig struct {
 }
 
 type AssistantConfig struct {
-	Provider         string
-	Timeout          time.Duration
-	APIBaseURL       string
-	APIKey           string
-	Model            string
-	Temperature      float64
-	MaxTokens        int
-	RAGEnabled       bool
-	PromptTimeout    time.Duration
-	EmbeddingModel   string
-	EmbeddingBaseURL string
-	EmbeddingAPIKey  string
+	Provider           string
+	Timeout            time.Duration
+	APIBaseURL         string
+	APIKey             string
+	Model              string
+	Temperature        float64
+	AssistantMaxTokens int
+	RAGEnabled         bool
+	PromptTimeout      time.Duration
+	EmbeddingModel     string
+	EmbeddingBaseURL   string
+	EmbeddingAPIKey    string
 }
 
 type PredictorConfig struct {

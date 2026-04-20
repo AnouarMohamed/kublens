@@ -261,7 +261,7 @@ func buildAIProvider(cfg config.AssistantConfig) (ai.Provider, error) {
 			APIKey:      cfg.APIKey,
 			Model:       cfg.Model,
 			Temperature: cfg.Temperature,
-			MaxTokens:   cfg.MaxTokens,
+			MaxTokens:   cfg.AssistantMaxTokens,
 		})
 		if err != nil {
 			return nil, err
