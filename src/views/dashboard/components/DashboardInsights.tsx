@@ -1,4 +1,6 @@
+import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import type { DiagnosticsResult, K8sEvent, Pod } from "../../../types";
+import { ACCENT, AMBER, RED } from "../constants";
 import { formatTimestamp, restartCountColorClass } from "../utils";
 
 export function TopRiskPodsCard({ pods }: { pods: Pod[] }) {
@@ -55,7 +57,18 @@ export function RecentEventsCard({ events }: { events: K8sEvent[] }) {
   );
 }
 
-export function HealthSnapshotCard({ diagnostics }: { diagnostics: DiagnosticsResult | null }) {
+export function HealthSnapshotCard({
+  diagnostics,
+  healthHistory,
+}: {
+  diagnostics: DiagnosticsResult | null;
+  healthHistory: Array<{ t: number; score: number }>;
+}) {
+  const latestScore = diagnostics?.healthScore ?? 0;
+  const hasTrend = healthHistory.length >= 2;
+  const trend = getHealthTrend(healthHistory);
+  const healthColor = getHealthColor(latestScore);
+
   return (
     <div className="surface p-5">
       <h3 className="text-sm font-semibold text-zinc-100">Health Snapshot</h3>
@@ -63,11 +76,6 @@ export function HealthSnapshotCard({ diagnostics }: { diagnostics: DiagnosticsRe
       {diagnostics ? (
         <div className="mt-3">
           {[
-            {
-              label: "Health Score",
-              value: `${diagnostics.healthScore}/100`,
-              critical: diagnostics.healthScore < 75,
-            },
             {
               label: "Critical",
               value: String(diagnostics.criticalIssues),
@@ -89,12 +97,49 @@ export function HealthSnapshotCard({ diagnostics }: { diagnostics: DiagnosticsRe
           ))}
           <div className="mt-3">
             <p className="text-[11px] uppercase tracking-wide text-zinc-500 font-semibold">Health Trend</p>
-            <div className="mt-2 h-1 rounded-none bg-zinc-700 overflow-hidden">
-              <div
-                className="h-full rounded-none bg-[#3b82f6]"
-                style={{ width: `${Math.max(0, Math.min(100, diagnostics.healthScore))}%` }}
-              />
-            </div>
+            {hasTrend ? (
+              <>
+                <div className="mt-2 h-16">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={healthHistory} margin={{ top: 4, right: 2, left: 2, bottom: 4 }}>
+                      <XAxis hide dataKey="t" type="number" domain={["dataMin", "dataMax"]} />
+                      <YAxis hide domain={[0, 100]} />
+                      <Line
+                        type="monotone"
+                        dataKey="score"
+                        stroke={healthColor}
+                        strokeWidth={2}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-lg font-mono font-semibold" style={{ color: healthColor }}>
+                    {diagnostics.healthScore}/100
+                  </span>
+                  <span className={`text-xs font-mono font-semibold ${trend.className}`}>{trend.label}</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-2 h-1 rounded-none bg-zinc-700 overflow-hidden">
+                  <div
+                    className="h-full rounded-none"
+                    style={{
+                      width: `${Math.max(0, Math.min(100, diagnostics.healthScore))}%`,
+                      backgroundColor: healthColor,
+                    }}
+                  />
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <span className="text-lg font-mono font-semibold" style={{ color: healthColor }}>
+                    {diagnostics.healthScore}/100
+                  </span>
+                </div>
+              </>
+            )}
           </div>
           <p className="text-xs text-zinc-500 mt-3">Updated: {formatTimestamp(diagnostics.timestamp)}</p>
         </div>
@@ -103,4 +148,43 @@ export function HealthSnapshotCard({ diagnostics }: { diagnostics: DiagnosticsRe
       )}
     </div>
   );
+}
+
+function getHealthColor(score: number): string {
+  if (score >= 75) {
+    return ACCENT;
+  }
+  if (score >= 50) {
+    return AMBER;
+  }
+  return RED;
+}
+
+function getHealthTrend(healthHistory: Array<{ t: number; score: number }>): { label: string; className: string } {
+  if (healthHistory.length < 2) {
+    return {
+      label: "→ stable",
+      className: "text-zinc-400",
+    };
+  }
+
+  const latest = healthHistory[healthHistory.length - 1];
+  const previous = healthHistory[healthHistory.length - 2];
+
+  if (latest.score > previous.score) {
+    return {
+      label: "↑ improving",
+      className: "text-[#00d4a8]",
+    };
+  }
+  if (latest.score < previous.score) {
+    return {
+      label: "↓ degrading",
+      className: "text-[#ff4444]",
+    };
+  }
+  return {
+    label: "→ stable",
+    className: "text-zinc-400",
+  };
 }

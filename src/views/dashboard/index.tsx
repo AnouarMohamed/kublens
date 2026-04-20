@@ -25,6 +25,7 @@ export default function Dashboard() {
   const {
     stats,
     diagnostics,
+    healthHistory,
     events,
     isLoading,
     error,
@@ -223,7 +224,7 @@ export default function Dashboard() {
       <section className="grid grid-cols-1 xl:grid-cols-3 gap-4">
         <TopRiskPodsCard pods={topRiskPods} />
         <RecentEventsCard events={events} />
-        <HealthSnapshotCard diagnostics={diagnostics} />
+        <HealthSnapshotCard diagnostics={diagnostics} healthHistory={healthHistory} />
       </section>
 
       <div className="flex justify-end">

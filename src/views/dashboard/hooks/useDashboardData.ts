@@ -14,6 +14,8 @@ import {
 } from "../utils";
 
 const DASHBOARD_REFRESH_MS = 30000;
+const HEALTH_HISTORY_KEY = "kubelens:health-history";
+const MAX_HEALTH_HISTORY = 20;
 
 interface DashboardKpi {
   label: string;
@@ -27,6 +29,7 @@ interface DashboardKpi {
 interface UseDashboardDataResult {
   stats: ClusterStats | null;
   diagnostics: DiagnosticsResult | null;
+  healthHistory: Array<{ t: number; score: number }>;
   events: K8sEvent[];
   nodes: Node[];
   pods: Pod[];
@@ -63,6 +66,7 @@ interface UseDashboardDataResult {
 export function useDashboardData(): UseDashboardDataResult {
   const [stats, setStats] = useState<ClusterStats | null>(null);
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
+  const [healthHistory, setHealthHistory] = useState<Array<{ t: number; score: number }>>(() => readHealthHistory());
   const [events, setEvents] = useState<K8sEvent[]>([]);
   const [nodes, setNodes] = useState<Node[]>([]);
   const [pods, setPods] = useState<Pod[]>([]);
@@ -101,6 +105,14 @@ export function useDashboardData(): UseDashboardDataResult {
 
       setStats(statsResponse);
       setDiagnostics(diagnosticsResponse);
+      if (Number.isFinite(diagnosticsResponse.healthScore)) {
+        setHealthHistory((current) =>
+          appendHealthHistoryPoint(current, {
+            t: Date.now(),
+            score: diagnosticsResponse.healthScore,
+          }),
+        );
+      }
       setEvents(eventsResponse);
       setNodes(nodesResponse);
       setPods(podsResponse);
@@ -140,6 +152,10 @@ export function useDashboardData(): UseDashboardDataResult {
     };
   }, [loadWithMode]);
 
+  useEffect(() => {
+    writeHealthHistory(healthHistory);
+  }, [healthHistory]);
+
   const topRiskPods = useMemo(() => [...pods].sort((a, b) => b.restarts - a.restarts).slice(0, 6), [pods]);
   const prioritizedIssues = useMemo(() => buildPrioritizedIssues(diagnostics), [diagnostics]);
   const podMixData = useMemo(() => buildPodMixData(stats), [stats]);
@@ -171,6 +187,7 @@ export function useDashboardData(): UseDashboardDataResult {
   return {
     stats,
     diagnostics,
+    healthHistory,
     events,
     nodes,
     pods,
@@ -192,4 +209,54 @@ export function useDashboardData(): UseDashboardDataResult {
     nodeAvailabilityPercent,
     kpis,
   };
+}
+
+function readHealthHistory(): Array<{ t: number; score: number }> {
+  if (typeof window === "undefined") {
+    return [];
+  }
+
+  try {
+    const raw = window.sessionStorage.getItem(HEALTH_HISTORY_KEY);
+    if (!raw) {
+      return [];
+    }
+
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    return parsed.filter(isHealthHistoryPoint).slice(-MAX_HEALTH_HISTORY);
+  } catch {
+    return [];
+  }
+}
+
+function writeHealthHistory(history: Array<{ t: number; score: number }>): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.sessionStorage.setItem(HEALTH_HISTORY_KEY, JSON.stringify(history.slice(-MAX_HEALTH_HISTORY)));
+  } catch {
+    // Session storage is best effort for client-side chart history.
+  }
+}
+
+function appendHealthHistoryPoint(
+  history: Array<{ t: number; score: number }>,
+  point: { t: number; score: number },
+): Array<{ t: number; score: number }> {
+  return [...history, point].slice(-MAX_HEALTH_HISTORY);
+}
+
+function isHealthHistoryPoint(value: unknown): value is { t: number; score: number } {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+
+  const candidate = value as { t?: unknown; score?: unknown };
+  return Number.isFinite(candidate.t) && Number.isFinite(candidate.score);
 }

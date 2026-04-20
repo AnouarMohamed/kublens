@@ -19,6 +19,7 @@ All notable changes to this project are documented here.
 ### Changed
 
 - Assistant context now includes top team runbooks from memory search on every query and increments usage counters for surfaced entries.
+- Dashboard health snapshot now keeps a session-scoped health score history and renders a sparkline with improving/degrading trend cues instead of a static single-bar snapshot.
 - Shift Brief now supports Markdown copy/download export and one-click handoff into the Ops Assistant with the current brief prefilled for summarization.
 - Resource YAML apply now supports risk-guard `202 Accepted` responses requiring explicit `force=true` override for high-risk manifests.
 - Backend HTTP contract/OpenAPI expanded to document all new operational APIs and schemas.
