@@ -29,6 +29,7 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Moved the shared assistant draft storage key out of `src/views/opsassistant` into a shared feature constant so structure lint no longer flags app-level imports crossing the `views/` boundary.
 - Scoped TypeScript, ESLint, and Prettier checks to repo-owned sources so local `.venv`, Postman workspace exports, and transient Vite temp files no longer break routine quality gates.
 - Improved backend Go task failures with a direct install hint when the `go` toolchain is missing from `PATH`.
 - Pinned predictor `protobuf` back to a compatible `6.x` release so fresh installs and dependency audits succeed with `opentelemetry-exporter-otlp 1.41.0`.

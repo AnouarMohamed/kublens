@@ -1,6 +1,6 @@
 export type AssistantIntent = "triage" | "remediate" | "verify";
 
-export const ASSISTANT_DRAFT_KEY = "k8s-ops.assistant.draft.v1";
+export { ASSISTANT_DRAFT_KEY } from "../../features/opsassistant/constants";
 
 export const intentOptions: Array<{ value: AssistantIntent; label: string }> = [
   { value: "triage", label: "Triage" },

@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import { ASSISTANT_DRAFT_KEY } from "../../features/opsassistant/constants";
 import { flattenViewItems, VIEW_SECTIONS } from "../../features/viewCatalog";
-import { ASSISTANT_DRAFT_KEY } from "../../views/opsassistant/constants";
 import { CommandPalette } from "./CommandPalette";
 
 const mockNavigation = vi.hoisted(() => ({
