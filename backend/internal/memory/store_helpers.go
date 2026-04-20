@@ -53,7 +53,18 @@ func cloneRunbook(in model.MemoryRunbook) model.MemoryRunbook {
 	out := in
 	out.Tags = append([]string(nil), in.Tags...)
 	out.Steps = append([]string(nil), in.Steps...)
+	out.Embedding = append([]float32(nil), in.Embedding...)
 	return out
+}
+
+func runbookEmbeddingText(runbook model.MemoryRunbook) string {
+	parts := []string{
+		strings.TrimSpace(runbook.Title),
+		strings.TrimSpace(runbook.Description),
+		strings.Join(runbook.Tags, " "),
+		strings.Join(runbook.Steps, " "),
+	}
+	return strings.TrimSpace(strings.Join(parts, " "))
 }
 
 func cloneFix(in model.MemoryFixPattern) model.MemoryFixPattern {

@@ -119,14 +119,15 @@ type RemediationRejectRequest struct {
 }
 
 type MemoryRunbook struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Tags        []string `json:"tags"`
-	Description string   `json:"description"`
-	Steps       []string `json:"steps"`
-	UsageCount  int      `json:"usageCount"`
-	CreatedAt   string   `json:"createdAt"`
-	UpdatedAt   string   `json:"updatedAt"`
+	ID          string    `json:"id"`
+	Title       string    `json:"title"`
+	Tags        []string  `json:"tags"`
+	Description string    `json:"description"`
+	Steps       []string  `json:"steps"`
+	Embedding   []float32 `json:"embedding,omitempty"`
+	UsageCount  int       `json:"usageCount"`
+	CreatedAt   string    `json:"createdAt"`
+	UpdatedAt   string    `json:"updatedAt"`
 }
 
 type MemoryRunbookUpsertRequest struct {

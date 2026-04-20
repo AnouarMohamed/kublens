@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -12,10 +13,15 @@ import (
 	"kubelens-backend/internal/model"
 )
 
+type EmbeddingClient interface {
+	Embed(ctx context.Context, text string) ([]float32, error)
+}
+
 type Store struct {
-	filePath string
-	logger   *slog.Logger
-	now      func() time.Time
+	filePath        string
+	logger          *slog.Logger
+	now             func() time.Time
+	embeddingClient EmbeddingClient
 
 	mu       sync.RWMutex
 	counter  uint64
@@ -24,6 +30,10 @@ type Store struct {
 }
 
 func New(filePath string, logger *slog.Logger) *Store {
+	return NewWithEmbeddings(filePath, logger, nil)
+}
+
+func NewWithEmbeddings(filePath string, logger *slog.Logger, embedder EmbeddingClient) *Store {
 	path := strings.TrimSpace(filePath)
 	if path == "" {
 		path = filepath.Clean("data/memory-runbooks.json")
@@ -33,64 +43,70 @@ func New(filePath string, logger *slog.Logger) *Store {
 	}
 
 	store := &Store{
-		filePath: path,
-		logger:   logger,
-		now:      time.Now,
-		runbooks: make([]model.MemoryRunbook, 0, 128),
-		fixes:    make([]model.MemoryFixPattern, 0, 256),
+		filePath:        path,
+		logger:          logger,
+		now:             time.Now,
+		embeddingClient: embedder,
+		runbooks:        make([]model.MemoryRunbook, 0, 128),
+		fixes:           make([]model.MemoryFixPattern, 0, 256),
 	}
 	store.load()
 	return store
 }
 
 func (s *Store) Search(query string) []model.MemoryRunbook {
+	return s.SearchContext(context.Background(), query)
+}
+
+func (s *Store) AddRunbook(ctx context.Context, runbook model.MemoryRunbook) (model.MemoryRunbook, error) {
 	if s == nil {
-		return nil
+		return model.MemoryRunbook{}, os.ErrInvalid
 	}
 
-	needle := strings.ToLower(strings.TrimSpace(query))
-	terms := searchTerms(needle)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	type scoredRunbook struct {
-		runbook model.MemoryRunbook
-		score   int
-	}
-	candidates := make([]scoredRunbook, 0, len(s.runbooks))
-	for _, runbook := range s.runbooks {
-		score := 0
-		if needle != "" {
-			score = runbookMatchScore(runbook, needle, terms)
-			if score == 0 {
-				continue
-			}
-		}
-		candidates = append(candidates, scoredRunbook{
-			runbook: cloneRunbook(runbook),
-			score:   score,
-		})
-	}
-
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].score != candidates[j].score {
-			return candidates[i].score > candidates[j].score
-		}
-		if candidates[i].runbook.UsageCount != candidates[j].runbook.UsageCount {
-			return candidates[i].runbook.UsageCount > candidates[j].runbook.UsageCount
-		}
-		return candidates[i].runbook.UpdatedAt > candidates[j].runbook.UpdatedAt
+	normalized, err := normalizeRunbookRequest(model.MemoryRunbookUpsertRequest{
+		Title:       runbook.Title,
+		Tags:        runbook.Tags,
+		Description: runbook.Description,
+		Steps:       runbook.Steps,
 	})
-
-	if len(candidates) > 5 {
-		candidates = candidates[:5]
+	if err != nil {
+		return model.MemoryRunbook{}, err
 	}
 
-	out := make([]model.MemoryRunbook, 0, len(candidates))
-	for _, candidate := range candidates {
-		out = append(out, candidate.runbook)
+	embedding, err := s.embedRunbook(ctx, normalized)
+	if err != nil && s.logger != nil {
+		s.logger.Warn("memory runbook embedding failed", "title", normalized.Title, "error", err.Error())
 	}
-	return out
+	if len(embedding) > 0 {
+		normalized.Embedding = embedding
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.counter++
+	nowAt := s.now().UTC().Format(time.RFC3339)
+	normalized.ID = "rbk-" + formatCounter(s.counter)
+	normalized.CreatedAt = nowAt
+	normalized.UpdatedAt = nowAt
+	normalized.UsageCount = 0
+	s.runbooks = append(s.runbooks, normalized)
+	s.persistLocked()
+	return cloneRunbook(normalized), nil
+}
+
+func (s *Store) embedRunbook(ctx context.Context, runbook model.MemoryRunbook) ([]float32, error) {
+	if s == nil || s.embeddingClient == nil {
+		return nil, nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	vector, err := s.embeddingClient.Embed(ctx, runbookEmbeddingText(runbook))
+	if err != nil {
+		return nil, err
+	}
+	return append([]float32(nil), vector...), nil
 }
 
 func (s *Store) IncrementUsage(id string) bool {
@@ -127,22 +143,14 @@ func (s *Store) CreateRunbook(req model.MemoryRunbookUpsertRequest) (model.Memor
 	if err != nil {
 		return model.MemoryRunbook{}, err
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.counter++
-	nowAt := s.now().UTC().Format(time.RFC3339)
-	runbook.ID = "rbk-" + formatCounter(s.counter)
-	runbook.CreatedAt = nowAt
-	runbook.UpdatedAt = nowAt
-	runbook.UsageCount = 0
-	s.runbooks = append(s.runbooks, runbook)
-	s.persistLocked()
-	return cloneRunbook(runbook), nil
+	return s.AddRunbook(context.Background(), runbook)
 }
 
 func (s *Store) UpdateRunbook(id string, req model.MemoryRunbookUpsertRequest) (model.MemoryRunbook, error) {
+	return s.updateRunbookContext(context.Background(), id, req)
+}
+
+func (s *Store) updateRunbookContext(ctx context.Context, id string, req model.MemoryRunbookUpsertRequest) (model.MemoryRunbook, error) {
 	if s == nil {
 		return model.MemoryRunbook{}, os.ErrInvalid
 	}
@@ -156,6 +164,11 @@ func (s *Store) UpdateRunbook(id string, req model.MemoryRunbookUpsertRequest) (
 		return model.MemoryRunbook{}, err
 	}
 
+	embedding, embeddingErr := s.embedRunbook(ctx, normalized)
+	if embeddingErr != nil && s.logger != nil {
+		s.logger.Warn("memory runbook embedding failed", "id", needle, "title", normalized.Title, "error", embeddingErr.Error())
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -167,6 +180,9 @@ func (s *Store) UpdateRunbook(id string, req model.MemoryRunbookUpsertRequest) (
 		s.runbooks[i].Tags = append([]string(nil), normalized.Tags...)
 		s.runbooks[i].Description = normalized.Description
 		s.runbooks[i].Steps = append([]string(nil), normalized.Steps...)
+		if len(embedding) > 0 {
+			s.runbooks[i].Embedding = append([]float32(nil), embedding...)
+		}
 		s.runbooks[i].UpdatedAt = s.now().UTC().Format(time.RFC3339)
 		s.persistLocked()
 		return cloneRunbook(s.runbooks[i]), nil

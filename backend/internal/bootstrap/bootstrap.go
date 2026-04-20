@@ -117,7 +117,7 @@ func Build(cfg config.Config) (Result, error) {
 		Enabled:         cfg.Assistant.RAGEnabled,
 		EmbeddingClient: embeddingClient,
 	})
-	memoryStore := memory.New(cfg.Memory.FilePath, nil)
+	memoryStore := memory.NewWithEmbeddings(cfg.Memory.FilePath, nil, embeddingClient)
 	incidentStore := incident.NewStore(sqliteDB, incident.DefaultStoreLimit, nil)
 	remediationStore := remediation.NewStore(sqliteDB, remediation.DefaultStoreLimit, nil)
 	postmortemStore := postmortem.NewStore(sqliteDB, postmortem.DefaultStoreLimit, nil)

@@ -1,13 +1,33 @@
 package memory
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"kubelens-backend/internal/model"
 )
+
+type mockEmbeddingClient struct{}
+
+func (m mockEmbeddingClient) Embed(_ context.Context, text string) ([]float32, error) {
+	switch normalized := strings.ToLower(strings.TrimSpace(text)); {
+	case strings.Contains(normalized, "oom"),
+		strings.Contains(normalized, "memory"),
+		strings.Contains(normalized, "heap"),
+		strings.Contains(normalized, "exhaustion"):
+		return []float32{0.9, 0.1}, nil
+	case strings.Contains(normalized, "certificate"),
+		strings.Contains(normalized, "tls"),
+		strings.Contains(normalized, "rotation"):
+		return []float32{0.1, 0.9}, nil
+	default:
+		return []float32{0.5, 0.5}, nil
+	}
+}
 
 func TestStoreCreateSearchAndIncrementUsage(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "memory.json")
@@ -138,5 +158,42 @@ func TestSearchRanksByRelevanceBeforeUsage(t *testing.T) {
 	}
 	if results[0].ID != moreRelevant.ID {
 		t.Fatalf("expected most relevant runbook first, got %s", results[0].ID)
+	}
+}
+
+func TestStoreSearchUsesEmbeddingsWhenAvailable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "memory.json")
+	store := NewWithEmbeddings(path, nil, mockEmbeddingClient{})
+	store.now = func() time.Time { return time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC) }
+
+	_, err := store.CreateRunbook(model.MemoryRunbookUpsertRequest{
+		Title:       "Certificate rotation drill",
+		Tags:        []string{"tls", "certificates"},
+		Description: "Refresh certificates after a CA rollover.",
+		Steps:       []string{"Rotate secret", "Restart ingress"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRunbook(certificate) error = %v", err)
+	}
+
+	expected, err := store.CreateRunbook(model.MemoryRunbookUpsertRequest{
+		Title:       "Payment gateway OOM recovery",
+		Tags:        []string{"payments", "oom"},
+		Description: "Recover payment-gateway after repeated OOMKilled crashes.",
+		Steps:       []string{"Check memory requests", "Restart deployment"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRunbook(oom) error = %v", err)
+	}
+	if len(expected.Embedding) == 0 {
+		t.Fatal("expected created runbook to persist an embedding")
+	}
+
+	results := store.Search("heap exhaustion during checkout")
+	if len(results) < 2 {
+		t.Fatalf("search results length = %d, want at least 2", len(results))
+	}
+	if results[0].ID != expected.ID {
+		t.Fatalf("expected semantic match %s first, got %s", expected.ID, results[0].ID)
 	}
 }
