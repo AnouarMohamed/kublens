@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { VIEW_NAVIGATE_EVENT, consumePendingViewNavigationDetail, type ViewNavigateDetail } from "../../app/viewNavigation";
 import { intentOptions } from "./constants";
 import { OpsAssistantComposer } from "./components/OpsAssistantComposer";
 import { OpsAssistantHeader } from "./components/OpsAssistantHeader";
@@ -37,6 +39,26 @@ export default function OpsAssistant() {
     submitReferenceFeedback,
     resetSession,
   } = useOpsAssistantView();
+
+  useEffect(() => {
+    const applyPrefill = (detail?: ViewNavigateDetail | null) => {
+      const prefillMessage = detail?.view === "assistant" ? detail.prefillMessage?.trim() : "";
+      if (!prefillMessage) {
+        return;
+      }
+      setInput(prefillMessage);
+    };
+
+    applyPrefill(consumePendingViewNavigationDetail());
+
+    const onNavigate = (event: Event) => {
+      const custom = event as CustomEvent<ViewNavigateDetail>;
+      applyPrefill(custom.detail);
+    };
+
+    window.addEventListener(VIEW_NAVIGATE_EVENT, onNavigate as EventListener);
+    return () => window.removeEventListener(VIEW_NAVIGATE_EVENT, onNavigate as EventListener);
+  }, [setInput]);
 
   return (
     <div className="h-[calc(100vh-140px)] app-shell overflow-hidden grid grid-cols-1 xl:grid-cols-[1fr_340px]">

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { navigateToView } from "../../app/viewNavigation";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { api } from "../../lib/api";
 import type { AuditEntry, DiagnosticsResult, Incident, PredictionsResult, RemediationProposal } from "../../types";
@@ -17,6 +18,8 @@ export default function ShiftBrief() {
   const [snapshot, setSnapshot] = useState<ShiftSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const copyResetRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     if (!canRead) {
@@ -55,6 +58,14 @@ export default function ShiftBrief() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    return () => {
+      if (copyResetRef.current !== null) {
+        window.clearTimeout(copyResetRef.current);
+      }
+    };
+  }, []);
+
   const criticalPredictions = useMemo(() => {
     if (!snapshot) {
       return [];
@@ -85,6 +96,68 @@ export default function ShiftBrief() {
       .slice(0, 8);
   }, [snapshot]);
 
+  const markdown = useMemo(
+    () =>
+      snapshot
+        ? buildShiftBriefMarkdown({
+            snapshot,
+            openIncidents,
+            pendingRemediations,
+            criticalPredictions,
+            recentMutations,
+          })
+        : "",
+    [criticalPredictions, openIncidents, pendingRemediations, recentMutations, snapshot],
+  );
+
+  const scheduleCopiedReset = useCallback(() => {
+    if (copyResetRef.current !== null) {
+      window.clearTimeout(copyResetRef.current);
+    }
+    copyResetRef.current = window.setTimeout(() => {
+      setCopied(false);
+      copyResetRef.current = null;
+    }, 2000);
+  }, []);
+
+  const handleCopy = useCallback(async () => {
+    if (!markdown) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(markdown);
+      setCopied(true);
+      scheduleCopiedReset();
+    } catch {
+      // Clipboard access is best effort.
+    }
+  }, [markdown, scheduleCopiedReset]);
+
+  const handleDownload = useCallback(() => {
+    if (!markdown) {
+      return;
+    }
+    const blob = new Blob([markdown], { type: "text/markdown" });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `shift-brief-${new Date().toISOString().slice(0, 10)}.md`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+  }, [markdown]);
+
+  const handleOpenInAssistant = useCallback(() => {
+    if (!markdown) {
+      return;
+    }
+    navigateToView("assistant", {
+      prefillMessage: `Summarize this shift brief and tell me what needs attention:\n\n${markdown}`,
+    });
+  }, [markdown]);
+
   return (
     <div className="space-y-5">
       <header className="panel-head">
@@ -94,9 +167,20 @@ export default function ShiftBrief() {
             Live handoff view for on-call transitions: risk posture, active incidents, and recent changes.
           </p>
         </div>
-        <button onClick={() => void load()} className="btn-sm" disabled={isLoading || !canRead}>
-          {isLoading ? "Refreshing..." : "Refresh"}
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => void handleCopy()} className="btn-sm" disabled={!snapshot || isLoading || !canRead}>
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button onClick={handleDownload} className="btn-sm" disabled={!snapshot || isLoading || !canRead}>
+            Download .md
+          </button>
+          <button onClick={handleOpenInAssistant} className="btn-sm" disabled={!snapshot || isLoading || !canRead}>
+            Open in Assistant
+          </button>
+          <button onClick={() => void load()} className="btn-sm" disabled={isLoading || !canRead}>
+            {isLoading ? "Refreshing..." : "Refresh"}
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -213,4 +297,104 @@ function formatTimestamp(raw: string): string {
     return raw;
   }
   return date.toLocaleString();
+}
+
+function buildShiftBriefMarkdown({
+  snapshot,
+  openIncidents,
+  pendingRemediations,
+  criticalPredictions,
+  recentMutations,
+}: {
+  snapshot: ShiftSnapshot;
+  openIncidents: Incident[];
+  pendingRemediations: RemediationProposal[];
+  criticalPredictions: PredictionsResult["items"];
+  recentMutations: AuditEntry[];
+}): string {
+  const lines = [
+    `## Shift Brief — ${new Date().toISOString()}`,
+    "",
+    "### Health",
+    `- Health score: ${snapshot.diagnostics.healthScore}/100`,
+    `- Critical issues: ${snapshot.diagnostics.criticalIssues}`,
+    `- Warnings: ${snapshot.diagnostics.warningIssues}`,
+    "",
+    `### Active Incidents (${openIncidents.length})`,
+    ...toMarkdownList(
+      openIncidents.map((incident) => `- [${incident.status}] ${incident.title} — started ${formatRelativeTime(incident.openedAt)}`),
+    ),
+    "",
+    `### Pending Remediations (${pendingRemediations.length})`,
+    ...toMarkdownList(
+      pendingRemediations.map(
+        (item) => `- [${item.riskLevel}] ${item.resource || "unknown resource"} — ${item.reason || "No reason provided"}`,
+      ),
+    ),
+    "",
+    `### Top Predictions (${criticalPredictions.length})`,
+    ...toMarkdownList(
+      criticalPredictions.map((item) => {
+        const resource = item.namespace ? `${item.namespace}/${item.resource}` : item.resource;
+        return `- [${item.confidence}%] ${resource} — ${item.summary}`;
+      }),
+    ),
+    "",
+    `### Recent Audit Activity (${recentMutations.length} entries)`,
+    ...toMarkdownList(
+      recentMutations.map((entry) => {
+        const actor = entry.user?.trim() || "unknown";
+        const route = entry.route?.trim() || entry.path;
+        return `- ${actor} · ${route} · ${entry.status} · ${formatIsoTimestamp(entry.timestamp)}`;
+      }),
+    ),
+  ];
+
+  return lines.join("\n");
+}
+
+function toMarkdownList(entries: string[]): string[] {
+  return entries.length > 0 ? entries : ["- None"];
+}
+
+function formatRelativeTime(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return "unknown";
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    return raw;
+  }
+
+  const diffMs = date.getTime() - Date.now();
+  const diffMinutes = Math.round(diffMs / 60000);
+  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+
+  if (Math.abs(diffMinutes) < 60) {
+    return formatter.format(diffMinutes, "minute");
+  }
+
+  const diffHours = Math.round(diffMinutes / 60);
+  if (Math.abs(diffHours) < 24) {
+    return formatter.format(diffHours, "hour");
+  }
+
+  const diffDays = Math.round(diffHours / 24);
+  return formatter.format(diffDays, "day");
+}
+
+function formatIsoTimestamp(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed === "") {
+    return "-";
+  }
+
+  const date = new Date(trimmed);
+  if (Number.isNaN(date.getTime())) {
+    return raw;
+  }
+
+  return date.toISOString();
 }
