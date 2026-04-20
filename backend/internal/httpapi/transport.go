@@ -70,6 +70,11 @@ func attachStatic(r chi.Router, distDir string) {
 		return
 	}
 
+	absDistDir, err := filepath.Abs(distDir)
+	if err != nil {
+		return
+	}
+
 	fileServer := http.FileServer(http.Dir(distDir))
 	r.Get("/*", func(w http.ResponseWriter, req *http.Request) {
 		if isAPIPath(req.URL.Path) {
@@ -83,10 +88,16 @@ func attachStatic(r chi.Router, distDir string) {
 			return
 		}
 
-		candidate := filepath.Join(distDir, filepath.Clean(trimmed))
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			fileServer.ServeHTTP(w, req)
-			return
+		cleaned := filepath.Clean(trimmed)
+		candidate := filepath.Join(absDistDir, cleaned)
+		absCandidate, err := filepath.Abs(candidate)
+		if err == nil {
+			if rel, relErr := filepath.Rel(absDistDir, absCandidate); relErr == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				if info, statErr := os.Stat(absCandidate); statErr == nil && !info.IsDir() {
+					fileServer.ServeHTTP(w, req)
+					return
+				}
+			}
 		}
 
 		http.ServeFile(w, req, indexFile)
