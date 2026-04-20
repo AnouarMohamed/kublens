@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { api } from "../../../lib/api";
 import { useAssistantChat } from "./useAssistantChat";
-import type { AssistantMessage as Message } from "../types";
+import type { AssistantMessage as Message, ChatSession } from "../types";
 import { applyIntentToPrompt, buildFollowUpPrompt } from "../utils";
 import { ASSISTANT_DRAFT_KEY, type AssistantIntent } from "../constants";
 
@@ -16,6 +16,8 @@ interface UseOpsAssistantViewResult {
   lastAssistant: Message | undefined;
   suggestionPool: string[];
   diagnosticPrompts: string[];
+  sessions: ChatSession[];
+  activeSessionId: string | null;
   input: string;
   intentMode: AssistantIntent;
   copiedMessageID: string | null;
@@ -29,6 +31,9 @@ interface UseOpsAssistantViewResult {
   setInput: (value: string) => void;
   setIntentMode: (intent: AssistantIntent) => void;
   setSelectedNamespace: (namespace: string) => void;
+  startNewSession: () => void;
+  selectSession: (id: string) => void;
+  deleteSession: (id: string) => void;
   submit: (promptOverride?: string) => Promise<void>;
   copyMessage: (message: Message) => Promise<void>;
   submitReferenceFeedback: (message: Message, url: string, helpful: boolean) => Promise<void>;
@@ -41,7 +46,19 @@ interface UseOpsAssistantViewResult {
  * @returns View-model and handlers for Ops Assistant rendering.
  */
 export function useOpsAssistantView(): UseOpsAssistantViewResult {
-  const { messages, isLoading, lastAssistant, suggestionPool, diagnosticPrompts, send, clear } = useAssistantChat();
+  const {
+    messages,
+    isLoading,
+    lastAssistant,
+    suggestionPool,
+    diagnosticPrompts,
+    sessions,
+    activeSessionId,
+    selectSession: selectStoredSession,
+    deleteSession: deleteStoredSession,
+    send,
+    clear,
+  } = useAssistantChat();
   const [input, setInputState] = useState("");
   const [intentMode, setIntentModeState] = useState<AssistantIntent>("triage");
   const [copiedMessageID, setCopiedMessageID] = useState<string | null>(null);
@@ -61,6 +78,25 @@ export function useOpsAssistantView(): UseOpsAssistantViewResult {
   const setSelectedNamespace = useCallback((namespace: string) => {
     setSelectedNamespaceState(namespace);
   }, []);
+
+  const startNewSession = useCallback(() => {
+    clear();
+    setInputState("");
+    setReferenceFeedback({});
+    setCopiedMessageID(null);
+  }, [clear]);
+
+  const selectSession = useCallback((id: string) => {
+    selectStoredSession(id);
+    setReferenceFeedback({});
+    setCopiedMessageID(null);
+  }, [selectStoredSession]);
+
+  const deleteSession = useCallback((id: string) => {
+    deleteStoredSession(id);
+    setReferenceFeedback({});
+    setCopiedMessageID(null);
+  }, [deleteStoredSession]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -196,6 +232,8 @@ export function useOpsAssistantView(): UseOpsAssistantViewResult {
     lastAssistant,
     suggestionPool,
     diagnosticPrompts,
+    sessions,
+    activeSessionId,
     input,
     intentMode,
     copiedMessageID,
@@ -209,6 +247,9 @@ export function useOpsAssistantView(): UseOpsAssistantViewResult {
     setInput,
     setIntentMode,
     setSelectedNamespace,
+    startNewSession,
+    selectSession,
+    deleteSession,
     submit,
     copyMessage,
     submitReferenceFeedback,

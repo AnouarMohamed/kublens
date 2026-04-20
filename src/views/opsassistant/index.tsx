@@ -14,6 +14,8 @@ export default function OpsAssistant() {
     lastAssistant,
     suggestionPool,
     diagnosticPrompts,
+    sessions,
+    activeSessionId,
     input,
     intentMode,
     copiedMessageID,
@@ -27,6 +29,9 @@ export default function OpsAssistant() {
     setInput,
     setIntentMode,
     setSelectedNamespace,
+    startNewSession,
+    selectSession,
+    deleteSession,
     submit,
     copyMessage,
     submitReferenceFeedback,
@@ -74,6 +79,8 @@ export default function OpsAssistant() {
       </section>
 
       <OpsAssistantSidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
         quickActions={quickActions}
         decisionPrompts={decisionPrompts}
         assistantReplies={assistantReplies}
@@ -81,6 +88,9 @@ export default function OpsAssistant() {
         referencesCount={lastAssistant?.references?.length ?? 0}
         selectedNamespace={selectedNamespace}
         latestResources={lastAssistant?.resources ?? []}
+        onStartNewSession={startNewSession}
+        onSelectSession={selectSession}
+        onDeleteSession={deleteSession}
         onRunPrompt={(prompt) => void submit(prompt)}
       />
     </div>

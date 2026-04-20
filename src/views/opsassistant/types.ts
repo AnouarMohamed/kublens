@@ -16,3 +16,10 @@ export interface AssistantMessage {
   references?: AssistantDocRef[];
   isError?: boolean;
 }
+
+export interface ChatSession {
+  id: string;
+  title: string;
+  startedAt: string;
+  messages: AssistantMessage[];
+}
