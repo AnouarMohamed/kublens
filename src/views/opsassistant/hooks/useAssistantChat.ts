@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../lib/api";
-import type { AssistantResponse, DiagnosticsResult, DiagnosticIssue } from "../../../types";
+import type { AssistantResponse } from "../../../types";
 import type { AssistantMessage } from "../types";
+import { toDiagnosePrompt } from "../utils";
 import { useChatSessions } from "./useChatSessions";
 
 export const basePrompts = [
@@ -243,15 +244,6 @@ function dedupeStrings(values: readonly string[]): string[] {
     }
   }
   return out;
-}
-
-function toDiagnosePrompt(resource: string): string {
-  const trimmed = resource.trim();
-  if (trimmed === "") {
-    return "Show cluster health";
-  }
-  const podName = trimmed.includes("/") ? (trimmed.split("/").pop() ?? trimmed) : trimmed;
-  return `Diagnose ${podName}`;
 }
 
 function createID(): string {
