@@ -33,3 +33,17 @@ export function toDiagnosePrompt(resource: string): string {
   const podName = trimmed.includes("/") ? (trimmed.split("/").pop() ?? trimmed) : trimmed;
   return `Diagnose ${podName}`;
 }
+
+export function dedupeStrings(values: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const value of values) {
+    const normalized = value.trim();
+    if (normalized === "") {
+      continue;
+    }
+    if (!out.includes(normalized)) {
+      out.push(normalized);
+    }
+  }
+  return out;
+}
