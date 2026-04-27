@@ -48,10 +48,11 @@ export function ClusterTabPanel({ nodeUtilizationBars, nodeCPUTrend }: ClusterTa
               <YAxis domain={[0, 100]} tick={{ fill: "#5d6674", fontSize: 12 }} unit="%" />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined, name: string | undefined) => [
-                  `${coerceNumber(value).toFixed(1)}%`,
-                  name === "cpu" ? "CPU" : "Memory",
-                ]}
+                formatter={(value, name) => {
+                  const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                  const label = name === "cpu" ? "CPU" : "Memory";
+                  return [`${numeric.toFixed(1)}%`, label] as [string, string];
+                }}
               />
               <Bar dataKey="cpu" name="CPU" fill={CHART_BLUE} radius={[4, 4, 0, 0]} />
               <Bar dataKey="memory" name="Memory" fill={CHART_GREEN} radius={[4, 4, 0, 0]} />
@@ -71,7 +72,10 @@ export function ClusterTabPanel({ nodeUtilizationBars, nodeCPUTrend }: ClusterTa
               <YAxis domain={[0, 100]} tick={{ fill: "#5d6674", fontSize: 12 }} unit="%" />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
+                formatter={(value) => {
+                  const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                  return [`${numeric.toFixed(1)}%`, "Avg CPU"] as [string, string];
+                }}
               />
               <Area
                 type="monotone"
@@ -109,7 +113,10 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Pods"]}
+                formatter={(value) => {
+                  const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                  return [Math.round(numeric), "Pods"] as [number, string];
+                }}
               />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                 {podLifecycleBars.map((row) => (
@@ -138,7 +145,10 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
             <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
-              formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Pods"]}
+              formatter={(value) => {
+                const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                return [Math.round(numeric), "Pods"] as [number, string];
+              }}
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {restartBands.map((row) => (
@@ -158,16 +168,16 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               <YAxis type="category" dataKey="name" width={120} tick={{ fill: "#5d6674", fontSize: 12 }} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined, name: string | undefined, item) => {
-                  const numeric = coerceNumber(value);
+                formatter={(value, name, item) => {
+                  const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
                   const payload = (item.payload ?? {}) as { cpuMilli?: number; memMi?: number };
                   if (name === "score") {
                     return [
                       `${numeric.toFixed(1)}%`,
                       `Pressure (CPU ${payload.cpuMilli ?? 0}m | Mem ${payload.memMi ?? 0}Mi)`,
-                    ];
+                    ] as [string, string];
                   }
-                  return [numeric, name];
+                  return [numeric, String(name ?? "")] as [number, string];
                 }}
               />
               <Bar dataKey="score" fill={DOCKER_BLUE} radius={[0, 4, 4, 0]} />
