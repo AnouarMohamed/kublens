@@ -415,8 +415,6 @@ func (s *Server) writeAuthCookie(w http.ResponseWriter, r *http.Request, token s
 		return
 	}
 
-	secureCookie := requestIsSecure(r)
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.auth.cookieName,
 		Value:    token,
@@ -424,7 +422,7 @@ func (s *Server) writeAuthCookie(w http.ResponseWriter, r *http.Request, token s
 		MaxAge:   12 * 60 * 60,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   secureCookie,
+		Secure:   true,
 	})
 }
 
@@ -433,8 +431,6 @@ func (s *Server) clearAuthCookie(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	secureCookie := requestIsSecure(r)
-
 	http.SetCookie(w, &http.Cookie{
 		Name:     s.auth.cookieName,
 		Value:    "",
@@ -442,7 +438,7 @@ func (s *Server) clearAuthCookie(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   secureCookie,
+		Secure:   true,
 	})
 }
 
