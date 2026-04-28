@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../../lib/api";
 import type { AssistantResponse, DiagnosticsResult, DiagnosticIssue } from "../../../types";
 import type { AssistantMessage } from "../types";
+import { dedupeStrings } from "../utils";
 import { useChatSessions } from "./useChatSessions";
 
 export const basePrompts = [
@@ -229,20 +230,6 @@ function buildDiagnosticPrompts(diagnostics: DiagnosticsResult): string[] {
   issuePrompts.push("What is the safest next change?");
   issuePrompts.push("Give me a rollback-first runbook.");
   return dedupeStrings(issuePrompts).slice(0, 8);
-}
-
-function dedupeStrings(values: readonly string[]): string[] {
-  const out: string[] = [];
-  for (const value of values) {
-    const normalized = value.trim();
-    if (normalized === "") {
-      continue;
-    }
-    if (!out.includes(normalized)) {
-      out.push(normalized);
-    }
-  }
-  return out;
 }
 
 function toDiagnosePrompt(resource: string): string {
