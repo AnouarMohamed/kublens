@@ -1,6 +1,7 @@
 # Documentation Governance
 
 This policy keeps KubeLens documentation current, reviewable, and release-ready.
+Documentation review refresh: 2026-05-07 (governance process unchanged).
 
 ## 1) Scope
 

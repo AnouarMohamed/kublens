@@ -1,6 +1,7 @@
 # Architecture
 
 This document describes KubeLens AI runtime components, boundaries, and data flow.
+Documentation review refresh: 2026-05-07 (no architecture changes required).
 
 ## High-level topology
 

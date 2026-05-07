@@ -1,6 +1,7 @@
 # Supply Chain Security Policy
 
 This policy defines mandatory controls for release integrity, artifact traceability, and SBOM publication.
+Documentation review refresh: 2026-05-07 (policy remains current).
 
 ## 1) Scope
 
