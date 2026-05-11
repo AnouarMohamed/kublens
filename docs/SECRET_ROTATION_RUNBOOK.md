@@ -1,6 +1,7 @@
 # Secret Rotation Runbook
 
 This runbook defines formal secret-rotation controls for KubeLens runtime and integrations.
+Documentation review refresh: 2026-05-07 (runbook content remains current).
 
 ## 1) Scope
 

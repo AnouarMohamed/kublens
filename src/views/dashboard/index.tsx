@@ -89,7 +89,7 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={AXIS_TICK} unit="%" />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value: number | string | undefined, key: string | undefined) => [
+                  formatter={(value, key) => [
                     `${coerceNumber(value).toFixed(1)}%`,
                     key === "cpu" ? "CPU" : "Memory",
                   ]}
@@ -116,7 +116,7 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={AXIS_TICK} unit="%" />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value: number | string | undefined) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
+                  formatter={(value) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
                 />
                 <Line
                   type="monotone"
@@ -148,7 +148,7 @@ export default function Dashboard() {
                 <YAxis allowDecimals={false} tick={AXIS_TICK} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Events"]}
+                  formatter={(value) => [Math.round(coerceNumber(value)), "Events"]}
                 />
                 <Bar dataKey="count" fill={BLUE} onClick={openEvents} cursor="pointer" />
               </BarChart>
@@ -177,7 +177,7 @@ export default function Dashboard() {
                 <YAxis type="category" dataKey="name" width={130} tick={AXIS_TICK} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Restarts"]}
+                  formatter={(value) => [Math.round(coerceNumber(value)), "Restarts"]}
                 />
                 <Bar dataKey="restarts" cursor="pointer">
                   {restartHotspots.map((row) => (

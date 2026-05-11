@@ -48,7 +48,7 @@ export function ClusterTabPanel({ nodeUtilizationBars, nodeCPUTrend }: ClusterTa
               <YAxis domain={[0, 100]} tick={{ fill: "#5d6674", fontSize: 12 }} unit="%" />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined, name: string | undefined) => [
+                formatter={(value, name) => [
                   `${coerceNumber(value).toFixed(1)}%`,
                   name === "cpu" ? "CPU" : "Memory",
                 ]}
@@ -71,7 +71,7 @@ export function ClusterTabPanel({ nodeUtilizationBars, nodeCPUTrend }: ClusterTa
               <YAxis domain={[0, 100]} tick={{ fill: "#5d6674", fontSize: 12 }} unit="%" />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
+                formatter={(value) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
               />
               <Area
                 type="monotone"
@@ -109,7 +109,7 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Pods"]}
+                formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]}
               />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                 {podLifecycleBars.map((row) => (
@@ -138,7 +138,7 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
             <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
             <Tooltip
               contentStyle={TOOLTIP_STYLE}
-              formatter={(value: number | string | undefined) => [Math.round(coerceNumber(value)), "Pods"]}
+              formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]}
             />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {restartBands.map((row) => (
@@ -158,7 +158,7 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               <YAxis type="category" dataKey="name" width={120} tick={{ fill: "#5d6674", fontSize: 12 }} />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number | string | undefined, name: string | undefined, item) => {
+                formatter={(value, name, item) => {
                   const numeric = coerceNumber(value);
                   const payload = (item.payload ?? {}) as { cpuMilli?: number; memMi?: number };
                   if (name === "score") {

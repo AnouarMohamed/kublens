@@ -5,8 +5,39 @@ on:
     branches: ["main", "master"]
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+    steps:
+      - id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            docs:
+              - 'docs/**'
+            workflows:
+              - '.github/workflows/**'
+            non_docs:
+              - '**'
+              - '!docs/**'
+              - '!.github/workflows/**'
+
+      - id: classify
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.filter.outputs.non_docs }}" = "false" ] && { [ "${{ steps.filter.outputs.docs }}" = "true" ] || [ "${{ steps.filter.outputs.workflows }}" = "true" ]; }; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release-discipline:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -57,6 +88,8 @@ jobs:
         run: npm run verify:doc-impact
 
   frontend:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -78,6 +111,8 @@ jobs:
           npm run build
 
   backend:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -92,7 +127,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.9"
+          go-version: "1.26.0"
           cache-dependency-path: backend/go.sum
 
       - name: Install dependencies
@@ -106,6 +141,8 @@ jobs:
           node scripts/go-task.mjs -C backend test ./internal/incident ./internal/remediation ./internal/memory ./internal/riskguard ./internal/postmortem ./internal/chatops
 
   predictor:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -143,7 +180,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.9"
+          go-version: "1.26.0"
 
       - name: Install dependencies
         run: npm ci
@@ -155,6 +192,8 @@ jobs:
         run: npm run test:e2e
 
   manifests:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -181,6 +220,8 @@ jobs:
           done
 
   security:
+    needs: [changes]
+    if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -195,7 +236,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.25.9"
+          go-version: "1.26.0"
           cache-dependency-path: backend/go.sum
 
       - name: Setup Python

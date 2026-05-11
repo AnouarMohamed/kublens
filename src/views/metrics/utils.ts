@@ -195,7 +195,10 @@ export function parsePercentValue(value: string): number {
   return Math.min(Math.max(num, 0), 100);
 }
 
-export function coerceNumber(value: number | string | undefined): number {
+export function coerceNumber(value: number | string | readonly (number | string)[] | undefined): number {
+  if (Array.isArray(value)) {
+    return coerceNumber(value[0]);
+  }
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }
