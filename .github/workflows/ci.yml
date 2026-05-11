@@ -21,7 +21,6 @@ jobs:
             docs:
               - 'docs/**'
             non_docs:
-              - '**'
               - '!docs/**'
 
       - id: classify
