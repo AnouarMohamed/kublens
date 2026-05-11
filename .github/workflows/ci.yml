@@ -22,6 +22,7 @@ jobs:
               - 'docs/**'
             non_docs:
               - '!docs/**'
+              - '!.github/workflows/**'
 
       - id: classify
         run: |
