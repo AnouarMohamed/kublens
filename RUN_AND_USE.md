@@ -16,7 +16,7 @@ This is the full operator and contributor guide for KubeLens AI.
 
 - Node.js 20+
 - npm 10+
-- Go 1.25+ (for backend tests/local backend)
+- Go 1.26.3+ (for backend tests/local backend)
 - Python 3.12+ (for predictor tests)
 - Docker Desktop (for image/compose workflows)
 - `kubectl` (for Kubernetes deploy/use)

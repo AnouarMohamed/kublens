@@ -27,7 +27,7 @@ if (result.error) {
     const attemptedCommand = ["go", ...args].join(" ");
     console.error("Go toolchain not found on PATH.");
     console.error(
-      "Install Go 1.25+ to run backend commands such as npm run dev:api, npm run test:go, and npm run ci:backend.",
+      "Install Go 1.26.3+ to run backend commands such as npm run dev:api, npm run test:go, and npm run ci:backend.",
     );
     console.error(`Attempted command: ${attemptedCommand}`);
     process.exit(1);

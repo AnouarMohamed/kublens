@@ -97,7 +97,7 @@ Runs in `demo` mode with mock data. No cluster required, no config needed.
 ## Local toolchain
 
 - Node.js 20+ and npm 10+ for frontend and repo automation
-- Go 1.25+ on `PATH` for backend commands such as `npm run dev:api`, `npm run test:go`, and `npm run ci:backend`
+- Go 1.26.3+ on `PATH` for backend commands such as `npm run dev:api`, `npm run test:go`, and `npm run ci:backend`
 - Python 3.12+ for predictor tests and linting
 - `kubectl` and `helm` only for Kubernetes deployment flows
 

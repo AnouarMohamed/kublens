@@ -29,6 +29,9 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Cluster selection cookies now keep the `Secure` flag when requests arrive through HTTPS-terminating reverse proxies, matching the existing secure-request detection path.
+- Frontend ESLint now keeps the long-standing React hook patterns permitted by disabling the newly surfaced `react-hooks/set-state-in-effect` and `react-hooks/preserve-manual-memoization` rules in repo checks.
+- Upgraded the Go toolchain baseline from 1.26.0 to 1.26.3 across the workspace and CI to address newly reported Go standard library vulnerabilities from `govulncheck`.
 - Moved the shared assistant draft storage key out of `src/views/opsassistant` into a shared feature constant so structure lint no longer flags app-level imports crossing the `views/` boundary.
 - Scoped TypeScript, ESLint, and Prettier checks to repo-owned sources so local `.venv`, Postman workspace exports, and transient Vite temp files no longer break routine quality gates.
 - Improved backend Go task failures with a direct install hint when the `go` toolchain is missing from `PATH`.

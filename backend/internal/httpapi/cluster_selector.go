@@ -450,7 +450,7 @@ func (s *Server) handleSelectCluster(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   24 * 60 * 60,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   r.TLS != nil,
+		Secure:   requestIsSecure(r),
 	})
 
 	writeJSON(w, http.StatusOK, model.ClusterSelectResponse{Selected: name})
