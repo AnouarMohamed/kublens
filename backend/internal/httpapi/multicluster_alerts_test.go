@@ -66,6 +66,39 @@ func TestClusterSelectionSwitchesActiveContext(t *testing.T) {
 	}
 }
 
+func TestClusterSelectionCookieSecureWithForwardedProto(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithClusterContexts(ClusterContextsConfig{
+			Default: "default",
+			Readers: map[string]ClusterReader{
+				"default": testClusterReader{},
+				"staging": altClusterReader{},
+			},
+		}),
+	)
+	router := server.Router("")
+
+	selectReq := httptest.NewRequest(http.MethodPost, "/api/clusters/select", strings.NewReader(`{"name":"staging"}`))
+	selectReq.Header.Set("Content-Type", "application/json")
+	selectReq.Header.Set("X-Forwarded-Proto", "https")
+	selectResp := httptest.NewRecorder()
+	router.ServeHTTP(selectResp, selectReq)
+	if selectResp.Code != http.StatusOK {
+		t.Fatalf("cluster select status = %d, want 200", selectResp.Code)
+	}
+	cookies := selectResp.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("expected cluster selection cookie")
+	}
+	if !cookies[0].Secure {
+		t.Fatal("expected secure cluster selection cookie when request is forwarded over https")
+	}
+}
+
 func TestAlertDispatchEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := newServer(
