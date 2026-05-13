@@ -6,6 +6,8 @@ const root = process.cwd();
 const cacheDir = process.env.GOCACHE || path.join(root, ".gocache");
 const modCacheDir = process.env.GOMODCACHE || path.join(root, ".gomodcache");
 const tmpDir = process.env.GOTMPDIR || path.join(root, ".tmp-go");
+const minimumGoVersion = "1.26.3";
+const goToolchain = process.env.GOTOOLCHAIN || `go${minimumGoVersion}+auto`;
 
 for (const dir of [cacheDir, modCacheDir, tmpDir]) {
   mkdirSync(dir, { recursive: true });
@@ -19,6 +21,7 @@ const result = spawnSync("go", args, {
     GOCACHE: cacheDir,
     GOMODCACHE: modCacheDir,
     GOTMPDIR: tmpDir,
+    GOTOOLCHAIN: goToolchain,
   },
 });
 
@@ -27,7 +30,7 @@ if (result.error) {
     const attemptedCommand = ["go", ...args].join(" ");
     console.error("Go toolchain not found on PATH.");
     console.error(
-      "Install Go 1.26.3+ to run backend commands such as npm run dev:api, npm run test:go, and npm run ci:backend.",
+      `Install Go ${minimumGoVersion}+ to run backend commands such as npm run dev:api, npm run test:go, and npm run ci:backend.`,
     );
     console.error(`Attempted command: ${attemptedCommand}`);
     process.exit(1);
