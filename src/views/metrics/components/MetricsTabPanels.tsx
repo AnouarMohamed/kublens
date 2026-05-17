@@ -48,10 +48,7 @@ export function ClusterTabPanel({ nodeUtilizationBars, nodeCPUTrend }: ClusterTa
               <YAxis domain={[0, 100]} tick={{ fill: "#5d6674", fontSize: 12 }} unit="%" />
               <Tooltip
                 contentStyle={TOOLTIP_STYLE}
-                formatter={(value, name) => [
-                  `${coerceNumber(value).toFixed(1)}%`,
-                  name === "cpu" ? "CPU" : "Memory",
-                ]}
+                formatter={(value, name) => [`${coerceNumber(value).toFixed(1)}%`, name === "cpu" ? "CPU" : "Memory"]}
               />
               <Bar dataKey="cpu" name="CPU" fill={CHART_BLUE} radius={[4, 4, 0, 0]} />
               <Bar dataKey="memory" name="Memory" fill={CHART_GREEN} radius={[4, 4, 0, 0]} />
@@ -107,10 +104,7 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               <CartesianGrid stroke={GRID_STROKE} strokeDasharray="3 3" vertical={false} />
               <XAxis dataKey="name" tick={{ fill: "#5d6674", fontSize: 12 }} />
               <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
-              <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]}
-              />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]} />
               <Bar dataKey="value" radius={[4, 4, 0, 0]}>
                 {podLifecycleBars.map((row) => (
                   <Cell key={row.name} fill={row.color} />
@@ -136,10 +130,7 @@ export function WorkloadsTabPanel({ podLifecycleBars, restartBands, podPressureB
               height={50}
             />
             <YAxis allowDecimals={false} tick={{ fill: "#5d6674", fontSize: 12 }} />
-            <Tooltip
-              contentStyle={TOOLTIP_STYLE}
-              formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]}
-            />
+            <Tooltip contentStyle={TOOLTIP_STYLE} formatter={(value) => [Math.round(coerceNumber(value)), "Pods"]} />
             <Bar dataKey="value" radius={[4, 4, 0, 0]}>
               {restartBands.map((row) => (
                 <Cell key={row.name} fill={row.color} />

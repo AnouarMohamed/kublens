@@ -89,10 +89,7 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={AXIS_TICK} unit="%" />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value, key) => [
-                    `${coerceNumber(value).toFixed(1)}%`,
-                    key === "cpu" ? "CPU" : "Memory",
-                  ]}
+                  formatter={(value, key) => [`${coerceNumber(value).toFixed(1)}%`, key === "cpu" ? "CPU" : "Memory"]}
                 />
                 <Bar dataKey="cpu" fill={ACCENT} onClick={openNodes} cursor="pointer" />
                 <Bar dataKey="memory" fill="rgba(0, 212, 168, 0.4)" onClick={openNodes} cursor="pointer" />

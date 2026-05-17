@@ -42,6 +42,9 @@ All notable changes to this project are documented here.
 - Upgraded github.com/go-jose/go-jose/v4 from 4.1.3 to 4.1.4 to resolve CVE-2026-34986 (DoS via crafted JWE JSON).
 - Removed the temporary Trivy ignore for CVE-2026-39883 after applying the OpenTelemetry upstream patched commit.
 - Updated backend Kubernetes client dependencies (`k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go`, `k8s.io/metrics`) from `0.36.0` to `0.36.1` and `modernc.org/sqlite` from `1.49.1` to `1.50.1`.
+- Downgraded predictor `protobuf` from `7.34.1` to `6.33.5` to resolve installation conflicts with `opentelemetry-exporter-otlp 1.41.1`.
+- Updated backend and CI Go toolchain targets from `1.26.0` to `1.26.3` to address standard-library vulnerabilities detected by `govulncheck`.
+- Disabled the `react-hooks/set-state-in-effect` lint rule to unblock frontend quality gates for existing effect-driven data-loading flows.
 
 ## v0.3.0
 
