@@ -45,6 +45,9 @@ All notable changes to this project are documented here.
 - Downgraded predictor `protobuf` from `7.34.1` to `6.33.5` to resolve installation conflicts with `opentelemetry-exporter-otlp 1.41.1`.
 - Updated backend and CI Go toolchain targets from `1.26.0` to `1.26.3` to address standard-library vulnerabilities detected by `govulncheck`.
 - Disabled the `react-hooks/set-state-in-effect` lint rule to unblock frontend quality gates for existing effect-driven data-loading flows.
+- Upgraded `golang.org/x/net` to `v0.53.0` (and aligned `x/sys`, `x/term`, `x/text`) to resolve `GO-2026-4918` in security audits.
+- Stabilized E2E assertions by scoping the SLO heading selector to `main` and allowing remediation GitOps checks to use any returned proposal when restart-specific proposals are absent.
+- Added a nil-guard in the RAG embedding client so memory runbook creation degrades gracefully instead of panicking when embeddings are not configured.
 
 ## v0.3.0
 

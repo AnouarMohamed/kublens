@@ -24,7 +24,7 @@ test("dashboard loads and navigates between core views", async ({ page }) => {
 
   await search.fill("slo");
   await page.getByRole("button", { name: "Execute search" }).click();
-  await expect(page.getByRole("heading", { name: "SLO Center" })).toBeVisible();
+  await expect(page.locator("main").getByRole("heading", { name: "SLO Center" })).toBeVisible();
   await expect(page.getByText(/Error-budget posture/i)).toBeVisible();
 
   await search.fill("rightsizing");
