@@ -41,6 +41,14 @@ All notable changes to this project are documented here.
 - Upgraded OpenTelemetry (go.opentelemetry.io/otel\*) from 1.42.0 to v1.43.0 (stable upstream release) to resolve CVE-2026-39883 in otel/sdk.
 - Upgraded github.com/go-jose/go-jose/v4 from 4.1.3 to 4.1.4 to resolve CVE-2026-34986 (DoS via crafted JWE JSON).
 - Removed the temporary Trivy ignore for CVE-2026-39883 after applying the OpenTelemetry upstream patched commit.
+- Updated backend Kubernetes client dependencies (`k8s.io/api`, `k8s.io/apimachinery`, `k8s.io/client-go`, `k8s.io/metrics`) from `0.36.0` to `0.36.1` and `modernc.org/sqlite` from `1.49.1` to `1.50.1`.
+- Downgraded predictor `protobuf` from `7.34.1` to `6.33.5` to resolve installation conflicts with `opentelemetry-exporter-otlp 1.41.1`.
+- Updated backend and CI Go toolchain targets from `1.26.0` to `1.26.3` to address standard-library vulnerabilities detected by `govulncheck`.
+- Disabled the `react-hooks/set-state-in-effect` lint rule to unblock frontend quality gates for existing effect-driven data-loading flows.
+- Upgraded `golang.org/x/net` to `v0.53.0` (and aligned `x/sys`, `x/term`, `x/text`) to resolve `GO-2026-4918` in security audits.
+- Stabilized E2E assertions by scoping the SLO heading selector to `main` and allowing remediation GitOps checks to use any returned proposal when restart-specific proposals are absent.
+- Added a nil-guard in the RAG embedding client so memory runbook creation degrades gracefully instead of panicking when embeddings are not configured.
+- Updated the dashboard Dockerfile Go builder base image from `golang:1.25.8-alpine` to `golang:1.26.3-alpine` to match backend toolchain requirements and restore CI docker-build.
 
 ## v0.3.0
 

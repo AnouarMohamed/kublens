@@ -39,6 +39,10 @@ func NewEmbeddingClient(baseURL, model string, httpClient *http.Client) (*Embedd
 }
 
 func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, error) {
+	if c == nil {
+		return nil, errors.New("embedding client is not configured")
+	}
+
 	payload, err := json.Marshal(map[string]any{
 		"model":  c.model,
 		"prompt": text,

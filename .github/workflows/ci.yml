@@ -127,7 +127,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - name: Install dependencies
@@ -180,7 +180,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.3"
 
       - name: Install dependencies
         run: npm ci
@@ -236,7 +236,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26.0"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - name: Setup Python
