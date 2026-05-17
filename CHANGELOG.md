@@ -48,6 +48,7 @@ All notable changes to this project are documented here.
 - Upgraded `golang.org/x/net` to `v0.53.0` (and aligned `x/sys`, `x/term`, `x/text`) to resolve `GO-2026-4918` in security audits.
 - Stabilized E2E assertions by scoping the SLO heading selector to `main` and allowing remediation GitOps checks to use any returned proposal when restart-specific proposals are absent.
 - Added a nil-guard in the RAG embedding client so memory runbook creation degrades gracefully instead of panicking when embeddings are not configured.
+- Updated the dashboard Dockerfile Go builder base image from `golang:1.25.8-alpine` to `golang:1.26.3-alpine` to match backend toolchain requirements and restore CI docker-build.
 
 ## v0.3.0
 
