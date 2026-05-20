@@ -67,10 +67,14 @@ test("auth role matrix and policy gates", async ({ page }) => {
 
   const adminLogin = await loginWithToken(request, adminToken);
   const adminSessionCookie = adminLogin
-    .headers()["set-cookie"]
+    .headersArray()
+    .find((header) => header.name.toLowerCase() === "set-cookie")
+    ?.value
     ?.split(";")
     .at(0);
-  expect(adminSessionCookie).toBeTruthy();
+  if (!adminSessionCookie) {
+    throw new Error("expected auth session cookie in login response");
+  }
   session = await request.get("/api/auth/session", {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
@@ -79,7 +83,7 @@ test("auth role matrix and policy gates", async ({ page }) => {
   expect(sessionPayload.user.role).toBe("admin");
 
   const csrfBlocked = await request.post("/api/pods", {
-    headers: { Origin: "https://evil.example", Cookie: adminSessionCookie ?? "" },
+    headers: { Origin: "https://evil.example", Cookie: adminSessionCookie },
     data: { namespace: "default", name: "csrf-block", image: "nginx:latest" },
   });
   expect(csrfBlocked.status()).toBe(403);
