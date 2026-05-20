@@ -41,6 +41,7 @@ test("profile panel authenticates with normalized bearer token and logs out", as
   });
   expect(sessionAfterLogin.status()).toBe(200);
   const sessionPayload = await sessionAfterLogin.json();
+  expect(sessionPayload.authenticated).toBe(true);
   expect(sessionPayload.user).toBeDefined();
   expect(sessionPayload.user.role).toBe("viewer");
 

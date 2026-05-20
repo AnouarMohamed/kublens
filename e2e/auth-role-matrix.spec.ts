@@ -1,12 +1,13 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import { expect, test, type APIRequestContext, type APIResponse } from "@playwright/test";
 
 const viewerToken = "e2e-viewer-token";
 const operatorToken = "e2e-operator-token";
 const adminToken = "e2e-admin-token";
 
-async function loginWithToken(request: APIRequestContext, token: string) {
+async function loginWithToken(request: APIRequestContext, token: string): Promise<APIResponse> {
   const response = await request.post("/api/auth/login", { data: { token } });
   expect(response.status()).toBe(200);
+  return response;
 }
 
 async function logoutSession(request: APIRequestContext) {
@@ -64,7 +65,12 @@ test("auth role matrix and policy gates", async ({ page }) => {
   });
   await logoutSession(request);
 
-  await loginWithToken(request, adminToken);
+  const adminLogin = await loginWithToken(request, adminToken);
+  const adminSessionCookie = adminLogin
+    .headers()["set-cookie"]
+    ?.split(";")
+    .at(0);
+  expect(adminSessionCookie).toBeTruthy();
   session = await request.get("/api/auth/session", {
     headers: { Authorization: `Bearer ${adminToken}` },
   });
@@ -73,9 +79,9 @@ test("auth role matrix and policy gates", async ({ page }) => {
   expect(sessionPayload.user.role).toBe("admin");
 
   const csrfBlocked = await request.post("/api/pods", {
-    headers: { Origin: "https://evil.example" },
+    headers: { Origin: "https://evil.example", Cookie: adminSessionCookie ?? "" },
     data: { namespace: "default", name: "csrf-block", image: "nginx:latest" },
   });
-  expect([401, 403]).toContain(csrfBlocked.status());
+  expect(csrfBlocked.status()).toBe(403);
   await logoutSession(request);
 });
