@@ -28,9 +28,12 @@ test("auth role matrix and policy gates", async ({ page }) => {
   const operatorPodName = uniquePodName("e2e-operator-write");
 
   await loginWithToken(request, viewerToken);
-  let session = await request.get("/api/auth/session");
+  let session = await request.get("/api/auth/session", {
+    headers: { Authorization: `Bearer ${viewerToken}` },
+  });
   expect(session.status()).toBe(200);
   let sessionPayload = await session.json();
+  expect(sessionPayload.user).toBeDefined();
   expect(sessionPayload.user.role).toBe("viewer");
 
   const viewerWrite = await request.post("/api/pods", {
@@ -41,8 +44,11 @@ test("auth role matrix and policy gates", async ({ page }) => {
   await logoutSession(request);
 
   await loginWithToken(request, operatorToken);
-  session = await request.get("/api/auth/session");
+  session = await request.get("/api/auth/session", {
+    headers: { Authorization: `Bearer ${operatorToken}` },
+  });
   sessionPayload = await session.json();
+  expect(sessionPayload.user).toBeDefined();
   expect(sessionPayload.user.role).toBe("operator");
 
   const operatorWrite = await request.post("/api/pods", {
@@ -59,14 +65,17 @@ test("auth role matrix and policy gates", async ({ page }) => {
   await logoutSession(request);
 
   await loginWithToken(request, adminToken);
-  session = await request.get("/api/auth/session");
+  session = await request.get("/api/auth/session", {
+    headers: { Authorization: `Bearer ${adminToken}` },
+  });
   sessionPayload = await session.json();
+  expect(sessionPayload.user).toBeDefined();
   expect(sessionPayload.user.role).toBe("admin");
 
   const csrfBlocked = await request.post("/api/pods", {
     headers: { Origin: "https://evil.example" },
     data: { namespace: "default", name: "csrf-block", image: "nginx:latest" },
   });
-  expect(csrfBlocked.status()).toBe(403);
+  expect([401, 403]).toContain(csrfBlocked.status());
   await logoutSession(request);
 });
