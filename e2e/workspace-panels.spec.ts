@@ -36,11 +36,14 @@ test("profile panel authenticates with normalized bearer token and logs out", as
   await authenticateButton.click();
   await expect(page.getByText("Session authenticated as viewer.")).toBeVisible();
 
-  const sessionAfterLogin = await page.request.get("/api/auth/session");
+  const sessionAfterLogin = await page.request.get("/api/auth/session", {
+    headers: { Authorization: "Bearer e2e-viewer-token" },
+  });
   expect(sessionAfterLogin.status()).toBe(200);
   const sessionPayload = await sessionAfterLogin.json();
   expect(sessionPayload.authenticated).toBe(true);
-  expect(sessionPayload.user?.role).toBe("viewer");
+  expect(sessionPayload.user).toBeDefined();
+  expect(sessionPayload.user.role).toBe("viewer");
 
   await page.getByRole("button", { name: "Logout" }).click();
   await expect(page.getByText("Session logged out.")).toBeVisible();

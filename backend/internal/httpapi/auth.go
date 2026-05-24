@@ -422,7 +422,7 @@ func (s *Server) writeAuthCookie(w http.ResponseWriter, r *http.Request, token s
 		MaxAge:   12 * 60 * 60,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   !s.runtime.Insecure || requestIsSecure(r),
+		Secure:   true,
 	})
 }
 
@@ -438,7 +438,7 @@ func (s *Server) clearAuthCookie(w http.ResponseWriter, r *http.Request) {
 		MaxAge:   -1,
 		HttpOnly: true,
 		SameSite: http.SameSiteStrictMode,
-		Secure:   !s.runtime.Insecure || requestIsSecure(r),
+		Secure:   true,
 	})
 }
 
