@@ -1,0 +1,123 @@
+syntax = "proto3";
+
+package ghost.v1;
+
+option go_package = "kubelens-backend/gen/ghost/v1;ghostv1";
+
+service SimulationService {
+  rpc Simulate(SimulationRequest) returns (SimulationResult);
+}
+
+message SimulationRequest {
+  string action = 1;
+  string node_name = 2;
+  int32 horizon_seconds = 3;
+  TopologySnapshot topology = 4;
+}
+
+message TopologySnapshot {
+  string generated_at = 1;
+  repeated Node nodes = 2;
+  repeated Pod pods = 3;
+  repeated Service services = 4;
+  repeated Ingress ingresses = 5;
+  repeated GraphEdge edges = 6;
+}
+
+message ResourceVector {
+  int64 cpu_milli = 1;
+  int64 memory_bytes = 2;
+}
+
+message Node {
+  string name = 1;
+  string status = 2;
+  bool unschedulable = 3;
+  map<string, string> labels = 4;
+  repeated string taints = 5;
+  ResourceVector capacity = 6;
+  ResourceVector allocatable = 7;
+  ResourceVector used = 8;
+  ResourceVector headroom = 9;
+}
+
+message Pod {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  string node_name = 4;
+  string status = 5;
+  map<string, string> labels = 6;
+  map<string, string> node_selector = 7;
+  repeated string tolerations = 8;
+  ResourceVector requests = 9;
+  ResourceVector usage = 10;
+}
+
+message Service {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  string type = 4;
+  map<string, string> selector = 5;
+  repeated string pod_refs = 6;
+}
+
+message Ingress {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  repeated string hosts = 4;
+  repeated string service_refs = 5;
+}
+
+message GraphEdge {
+  string from = 1;
+  string to = 2;
+  string kind = 3;
+}
+
+message SimulationResult {
+  string id = 1;
+  string action = 2;
+  string generated_at = 3;
+  int32 horizon_seconds = 4;
+  Verdict verdict = 5;
+  repeated TimelineFrame frames = 6;
+}
+
+message Verdict {
+  string severity = 1;
+  string summary = 2;
+  repeated string recommendations = 3;
+}
+
+message TimelineFrame {
+  int32 offset_seconds = 1;
+  repeated FrameNode nodes = 2;
+  repeated FramePod pods = 3;
+  repeated TimelineEvent events = 4;
+}
+
+message FrameNode {
+  string name = 1;
+  string status = 2;
+  bool unschedulable = 3;
+  ResourceVector headroom = 4;
+}
+
+message FramePod {
+  string id = 1;
+  string namespace = 2;
+  string name = 3;
+  string node_name = 4;
+  string status = 5;
+}
+
+message TimelineEvent {
+  string kind = 1;
+  string severity = 2;
+  string resource = 3;
+  string message = 4;
+  string timestamp = 5;
+}
