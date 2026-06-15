@@ -10,7 +10,7 @@ COPY index.html tsconfig.json vite.config.ts ./
 COPY src ./src
 RUN npm run build
 
-FROM golang:1.26.0-alpine AS go-builder
+FROM golang:1.26.4-alpine AS go-builder
 WORKDIR /workspace/backend
 
 COPY backend/go.mod backend/go.sum ./

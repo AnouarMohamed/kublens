@@ -69,8 +69,7 @@ test("auth role matrix and policy gates", async ({ page }) => {
   const adminSessionCookie = adminLogin
     .headersArray()
     .find((header) => header.name.toLowerCase() === "set-cookie")
-    ?.value
-    ?.split(";")
+    ?.value?.split(";")
     .at(0);
   if (!adminSessionCookie) {
     throw new Error("expected auth session cookie in login response");
