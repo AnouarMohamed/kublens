@@ -66,6 +66,7 @@ export const VIEW_ICON: Record<View, LucideIcon> = {
   audit: ScrollText,
   predictions: TrendingUp,
   diagnostics: ScanSearch,
+  ghost: Network,
   shiftbrief: AlarmClock,
   playbooks: BookOpen,
   incidents: Siren,

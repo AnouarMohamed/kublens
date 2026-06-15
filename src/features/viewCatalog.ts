@@ -241,6 +241,12 @@ export const VIEW_SECTIONS: ViewSection[] = [
         description: "Automated issue detection and remediation guidance.",
         kubectlCommand: "kubectl describe nodes",
       },
+      {
+        id: "ghost",
+        label: "Ghost Mode",
+        description: "Simulate node maintenance before touching the live cluster.",
+        kubectlCommand: "kubectl drain <node> --dry-run=server",
+      },
     ],
   },
   {
