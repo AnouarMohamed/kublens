@@ -89,7 +89,11 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={AXIS_TICK} unit="%" />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value, key) => [`${coerceNumber(value).toFixed(1)}%`, key === "cpu" ? "CPU" : "Memory"]}
+                  formatter={(value, key) => {
+                    const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                    const label = key === "cpu" ? "CPU" : "Memory";
+                    return [`${numeric.toFixed(1)}%`, label] as [string, string];
+                  }}
                 />
                 <Bar dataKey="cpu" fill={ACCENT} onClick={openNodes} cursor="pointer" />
                 <Bar dataKey="memory" fill="rgba(0, 212, 168, 0.4)" onClick={openNodes} cursor="pointer" />
@@ -113,7 +117,10 @@ export default function Dashboard() {
                 <YAxis domain={[0, 100]} tick={AXIS_TICK} unit="%" />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value) => [`${coerceNumber(value).toFixed(1)}%`, "Avg CPU"]}
+                  formatter={(value) => {
+                    const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                    return [`${numeric.toFixed(1)}%`, "Avg CPU"] as [string, string];
+                  }}
                 />
                 <Line
                   type="monotone"
@@ -145,7 +152,10 @@ export default function Dashboard() {
                 <YAxis allowDecimals={false} tick={AXIS_TICK} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value) => [Math.round(coerceNumber(value)), "Events"]}
+                  formatter={(value) => {
+                    const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                    return [Math.round(numeric), "Events"] as [number, string];
+                  }}
                 />
                 <Bar dataKey="count" fill={BLUE} onClick={openEvents} cursor="pointer" />
               </BarChart>
@@ -174,7 +184,10 @@ export default function Dashboard() {
                 <YAxis type="category" dataKey="name" width={130} tick={AXIS_TICK} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
-                  formatter={(value) => [Math.round(coerceNumber(value)), "Restarts"]}
+                  formatter={(value) => {
+                    const numeric = coerceNumber(Array.isArray(value) ? value[0] : value);
+                    return [Math.round(numeric), "Restarts"] as [number, string];
+                  }}
                 />
                 <Bar dataKey="restarts" cursor="pointer">
                   {restartHotspots.map((row) => (

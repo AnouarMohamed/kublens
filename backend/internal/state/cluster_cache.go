@@ -33,11 +33,14 @@ type ClusterCache struct {
 	client        kubernetes.Interface
 	metricsClient metricsclientset.Interface
 
-	factory informers.SharedInformerFactory
-	pods    cache.SharedIndexInformer
-	nodes   cache.SharedIndexInformer
-	deploys cache.SharedIndexInformer
-	events  cache.SharedIndexInformer
+	factory        informers.SharedInformerFactory
+	pods           cache.SharedIndexInformer
+	nodes          cache.SharedIndexInformer
+	deploys        cache.SharedIndexInformer
+	services       cache.SharedIndexInformer
+	endpointSlices cache.SharedIndexInformer
+	ingresses      cache.SharedIndexInformer
+	events         cache.SharedIndexInformer
 
 	mu    sync.RWMutex
 	state ClusterState
@@ -70,10 +73,13 @@ func NewClusterCache(client kubernetes.Interface, metricsClient metricsclientset
 		metricsInterval: interval,
 		resyncPeriod:    resync,
 		state: ClusterState{
-			Pods:        map[string]PodInfo{},
-			Nodes:       map[string]NodeInfo{},
-			Deployments: map[string]DeploymentInfo{},
-			Events:      []EventInfo{},
+			Pods:           map[string]PodInfo{},
+			Nodes:          map[string]NodeInfo{},
+			Deployments:    map[string]DeploymentInfo{},
+			Services:       map[string]ServiceInfo{},
+			EndpointSlices: map[string]EndpointSliceInfo{},
+			Ingresses:      map[string]IngressInfo{},
+			Events:         []EventInfo{},
 		},
 	}
 	return cache
@@ -93,6 +99,9 @@ func (c *ClusterCache) Start(ctx context.Context) error {
 	c.pods = c.factory.Core().V1().Pods().Informer()
 	c.nodes = c.factory.Core().V1().Nodes().Informer()
 	c.deploys = c.factory.Apps().V1().Deployments().Informer()
+	c.services = c.factory.Core().V1().Services().Informer()
+	c.endpointSlices = c.factory.Discovery().V1().EndpointSlices().Informer()
+	c.ingresses = c.factory.Networking().V1().Ingresses().Informer()
 	c.events = c.factory.Core().V1().Events().Informer()
 
 	c.pods.AddEventHandler(cache.ResourceEventHandlerFuncs{
@@ -110,6 +119,21 @@ func (c *ClusterCache) Start(ctx context.Context) error {
 		UpdateFunc: c.onDeploymentUpdate,
 		DeleteFunc: c.onDeploymentDelete,
 	})
+	c.services.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.onServiceAdd,
+		UpdateFunc: c.onServiceUpdate,
+		DeleteFunc: c.onServiceDelete,
+	})
+	c.endpointSlices.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.onEndpointSliceAdd,
+		UpdateFunc: c.onEndpointSliceUpdate,
+		DeleteFunc: c.onEndpointSliceDelete,
+	})
+	c.ingresses.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    c.onIngressAdd,
+		UpdateFunc: c.onIngressUpdate,
+		DeleteFunc: c.onIngressDelete,
+	})
 	c.events.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    c.onEventAdd,
 		UpdateFunc: c.onEventUpdate,
@@ -117,7 +141,16 @@ func (c *ClusterCache) Start(ctx context.Context) error {
 	})
 
 	c.factory.Start(ctx.Done())
-	synced := cache.WaitForCacheSync(ctx.Done(), c.pods.HasSynced, c.nodes.HasSynced, c.deploys.HasSynced, c.events.HasSynced)
+	synced := cache.WaitForCacheSync(
+		ctx.Done(),
+		c.pods.HasSynced,
+		c.nodes.HasSynced,
+		c.deploys.HasSynced,
+		c.services.HasSynced,
+		c.endpointSlices.HasSynced,
+		c.ingresses.HasSynced,
+		c.events.HasSynced,
+	)
 	c.ready.Store(synced)
 
 	go c.runMetricsPoller(ctx)
@@ -138,11 +171,14 @@ func (c *ClusterCache) Snapshot() ClusterState {
 	defer c.mu.RUnlock()
 
 	out := ClusterState{
-		Pods:        make(map[string]PodInfo, len(c.state.Pods)),
-		Nodes:       make(map[string]NodeInfo, len(c.state.Nodes)),
-		Deployments: make(map[string]DeploymentInfo, len(c.state.Deployments)),
-		Events:      make([]EventInfo, len(c.state.Events)),
-		LastUpdated: c.state.LastUpdated,
+		Pods:           make(map[string]PodInfo, len(c.state.Pods)),
+		Nodes:          make(map[string]NodeInfo, len(c.state.Nodes)),
+		Deployments:    make(map[string]DeploymentInfo, len(c.state.Deployments)),
+		Services:       make(map[string]ServiceInfo, len(c.state.Services)),
+		EndpointSlices: make(map[string]EndpointSliceInfo, len(c.state.EndpointSlices)),
+		Ingresses:      make(map[string]IngressInfo, len(c.state.Ingresses)),
+		Events:         make([]EventInfo, len(c.state.Events)),
+		LastUpdated:    c.state.LastUpdated,
 	}
 	for key, pod := range c.state.Pods {
 		out.Pods[key] = pod.clone()
@@ -152,6 +188,15 @@ func (c *ClusterCache) Snapshot() ClusterState {
 	}
 	for key, deploy := range c.state.Deployments {
 		out.Deployments[key] = deploy.clone()
+	}
+	for key, svc := range c.state.Services {
+		out.Services[key] = svc.clone()
+	}
+	for key, endpoints := range c.state.EndpointSlices {
+		out.EndpointSlices[key] = endpoints.clone()
+	}
+	for key, ingress := range c.state.Ingresses {
+		out.Ingresses[key] = ingress.clone()
 	}
 	copy(out.Events, c.state.Events)
 	return out

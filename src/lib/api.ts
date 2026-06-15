@@ -6,6 +6,7 @@
 import { alertsApi } from "./api/modules/alerts";
 import { assistantApi } from "./api/modules/assistant";
 import { authApi } from "./api/modules/auth";
+import { ghostApi } from "./api/modules/ghost";
 import { incidentsApi } from "./api/modules/incidents";
 import { nodesApi } from "./api/modules/nodes";
 import { podsApi } from "./api/modules/pods";
@@ -20,6 +21,7 @@ export const api = {
   ...resourcesApi,
   ...podsApi,
   ...nodesApi,
+  ...ghostApi,
   ...assistantApi,
   ...incidentsApi,
   ...remediationApi,

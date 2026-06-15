@@ -38,10 +38,13 @@ type PodInfo struct {
 	UID               string
 	Name              string
 	Namespace         string
+	Labels            map[string]string
 	Phase             string
 	StatusReason      string
 	StatusMessage     string
 	NodeName          string
+	NodeSelector      map[string]string
+	Tolerations       []TolerationInfo
 	StartTime         time.Time
 	DeletionTimestamp *time.Time
 	Restarts          int32
@@ -72,6 +75,13 @@ type NodeInfo struct {
 	Taints        []string
 }
 
+type TolerationInfo struct {
+	Key      string
+	Value    string
+	Effect   string
+	Operator string
+}
+
 type DeploymentInfo struct {
 	UID               string
 	Name              string
@@ -83,6 +93,45 @@ type DeploymentInfo struct {
 	Strategy          string
 	Conditions        []ConditionInfo
 	CreatedAt         time.Time
+}
+
+type ServicePortInfo struct {
+	Name       string
+	Port       int32
+	Protocol   string
+	TargetPort string
+}
+
+type ServiceInfo struct {
+	UID       string
+	Name      string
+	Namespace string
+	Type      string
+	ClusterIP string
+	Selector  map[string]string
+	Ports     []ServicePortInfo
+}
+
+type EndpointSliceInfo struct {
+	UID         string
+	Name        string
+	Namespace   string
+	ServiceName string
+	Addresses   []string
+	PodTargets  []string
+}
+
+type IngressBackendInfo struct {
+	ServiceName string
+	ServicePort string
+}
+
+type IngressInfo struct {
+	UID       string
+	Name      string
+	Namespace string
+	Hosts     []string
+	Backends  []IngressBackendInfo
 }
 
 type EventInfo struct {
@@ -99,11 +148,14 @@ type EventInfo struct {
 }
 
 type ClusterState struct {
-	Pods        map[string]PodInfo
-	Nodes       map[string]NodeInfo
-	Deployments map[string]DeploymentInfo
-	Events      []EventInfo
-	LastUpdated time.Time
+	Pods           map[string]PodInfo
+	Nodes          map[string]NodeInfo
+	Deployments    map[string]DeploymentInfo
+	Services       map[string]ServiceInfo
+	EndpointSlices map[string]EndpointSliceInfo
+	Ingresses      map[string]IngressInfo
+	Events         []EventInfo
+	LastUpdated    time.Time
 }
 
 func (p PodInfo) clone() PodInfo {
@@ -115,6 +167,9 @@ func (p PodInfo) clone() PodInfo {
 	out.Conditions = append([]ConditionInfo(nil), p.Conditions...)
 	out.Containers = append([]ContainerInfo(nil), p.Containers...)
 	out.UsageHistory = append([]UsagePoint(nil), p.UsageHistory...)
+	out.Labels = cloneStringMap(p.Labels)
+	out.NodeSelector = cloneStringMap(p.NodeSelector)
+	out.Tolerations = append([]TolerationInfo(nil), p.Tolerations...)
 	return out
 }
 
@@ -129,6 +184,27 @@ func (n NodeInfo) clone() NodeInfo {
 		}
 	}
 	out.Taints = append([]string(nil), n.Taints...)
+	return out
+}
+
+func (s ServiceInfo) clone() ServiceInfo {
+	out := s
+	out.Selector = cloneStringMap(s.Selector)
+	out.Ports = append([]ServicePortInfo(nil), s.Ports...)
+	return out
+}
+
+func (e EndpointSliceInfo) clone() EndpointSliceInfo {
+	out := e
+	out.Addresses = append([]string(nil), e.Addresses...)
+	out.PodTargets = append([]string(nil), e.PodTargets...)
+	return out
+}
+
+func (i IngressInfo) clone() IngressInfo {
+	out := i
+	out.Hosts = append([]string(nil), i.Hosts...)
+	out.Backends = append([]IngressBackendInfo(nil), i.Backends...)
 	return out
 }
 

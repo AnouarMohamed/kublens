@@ -20,6 +20,7 @@ import { useTransientMessage } from "./hooks/useTransientMessage";
 import { CLUSTER_REFRESH_EVENT, VIEW_NAVIGATE_EVENT, type ViewNavigateDetail } from "./viewNavigation";
 import type { View } from "../types";
 import Dashboard from "../views/dashboard";
+import { ErrorBoundary } from "../components/ErrorBoundary";
 
 const Metrics = lazy(() => import("../views/metrics"));
 const SLOCenter = lazy(() => import("../views/slo"));
@@ -32,6 +33,7 @@ const Events = lazy(() => import("../views/events"));
 const Namespaces = lazy(() => import("../views/namespaces"));
 const RBAC = lazy(() => import("../views/rbac"));
 const Diagnostics = lazy(() => import("../views/diagnostics"));
+const Ghost = lazy(() => import("../views/ghost"));
 const Predictions = lazy(() => import("../views/predictions"));
 const OpsAssistant = lazy(() => import("../views/opsassistant"));
 const IncidentCommander = lazy(() => import("../views/incident"));
@@ -274,7 +276,7 @@ export function AppShell() {
           )}
 
           <div key={`view-${clusterRefreshKey}`} className="flex-1 overflow-y-auto p-6 bg-grid">
-            {renderedView}
+            <ErrorBoundary key={currentView}>{renderedView}</ErrorBoundary>
           </div>
 
           <WorkspacePanels
@@ -400,6 +402,12 @@ function renderView(view: View): ReactElement {
       return (
         <Suspense fallback={<ViewLoadingState label="Loading diagnostics..." />}>
           <Diagnostics />
+        </Suspense>
+      );
+    case "ghost":
+      return (
+        <Suspense fallback={<ViewLoadingState label="Loading ghost mode..." />}>
+          <Ghost />
         </Suspense>
       );
     case "assistant":

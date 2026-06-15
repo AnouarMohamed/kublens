@@ -37,6 +37,7 @@ const VALID_VIEWS = new Set<View>([
   "audit",
   "predictions",
   "diagnostics",
+  "ghost",
   "assistant",
   "incidents",
   "remediation",
@@ -46,6 +47,16 @@ const VALID_VIEWS = new Set<View>([
   "riskguard",
   "postmortems",
 ]);
+
+const CANONICAL_VIEW_PATHS: Partial<Record<View, string>> = {
+  overview: "/",
+  shiftbrief: "/shift-brief",
+  riskguard: "/risk-guard",
+};
+
+function canonicalPathForView(view: View): string {
+  return CANONICAL_VIEW_PATHS[view] ?? `/${view}`;
+}
 
 function loadLastView(): View {
   try {
@@ -75,7 +86,36 @@ export function useCurrentView() {
 
   useEffect(() => {
     window.localStorage.setItem(VIEW_KEY, currentView);
+    try {
+      const pathname = window.location.pathname.toLowerCase();
+      const targetPath = canonicalPathForView(currentView);
+      if (pathname !== targetPath) {
+        window.history.pushState({ view: currentView }, "", targetPath);
+      }
+    } catch {
+      // Safely ignore history API access errors in test environment
+    }
   }, [currentView]);
+
+  useEffect(() => {
+    const handlePopState = (event: PopStateEvent) => {
+      const state = event.state as { view?: View } | null;
+      if (state?.view && VALID_VIEWS.has(state.view)) {
+        setCurrentView(state.view);
+      } else {
+        try {
+          const pathView = mapPathToView(window.location.pathname.toLowerCase());
+          if (pathView) {
+            setCurrentView(pathView);
+          }
+        } catch {
+          // ignore
+        }
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, []);
 
   return { currentView, setCurrentView };
 }
@@ -87,24 +127,18 @@ export function useCurrentView() {
  * @returns Matching view or `null` when no mapping exists.
  */
 function mapPathToView(pathname: string): View | null {
-  const mapping: Array<{ prefix: string; view: View }> = [
-    { prefix: "/incidents", view: "incidents" },
-    { prefix: "/remediation", view: "remediation" },
-    { prefix: "/memory", view: "memory" },
-    { prefix: "/shift-brief", view: "shiftbrief" },
-    { prefix: "/shiftbrief", view: "shiftbrief" },
-    { prefix: "/playbooks", view: "playbooks" },
-    { prefix: "/risk-guard", view: "riskguard" },
-    { prefix: "/riskguard", view: "riskguard" },
-    { prefix: "/postmortems", view: "postmortems" },
-    { prefix: "/slo", view: "slo" },
-    { prefix: "/rightsizing", view: "rightsizing" },
-    { prefix: "/assistant", view: "assistant" },
-  ];
-  for (const item of mapping) {
-    if (pathname === item.prefix || pathname.startsWith(item.prefix + "/")) {
-      return item.view;
-    }
+  const cleanPath = pathname.replace(/^\/+/, "").split("/")[0];
+  if (cleanPath === "") {
+    return "overview";
+  }
+  if (cleanPath === "shift-brief") {
+    return "shiftbrief";
+  }
+  if (cleanPath === "risk-guard") {
+    return "riskguard";
+  }
+  if (VALID_VIEWS.has(cleanPath as View)) {
+    return cleanPath as View;
   }
   return null;
 }
