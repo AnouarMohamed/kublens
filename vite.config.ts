@@ -12,6 +12,9 @@ export default defineConfig(() => ({
     },
   },
   server: {
+    watch: {
+      ignored: ["**/.gomodcache/**"],
+    },
     hmr: process.env.DISABLE_HMR !== "true",
     proxy: {
       "/api": {
