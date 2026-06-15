@@ -846,6 +846,40 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PredictionsResult"
+  /ghost/topology:
+    get:
+      operationId: getGhostTopology
+      summary: Current Ghost topology graph
+      responses:
+        "200":
+          description: Ghost topology graph
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GhostTopology"
+  /ghost/simulations:
+    post:
+      operationId: postGhostSimulation
+      summary: Run a Ghost simulation
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GhostSimulationRequest"
+      responses:
+        "200":
+          description: Simulation timeline
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GhostSimulationResult"
+        "400":
+          description: Invalid simulation request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /assistant:
     post:
       operationId: postAssistant
@@ -1397,6 +1431,8 @@ components:
         - writeActionsEnabled
         - predictorEnabled
         - predictorHealthy
+        - ghostEnabled
+        - ghostHealthy
         - assistantEnabled
         - ragEnabled
         - alertsEnabled
@@ -1419,6 +1455,12 @@ components:
         predictorHealthy:
           type: boolean
         predictorLastError:
+          type: string
+        ghostEnabled:
+          type: boolean
+        ghostHealthy:
+          type: boolean
+        ghostLastError:
           type: string
         assistantEnabled:
           type: boolean
@@ -1907,6 +1949,249 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/IncidentPrediction"
+    GhostResources:
+      type: object
+      required: [cpuMilli, memoryBytes]
+      properties:
+        cpuMilli:
+          type: integer
+          format: int64
+        memoryBytes:
+          type: integer
+          format: int64
+    GhostNode:
+      type: object
+      required: [name, status, unschedulable, capacity, allocatable, used, headroom]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        unschedulable:
+          type: boolean
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        taints:
+          type: array
+          items:
+            type: string
+        capacity:
+          $ref: "#/components/schemas/GhostResources"
+        allocatable:
+          $ref: "#/components/schemas/GhostResources"
+        used:
+          $ref: "#/components/schemas/GhostResources"
+        headroom:
+          $ref: "#/components/schemas/GhostResources"
+    GhostPod:
+      type: object
+      required: [id, namespace, name, status, requests, usage]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        name:
+          type: string
+        nodeName:
+          type: string
+        status:
+          type: string
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        nodeSelector:
+          type: object
+          additionalProperties:
+            type: string
+        tolerations:
+          type: array
+          items:
+            type: string
+        requests:
+          $ref: "#/components/schemas/GhostResources"
+        usage:
+          $ref: "#/components/schemas/GhostResources"
+    GhostService:
+      type: object
+      required: [id, namespace, name, type, podRefs]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        selector:
+          type: object
+          additionalProperties:
+            type: string
+        podRefs:
+          type: array
+          items:
+            type: string
+    GhostIngress:
+      type: object
+      required: [id, namespace, name, hosts, serviceRefs]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        name:
+          type: string
+        hosts:
+          type: array
+          items:
+            type: string
+        serviceRefs:
+          type: array
+          items:
+            type: string
+    GhostGraphEdge:
+      type: object
+      required: [from, to, kind]
+      properties:
+        from:
+          type: string
+        to:
+          type: string
+        kind:
+          type: string
+    GhostTopology:
+      type: object
+      required: [generatedAt, source, nodes, pods, services, ingresses, edges]
+      properties:
+        generatedAt:
+          type: string
+        source:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostNode"
+        pods:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostPod"
+        services:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostService"
+        ingresses:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostIngress"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostGraphEdge"
+    GhostSimulationRequest:
+      type: object
+      required: [action, nodeName]
+      properties:
+        action:
+          type: string
+          enum: [node_drain]
+        nodeName:
+          type: string
+        horizonSeconds:
+          type: integer
+          minimum: 1
+          maximum: 1800
+    GhostSimulationVerdict:
+      type: object
+      required: [severity, summary, recommendations]
+      properties:
+        severity:
+          type: string
+        summary:
+          type: string
+        recommendations:
+          type: array
+          items:
+            type: string
+    GhostFrameNode:
+      type: object
+      required: [name, status, unschedulable, headroom]
+      properties:
+        name:
+          type: string
+        status:
+          type: string
+        unschedulable:
+          type: boolean
+        headroom:
+          $ref: "#/components/schemas/GhostResources"
+    GhostFramePod:
+      type: object
+      required: [id, namespace, name, status]
+      properties:
+        id:
+          type: string
+        namespace:
+          type: string
+        name:
+          type: string
+        nodeName:
+          type: string
+        status:
+          type: string
+    GhostTimelineEvent:
+      type: object
+      required: [kind, severity, resource, message]
+      properties:
+        kind:
+          type: string
+        severity:
+          type: string
+        resource:
+          type: string
+        message:
+          type: string
+        timestamp:
+          type: string
+    GhostTimelineFrame:
+      type: object
+      required: [offsetSeconds, nodes, pods, events]
+      properties:
+        offsetSeconds:
+          type: integer
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostFrameNode"
+        pods:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostFramePod"
+        events:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostTimelineEvent"
+    GhostSimulationResult:
+      type: object
+      required: [id, action, generatedAt, horizonSeconds, verdict, frames]
+      properties:
+        id:
+          type: string
+        action:
+          type: string
+        generatedAt:
+          type: string
+        horizonSeconds:
+          type: integer
+        verdict:
+          $ref: "#/components/schemas/GhostSimulationVerdict"
+        frames:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostTimelineFrame"
     TimelineEntry:
       type: object
       required: [timestamp, kind, source, summary, resource, severity]

@@ -319,6 +319,8 @@ func actionForRequest(method, path string) string {
 		return "memory.fix.record"
 	case m == http.MethodPost && path == apiMountPrefix+"/risk-guard/analyze":
 		return "riskguard.analyze"
+	case m == http.MethodPost && path == apiMountPrefix+"/ghost/simulations":
+		return "ghost.simulate"
 	case m == http.MethodGet && path == apiMountPrefix+"/rightsizing":
 		return "rightsizing.view"
 	case m == http.MethodPost && path == apiMountPrefix+"/alerts/lifecycle":

@@ -20,6 +20,7 @@ func TestRequiredRole(t *testing.T) {
 		{name: "remediation gitops", method: http.MethodPost, path: "/api/remediation/rem-1/gitops", want: RoleViewer},
 		{name: "remediation reject", method: http.MethodPost, path: "/api/remediation/rem-1/reject", want: RoleViewer},
 		{name: "risk analyze", method: http.MethodPost, path: "/api/risk-guard/analyze", want: RoleViewer},
+		{name: "ghost simulation", method: http.MethodPost, path: "/api/ghost/simulations", want: RoleViewer},
 		{name: "memory write", method: http.MethodPost, path: "/api/memory/runbooks", want: RoleOperator},
 		{name: "cluster mutate", method: http.MethodPost, path: "/api/pods", want: RoleOperator},
 	}
@@ -44,6 +45,7 @@ func TestRequiresWriteGate(t *testing.T) {
 		{name: "resource apply", method: http.MethodPut, path: "/api/resources/deployments/ns/name/yaml", want: true},
 		{name: "remediation execute", method: http.MethodPost, path: "/api/remediation/rem-1/execute", want: true},
 		{name: "incident resolve", method: http.MethodPost, path: "/api/incidents/inc-1/resolve", want: false},
+		{name: "ghost simulation", method: http.MethodPost, path: "/api/ghost/simulations", want: false},
 		{name: "memory create", method: http.MethodPost, path: "/api/memory/runbooks", want: false},
 	}
 
