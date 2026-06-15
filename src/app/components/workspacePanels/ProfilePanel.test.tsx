@@ -14,6 +14,8 @@ function runtimeFixture(): RuntimeStatus {
     writeActionsEnabled: false,
     predictorEnabled: true,
     predictorHealthy: true,
+    ghostEnabled: true,
+    ghostHealthy: true,
     assistantEnabled: true,
     ragEnabled: true,
     alertsEnabled: true,
