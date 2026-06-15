@@ -9,6 +9,7 @@ export * from "./audit";
 export * from "./auth";
 export * from "./cluster";
 export * from "./diagnostics";
+export * from "./ghost";
 export * from "./incident";
 export * from "./predictions";
 export * from "./risk";

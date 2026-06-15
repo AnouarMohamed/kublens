@@ -17,6 +17,9 @@ export interface RuntimeStatus {
   predictorEnabled: boolean;
   predictorHealthy: boolean;
   predictorLastError?: string;
+  ghostEnabled: boolean;
+  ghostHealthy: boolean;
+  ghostLastError?: string;
   assistantEnabled: boolean;
   ragEnabled: boolean;
   alertsEnabled: boolean;

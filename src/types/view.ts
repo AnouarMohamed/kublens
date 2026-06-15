@@ -26,6 +26,7 @@ export type View =
   | "audit"
   | "predictions"
   | "diagnostics"
+  | "ghost"
   | "assistant"
   | "incidents"
   | "remediation"
