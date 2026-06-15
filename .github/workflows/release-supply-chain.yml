@@ -97,7 +97,7 @@ jobs:
             predictor.sbom.cdx.json
 
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.1
+        uses: sigstore/cosign-installer@v4.1.2
 
       - name: Sign dashboard image
         run: cosign sign --yes "${{ env.DASHBOARD_IMAGE }}@${{ steps.build_dashboard.outputs.digest }}"

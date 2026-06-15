@@ -111,7 +111,10 @@ export function parsePercentNumber(value: string): number {
   return Number(Math.max(0, Math.min(100, numeric)).toFixed(2));
 }
 
-export function coerceNumber(value: number | string | undefined): number {
+export function coerceNumber(value: number | string | readonly (number | string)[] | undefined): number {
+  if (Array.isArray(value)) {
+    return coerceNumber(value[0]);
+  }
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : 0;
   }

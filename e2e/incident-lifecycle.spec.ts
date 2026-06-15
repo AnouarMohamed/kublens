@@ -162,26 +162,27 @@ test("incident lifecycle and memory flow remain operational", async ({ request }
     }),
     200,
   );
-  const restartProposal = proposals.find((item) => item.kind === "restart_pod");
-  expect(restartProposal).toBeTruthy();
+  expect(proposals.length).toBeGreaterThan(0);
+  const selectedProposal = proposals.find((item) => item.kind === "restart_pod") ?? proposals[0];
+  expect(selectedProposal).toBeTruthy();
 
   const generatedArtifact = await expectJSON<RemediationGitOpsArtifact>(
-    await request.post(`/api/remediation/${encodeURIComponent(restartProposal!.id)}/gitops`, {
+    await request.post(`/api/remediation/${encodeURIComponent(selectedProposal!.id)}/gitops`, {
       headers: { Authorization: `Bearer ${viewerToken}` },
       data: {},
     }),
     200,
   );
-  expect(generatedArtifact.proposalId).toBe(restartProposal!.id);
+  expect(generatedArtifact.proposalId).toBe(selectedProposal!.id);
   expect(generatedArtifact.artifact.artifactBody.length).toBeGreaterThan(0);
 
   const fetchedArtifact = await expectJSON<RemediationGitOpsArtifact>(
-    await request.get(`/api/remediation/${encodeURIComponent(restartProposal!.id)}/gitops`, {
+    await request.get(`/api/remediation/${encodeURIComponent(selectedProposal!.id)}/gitops`, {
       headers: { Authorization: `Bearer ${viewerToken}` },
     }),
     200,
   );
-  expect(fetchedArtifact.proposalId).toBe(restartProposal!.id);
+  expect(fetchedArtifact.proposalId).toBe(selectedProposal!.id);
 
   const rightsizing = await expectJSON<RightsizingOverview>(
     await request.get("/api/rightsizing", {

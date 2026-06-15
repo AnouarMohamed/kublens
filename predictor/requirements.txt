@@ -1,5 +1,5 @@
 fastapi==0.136.1
-uvicorn==0.46.0
+uvicorn==0.47.0
 setuptools==82.0.1
 starlette==1.0.0
 protobuf==5.29.3
