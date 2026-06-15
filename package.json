@@ -48,7 +48,8 @@
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -57,6 +58,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
+    "@types/three": "^0.184.1",
     "@types/node": "^25.6.0",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
