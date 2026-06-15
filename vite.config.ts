@@ -4,6 +4,7 @@ import path from "path";
 import { defineConfig } from "vite";
 
 export default defineConfig(() => ({
+  cacheDir: ".tmp-vite",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
