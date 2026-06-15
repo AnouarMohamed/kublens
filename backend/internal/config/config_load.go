@@ -63,6 +63,11 @@ func Load() (Config, error) {
 		Timeout:      parseSecondsAsDuration(os.Getenv("PREDICTOR_TIMEOUT_SECONDS"), 4*time.Second),
 		SharedSecret: strings.TrimSpace(os.Getenv("PREDICTOR_SHARED_SECRET")),
 	}
+	cfg.Ghost = GhostConfig{
+		Enabled:    parseBoolDefault(os.Getenv("GHOST_ENABLED"), true),
+		EngineAddr: strings.TrimSpace(os.Getenv("GHOST_ENGINE_ADDR")),
+		Timeout:    parseSecondsAsDuration(os.Getenv("GHOST_ENGINE_TIMEOUT_SECONDS"), 5*time.Second),
+	}
 
 	cfg.DBPath = strings.TrimSpace(firstNonEmpty(
 		os.Getenv("DB_PATH"),

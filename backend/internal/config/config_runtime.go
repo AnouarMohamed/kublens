@@ -26,6 +26,8 @@ func RuntimeStatus(cfg Config, isRealCluster bool, alertsEnabled bool) model.Run
 		WriteActionsEnabled: cfg.WriteActionsEnabled,
 		PredictorEnabled:    strings.TrimSpace(cfg.Predictor.BaseURL) != "",
 		PredictorHealthy:    true,
+		GhostEnabled:        cfg.Ghost.Enabled,
+		GhostHealthy:        true,
 		AssistantEnabled:    cfg.Assistant.Provider != "" && cfg.Assistant.Provider != "none",
 		RAGEnabled:          cfg.Assistant.RAGEnabled,
 		AlertsEnabled:       alertsEnabled,

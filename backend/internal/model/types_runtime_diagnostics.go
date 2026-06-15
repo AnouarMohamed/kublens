@@ -29,6 +29,9 @@ type RuntimeStatus struct {
 	PredictorEnabled    bool     `json:"predictorEnabled"`
 	PredictorHealthy    bool     `json:"predictorHealthy"`
 	PredictorLastError  string   `json:"predictorLastError,omitempty"`
+	GhostEnabled        bool     `json:"ghostEnabled"`
+	GhostHealthy        bool     `json:"ghostHealthy"`
+	GhostLastError      string   `json:"ghostLastError,omitempty"`
 	AssistantEnabled    bool     `json:"assistantEnabled"`
 	RAGEnabled          bool     `json:"ragEnabled"`
 	AlertsEnabled       bool     `json:"alertsEnabled"`
