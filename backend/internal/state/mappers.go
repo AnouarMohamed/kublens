@@ -1,11 +1,14 @@
 package state
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 )
 
 func mapPodInfo(pod *corev1.Pod) PodInfo {
@@ -53,10 +56,13 @@ func mapPodInfo(pod *corev1.Pod) PodInfo {
 		UID:               string(pod.UID),
 		Name:              pod.Name,
 		Namespace:         pod.Namespace,
+		Labels:            cloneStringMap(pod.Labels),
 		Phase:             string(pod.Status.Phase),
 		StatusReason:      pod.Status.Reason,
 		StatusMessage:     pod.Status.Message,
 		NodeName:          pod.Spec.NodeName,
+		NodeSelector:      cloneStringMap(pod.Spec.NodeSelector),
+		Tolerations:       mapTolerations(pod.Spec.Tolerations),
 		StartTime:         start,
 		DeletionTimestamp: deletionTimestamp,
 		Restarts:          restarts,
@@ -66,6 +72,19 @@ func mapPodInfo(pod *corev1.Pod) PodInfo {
 		ResourceRequests:  reqs,
 		ResourceLimits:    limits,
 	}
+}
+
+func mapTolerations(tolerations []corev1.Toleration) []TolerationInfo {
+	out := make([]TolerationInfo, 0, len(tolerations))
+	for _, item := range tolerations {
+		out = append(out, TolerationInfo{
+			Key:      item.Key,
+			Value:    item.Value,
+			Effect:   string(item.Effect),
+			Operator: string(item.Operator),
+		})
+	}
+	return out
 }
 
 func mapContainerInfo(container corev1.Container, statuses []corev1.ContainerStatus) ContainerInfo {
@@ -228,6 +247,108 @@ func mapEventInfo(evt *corev1.Event) EventInfo {
 		LastTimestamp:      last,
 		Source:             source,
 	}
+}
+
+func mapServiceInfo(svc *corev1.Service) ServiceInfo {
+	if svc == nil {
+		return ServiceInfo{}
+	}
+
+	ports := make([]ServicePortInfo, 0, len(svc.Spec.Ports))
+	for _, port := range svc.Spec.Ports {
+		ports = append(ports, ServicePortInfo{
+			Name:       port.Name,
+			Port:       port.Port,
+			Protocol:   string(port.Protocol),
+			TargetPort: port.TargetPort.String(),
+		})
+	}
+
+	return ServiceInfo{
+		UID:       string(svc.UID),
+		Name:      svc.Name,
+		Namespace: svc.Namespace,
+		Type:      string(svc.Spec.Type),
+		ClusterIP: svc.Spec.ClusterIP,
+		Selector:  cloneStringMap(svc.Spec.Selector),
+		Ports:     ports,
+	}
+}
+
+func mapEndpointSliceInfo(slice *discoveryv1.EndpointSlice) EndpointSliceInfo {
+	if slice == nil {
+		return EndpointSliceInfo{}
+	}
+
+	serviceName := slice.Labels[discoveryv1.LabelServiceName]
+	addresses := make([]string, 0, len(slice.Endpoints))
+	targets := make([]string, 0, len(slice.Endpoints))
+	for _, endpoint := range slice.Endpoints {
+		addresses = append(addresses, endpoint.Addresses...)
+		if endpoint.TargetRef != nil && strings.EqualFold(endpoint.TargetRef.Kind, "Pod") {
+			targets = append(targets, podKey(endpoint.TargetRef.Namespace, endpoint.TargetRef.Name))
+		}
+	}
+
+	return EndpointSliceInfo{
+		UID:         string(slice.UID),
+		Name:        slice.Name,
+		Namespace:   slice.Namespace,
+		ServiceName: serviceName,
+		Addresses:   addresses,
+		PodTargets:  targets,
+	}
+}
+
+func mapIngressInfo(ing *networkingv1.Ingress) IngressInfo {
+	if ing == nil {
+		return IngressInfo{}
+	}
+
+	hosts := make([]string, 0, len(ing.Spec.Rules))
+	backends := make([]IngressBackendInfo, 0, len(ing.Spec.Rules)+1)
+	if ing.Spec.DefaultBackend != nil {
+		backends = appendIngressBackend(backends, ing.Spec.DefaultBackend)
+	}
+	for _, rule := range ing.Spec.Rules {
+		if strings.TrimSpace(rule.Host) != "" {
+			hosts = append(hosts, rule.Host)
+		}
+		if rule.HTTP == nil {
+			continue
+		}
+		for _, path := range rule.HTTP.Paths {
+			backends = appendIngressBackend(backends, &path.Backend)
+		}
+	}
+
+	return IngressInfo{
+		UID:       string(ing.UID),
+		Name:      ing.Name,
+		Namespace: ing.Namespace,
+		Hosts:     hosts,
+		Backends:  backends,
+	}
+}
+
+func appendIngressBackend(backends []IngressBackendInfo, backend *networkingv1.IngressBackend) []IngressBackendInfo {
+	if backend == nil || backend.Service == nil {
+		return backends
+	}
+	return append(backends, IngressBackendInfo{
+		ServiceName: backend.Service.Name,
+		ServicePort: ingressServicePortName(backend.Service.Port),
+	})
+}
+
+func ingressServicePortName(port networkingv1.ServiceBackendPort) string {
+	if strings.TrimSpace(port.Name) != "" {
+		return port.Name
+	}
+	if port.Number > 0 {
+		return fmt.Sprintf("%d", port.Number)
+	}
+	return ""
 }
 
 func mapQuantities(list corev1.ResourceList) ResourceQuantities {
