@@ -47,6 +47,7 @@ All notable changes to this project are documented here.
 - Disabled the `react-hooks/set-state-in-effect` lint rule to unblock frontend quality gates for existing effect-driven data-loading flows.
 - Upgraded `golang.org/x/net` to `v0.53.0` (and aligned `x/sys`, `x/term`, `x/text`) to resolve `GO-2026-4918` in security audits.
 - Hardened authentication cookie transport security by always setting the `Secure` attribute when writing and clearing auth cookies.
+- Applied automated Go code formatting to `backend/internal/httpapi/handlers_ghost.go` to ensure CI pipeline compliance.
 - Automated remediation proposal generation for favorable (warning/info) ghost simulation verdicts.
 - Ghost Engine-Remediation Integration: Automated creation of remediation proposals triggered by favorable "low" or "medium" severity simulation verdicts.
 - Updated backend and CI Go toolchain targets from 1.26.3 to 1.26.4 and upgraded golang.org/x/net to v0.55.0 to address standard-library vulnerabilities (GO-2026-5039, GO-2026-5038, GO-2026-5037, GO-2026-5026).
