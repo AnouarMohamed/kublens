@@ -2,6 +2,7 @@ node_modules
 .tmp-vite
 dist
 .gocache
+ghost-engine
 .gomodcache
 .tmp-go
 .venv
