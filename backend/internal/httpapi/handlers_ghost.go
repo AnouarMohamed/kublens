@@ -44,14 +44,14 @@ func (s *Server) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Automated Remediation Proposal for favorable verdicts
-	if (result.Verdict.Severity == "low" || result.Verdict.Severity == "medium") && s.remediations != nil {
+	if (result.Verdict.Severity == "warning" || result.Verdict.Severity == "info") && s.remediations != nil {
 		proposal := model.RemediationProposal{
 			ID:         fmt.Sprintf("ghost-%d", s.now().UnixNano()),
 			Kind:       model.RemediationKind(req.Action),
 			Status:     "proposed",
 			Resource:   req.NodeName,
 			Reason:     result.Verdict.Summary,
-			RiskLevel:  result.Verdict.Severity,
+			RiskLevel:  "low", // Map simulation warning/info to low-risk proposal
 			CreatedAt:  s.now().Format(time.RFC3339),
 		}
 		s.remediations.SaveProposals([]model.RemediationProposal{proposal})
