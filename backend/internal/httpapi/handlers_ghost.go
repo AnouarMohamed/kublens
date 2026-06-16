@@ -25,7 +25,21 @@ func (s *Server) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
 	}
 
 	topology := s.currentGhostTopology(r)
-	result := ghostengine.SimulateNodeDrain(topology, normalized, s.now())
+	var result model.GhostSimulationResult
+	var simulated bool
+	if s.ghostClient != nil {
+		var simErr error
+		result, simErr = s.ghostClient.Simulate(r.Context(), normalized, topology)
+		if simErr != nil {
+			s.logger.Warn("ghost engine gRPC simulation failed, falling back to in-memory simulation", "error", simErr)
+		} else {
+			simulated = true
+		}
+	}
+
+	if !simulated {
+		result = ghostengine.SimulateNodeDrain(topology, normalized, s.now())
+	}
 	writeJSON(w, http.StatusOK, result)
 }
 

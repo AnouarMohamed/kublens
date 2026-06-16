@@ -1,31 +1,56 @@
-#include <chrono>
-#include <csignal>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <thread>
+#include <csignal>
+#include <grpcpp/grpcpp.h>
+#include "ghost/v1/ghost.grpc.pb.h"
+#include "simulator.h"
+
+class SimulationServiceImpl final : public ghost::v1::SimulationService::Service {
+    grpc::Status Simulate(
+        grpc::ServerContext* context,
+        const ghost::v1::SimulationRequest* request,
+        ghost::v1::SimulationResult* response
+    ) override {
+        *response = ghost::Simulator::Run(*request);
+        return grpc::Status::OK;
+    }
+};
 
 namespace {
-bool running = true;
+std::unique_ptr<grpc::Server> server;
 
 void handle_signal(int) {
-  running = false;
+    if (server) {
+        std::cout << "Shutting down Ghost Engine gRPC server..." << std::endl;
+        server->Shutdown();
+    }
 }
-}  // namespace
+}
 
 int main(int argc, char** argv) {
-  std::string address = "0.0.0.0:8091";
-  if (argc > 1) {
-    address = argv[1];
-  }
+    std::string address = "0.0.0.0:8091";
+    if (argc > 1) {
+        address = argv[1];
+    }
 
-  std::signal(SIGINT, handle_signal);
-  std::signal(SIGTERM, handle_signal);
+    std::signal(SIGINT, handle_signal);
+    std::signal(SIGTERM, handle_signal);
 
-  std::cout << "ghost-engine scaffold listening target " << address << "\n";
-  std::cout << "Generate gRPC stubs from proto/ghost/v1/ghost.proto before enabling production serving.\n";
+    SimulationServiceImpl service;
 
-  while (running) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(250));
-  }
-  return 0;
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&service);
+
+    server = builder.BuildAndStart();
+    if (!server) {
+        std::cerr << "Failed to bind to " << address << std::endl;
+        return 1;
+    }
+    std::cout << "Ghost Engine Server listening on " << address << std::endl;
+
+    server->Wait();
+    return 0;
 }

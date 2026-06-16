@@ -1,19 +1,28 @@
-# Ghost Engine Scaffold
+# Ghost Engine Standalone Service
 
-This directory is the C++20 boundary for the future standalone Ghost Cluster gRPC service.
+This directory contains the C++20 standalone service for **Project Ghost Cluster**. It runs a high-performance gRPC server that simulates cluster-wide maintenance operations (like `node_drain`) and returns timeline frames and verdicts.
 
-Current status:
+## Current Status
 
-- `proto/ghost/v1/ghost.proto` defines the service contract.
-- `src/main.cc` is a compilable process scaffold.
-- Production gRPC serving is intentionally not generated in this workspace because `protoc`, `grpc_cpp_plugin`, `protoc-gen-go`, and `protoc-gen-go-grpc` are not installed.
+- **Fully Finished**: Implements `ghost.v1.SimulationService` defined in `proto/ghost/v1/ghost.proto`.
+- **Integrated**: The Go backend contains a `ghost.Client` that automatically serializes topology details, communicates with this service via gRPC, and maps results back to Go structures.
+- **Local Toolchain Setup**: Dependencies (Protobuf, gRPC, and Abseil) are locally resolved and configured in `third_party/` to avoid requiring system-wide root/sudo privileges.
 
-Expected generation flow once toolchains are available:
+## How to Build
 
-```bash
-protoc \
-  --cpp_out=ghost-engine/generated \
-  --grpc_cpp_out=ghost-engine/generated \
-  --plugin=protoc-gen-grpc="$(command -v grpc_cpp_plugin)" \
-  proto/ghost/v1/ghost.proto
-```
+1. Make sure you have `g++`, `make`, and `cmake` installed.
+2. Configure and compile using CMake:
+   ```bash
+   mkdir -p build && cd build
+   cmake ..
+   LD_LIBRARY_PATH=../../third_party/usr/lib64 make
+   ```
+
+## How to Run
+
+1. Run the service on a specific target address (default is `0.0.0.0:8091`):
+   ```bash
+   LD_LIBRARY_PATH=../../third_party/usr/lib64 ./ghost-engine 0.0.0.0:8091
+   ```
+
+2. Make sure `GHOST_ENABLED=true` and `GHOST_ENGINE_ADDR=localhost:8091` are configured in your backend environment `.env` to enable production gRPC forwarding from the Go backend.

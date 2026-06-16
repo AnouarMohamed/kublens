@@ -17,6 +17,7 @@ import (
 	"kubelens-backend/internal/config"
 	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/events"
+	"kubelens-backend/internal/ghost"
 	"kubelens-backend/internal/httpapi"
 	"kubelens-backend/internal/incident"
 	"kubelens-backend/internal/intelligence"
@@ -141,8 +142,14 @@ func Build(cfg config.Config) (Result, error) {
 	runtime := config.RuntimeStatus(cfg, clusterSvc.IsRealCluster(), alertDispatcher.Enabled())
 	diagnosticAnalyzer := buildAnalyzer()
 
+	var ghostClient *ghost.Client
+	if cfg.Ghost.Enabled && cfg.Ghost.EngineAddr != "" {
+		ghostClient = ghost.NewClient(cfg.Ghost.EngineAddr, cfg.Ghost.Timeout)
+	}
+
 	handler := httpapi.New(
 		clusterSvc,
+		httpapi.WithGhostClient(ghostClient),
 		httpapi.WithAIProvider(aiProvider),
 		httpapi.WithAITimeout(cfg.Assistant.Timeout),
 		httpapi.WithDocsRetriever(ragger),

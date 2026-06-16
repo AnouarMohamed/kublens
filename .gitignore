@@ -23,3 +23,6 @@ predictor/.pytest_cache/
 predictor/tests/__pycache__/
 playwright-report/
 test-results/
+third_party/
+.tmp-vite/
+backend/data/

@@ -75,6 +75,7 @@ type Server struct {
 	predictor      predictionProvider
 	buildInfo      model.BuildInfo
 	intel          *intelligence.Analyzer
+	ghostClient    ghostClient
 
 	predictionsTTL   time.Duration
 	predictionsMu    sync.RWMutex
@@ -226,6 +227,16 @@ func WithPredictor(baseURL string, timeout time.Duration, sharedSecret string) O
 		s.predictorHealthMu.Lock()
 		s.predictorHealth.enabled = true
 		s.predictorHealthMu.Unlock()
+	}
+}
+
+type ghostClient interface {
+	Simulate(ctx context.Context, req model.GhostSimulationRequest, topology model.GhostTopology) (model.GhostSimulationResult, error)
+}
+
+func WithGhostClient(client ghostClient) Option {
+	return func(s *Server) {
+		s.ghostClient = client
 	}
 }
 
