@@ -7,6 +7,7 @@ import (
 
 	ghostengine "kubelens-backend/internal/ghost"
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/remediation"
 )
 
 func (s *Server) handleGhostTopology(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +57,13 @@ func (s *Server) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
 		}
 		s.remediations.SaveProposals([]model.RemediationProposal{proposal})
 		s.logger.Info("automated remediation proposal created from ghost simulation", "id", proposal.ID, "resource", proposal.Resource)
+
+		// Automatically generate GitOps artifact
+		artifact := remediation.BuildGitOpsArtifact(proposal, collectGitOpsWorkloadInventory(r.Context(), s.cluster), s.now())
+		_, err := upsertRemediationGitOpsArtifactWithContext(r.Context(), s.remediations, proposal.ID, artifact, "system/ghost-engine")
+		if err != nil {
+			s.logger.Error("failed to persist ghost simulation gitops artifact", "proposal_id", proposal.ID, "error", err)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, result)
