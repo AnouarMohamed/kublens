@@ -12,6 +12,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { RAGTelemetry } from "../../../types";
 import {
   CHART_AMBER,
   CHART_BLUE,
@@ -252,4 +253,143 @@ export function APITabPanel({ apiStatusStack, routePerformance }: APITabPanelPro
       </ChartCard>
     </div>
   );
+}
+
+interface AssistantQualityTabPanelProps {
+  ragTelemetry: RAGTelemetry | null;
+  ragEmptyRate: number;
+  ragFeedbackBalance: number;
+}
+
+export function AssistantQualityTabPanel({
+  ragTelemetry,
+  ragEmptyRate,
+  ragFeedbackBalance,
+}: AssistantQualityTabPanelProps) {
+  const hitRate = (ragTelemetry?.hitRate ?? 0) * 100;
+  const averageResults = ragTelemetry?.averageResults ?? 0;
+  const recentQueries = ragTelemetry?.recentQueries ?? [];
+  const topFeedbackDocs = ragTelemetry?.topFeedbackDocs ?? [];
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        <QualityMetric
+          label="Retrieval Hit Rate"
+          value={`${hitRate.toFixed(1)}%`}
+          detail={`${ragTelemetry?.totalQueries ?? 0} traced queries`}
+        />
+        <QualityMetric
+          label="Empty Result Rate"
+          value={`${ragEmptyRate.toFixed(1)}%`}
+          detail={`${ragTelemetry?.emptyResults ?? 0} empty retrievals`}
+        />
+        <QualityMetric
+          label="Avg References"
+          value={averageResults.toFixed(1)}
+          detail={ragTelemetry?.enabled ? "docs retriever enabled" : "docs retriever disabled"}
+        />
+        <QualityMetric
+          label="Positive Feedback"
+          value={`${ragFeedbackBalance.toFixed(1)}%`}
+          detail={`${ragTelemetry?.feedbackSignals ?? 0} feedback signals`}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.65fr] gap-4">
+        <ChartCard title="Recent Retrieval Traces">
+          {recentQueries.length > 0 ? (
+            <div className="divide-y divide-zinc-800">
+              {recentQueries.slice(0, 8).map((query) => (
+                <div key={`${query.timestamp}-${query.query}`} className="py-3 first:pt-0 last:pb-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="max-w-[72ch] text-sm font-medium text-zinc-100">{query.query}</p>
+                    <span className="rounded-md border border-zinc-700 bg-zinc-800 px-2 py-1 text-[11px] text-zinc-300">
+                      {query.durationMs.toFixed(1)}ms
+                    </span>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-zinc-400 md:grid-cols-4">
+                    <TraceFact label="Results" value={String(query.resultCount)} />
+                    <TraceFact label="Candidates" value={String(query.candidateCount)} />
+                    <TraceFact label="Semantic" value={query.usedSemantic ? "On" : "Off"} />
+                    <TraceFact label="Terms" value={query.queryTerms.slice(0, 4).join(", ") || "None"} />
+                  </div>
+                  {query.topResults.length > 0 && (
+                    <div className="mt-3 space-y-2">
+                      {query.topResults.slice(0, 3).map((result) => (
+                        <div
+                          key={`${query.timestamp}-${result.url}`}
+                          className="grid gap-2 text-xs md:grid-cols-[minmax(0,1fr)_88px]"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-medium text-zinc-200">{result.title}</p>
+                            <p className="truncate text-zinc-500">{result.source || result.url}</p>
+                          </div>
+                          <div className="text-right font-mono text-zinc-300">
+                            {(result.finalScore * 100).toFixed(1)}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyChart message="No assistant retrieval traces available yet." />
+          )}
+        </ChartCard>
+
+        <ChartCard title="Reference Feedback">
+          {topFeedbackDocs.length > 0 ? (
+            <div className="divide-y divide-zinc-800">
+              {topFeedbackDocs.slice(0, 8).map((doc) => (
+                <div key={doc.url} className="py-3 first:pt-0 last:pb-0">
+                  <p className="truncate text-sm font-medium text-zinc-100">{doc.url}</p>
+                  <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
+                    <TraceFact label="Helpful" value={String(doc.helpful)} />
+                    <TraceFact label="Not Helpful" value={String(doc.notHelpful)} />
+                    <TraceFact label="Net" value={String(doc.netScore)} />
+                  </div>
+                  <p className="mt-2 text-[11px] text-zinc-500">{formatTelemetryTime(doc.updatedAt)}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <EmptyChart message="No reference feedback has been recorded." />
+          )}
+        </ChartCard>
+      </div>
+    </div>
+  );
+}
+
+function QualityMetric({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3">
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100">{value}</p>
+      <p className="mt-1 text-xs text-zinc-400">{detail}</p>
+    </div>
+  );
+}
+
+function TraceFact({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{label}</p>
+      <p className="truncate text-zinc-300">{value}</p>
+    </div>
+  );
+}
+
+function formatTelemetryTime(value: string): string {
+  if (value.trim() === "") {
+    return "No timestamp";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString();
 }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo } from "react";
+import { useAsyncResource } from "../../app/hooks/useAsyncResource";
 import { KpiStrip } from "../../components/KpiStrip";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { api } from "../../lib/api";
@@ -8,33 +9,23 @@ export default function SLOView() {
   const { can } = useAuthSession();
   const canRead = can("read");
 
-  const [overview, setOverview] = useState<SLOOverview | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const loadSLOOverview = useCallback((signal: AbortSignal) => {
+    return api.getSLOOverview(signal);
+  }, []);
 
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setOverview(null);
-      setError("Authenticate to view slo data.");
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const data = await api.getSLOOverview();
-      setOverview(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load slo overview");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canRead]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const {
+    data: overview,
+    isLoading,
+    error,
+    load,
+  } = useAsyncResource<SLOOverview | null>({
+    loader: loadSLOOverview,
+    fallbackError: "Failed to load slo overview",
+    initialData: null,
+    enabled: canRead,
+    disabledData: null,
+    disabledError: "Authenticate to view slo data.",
+  });
 
   const kpiItems = useMemo(() => {
     if (!overview) {

@@ -8,8 +8,9 @@ import type {
 import { apiRoute, requestJson } from "../core";
 
 export const resourcesApi = {
-  getNamespaces: () => requestJson<string[]>(apiRoute("/namespaces")),
-  getResources: (kind: string) => requestJson<ResourceList>(apiRoute("/resources/{kind}", { kind })),
+  getNamespaces: (signal?: AbortSignal) => requestJson<string[]>(apiRoute("/namespaces"), { signal }),
+  getResources: (kind: string, signal?: AbortSignal) =>
+    requestJson<ResourceList>(apiRoute("/resources/{kind}", { kind }), { signal }),
   getResourceYAML: (kind: string, namespace: string, name: string) =>
     requestJson<ResourceManifest>(apiRoute("/resources/{kind}/{namespace}/{name}/yaml", { kind, namespace, name })),
   applyResourceYAML: (kind: string, namespace: string, name: string, payload: ResourceManifest) =>

@@ -147,16 +147,6 @@ export function formatTimestamp(value: string): string {
   return date.toLocaleString();
 }
 
-export function riskColor(value: number): string {
-  if (value > 20) {
-    return RED;
-  }
-  if (value > 5) {
-    return AMBER;
-  }
-  return ACCENT;
-}
-
 export function restartSeverityColor(restarts: number): string {
   if (restarts > 10) {
     return RED;

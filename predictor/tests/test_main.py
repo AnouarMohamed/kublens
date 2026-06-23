@@ -1,9 +1,11 @@
 """Predictor API and scoring unit tests."""
 
 from fastapi.testclient import TestClient
+from predictor.app import main as predictor_main
 from predictor.app.main import (
     K8sEvent,
     api,
+    blend_risk_score,
     confidence_from_evidence,
     count_resource_warning_events,
     parse_cpu_milli,
@@ -117,6 +119,40 @@ def test_predict_scores_not_ready_node_with_hot_metrics() -> None:
     assert node_item["confidence"] >= 70
 
 
+def test_predict_blends_optional_ml_score(monkeypatch) -> None:
+    """Optional ML scoring can surface a high-risk running pod."""
+
+    class HighRiskModel:
+        def predict_proba(self, features: list[list[float]]) -> list[list[float]]:
+            assert features == [[0.0, 50.0, 128.0]]
+            return [[0.05, 0.95]]
+
+    monkeypatch.setattr(predictor_main, "get_optional_ml_model", lambda: HighRiskModel())
+    payload = {
+        "pods": [
+            {
+                "id": "p-ml",
+                "name": "checkout",
+                "namespace": "prod",
+                "status": "Running",
+                "cpu": "50m",
+                "memory": "128Mi",
+                "age": "3m",
+                "restarts": 0,
+            }
+        ],
+        "nodes": [],
+        "events": [],
+    }
+
+    response = client.post("/predict", json=payload)
+    assert response.status_code == 200
+    item = response.json()["items"][0]
+    assert item["resource"] == "checkout"
+    assert item["riskScore"] == 38
+    assert {"key": "mlRisk", "value": "95%"} in item["signals"]
+
+
 def test_predict_rejects_invalid_contract() -> None:
     """Malformed payloads are rejected by FastAPI validation."""
 
@@ -159,6 +195,13 @@ def test_confidence_from_evidence_rewards_richer_signals() -> None:
     )
 
     assert rich > sparse
+
+
+def test_blend_risk_score_never_lowers_deterministic_score() -> None:
+    """ML blending cannot reduce the deterministic risk score."""
+
+    assert blend_risk_score(80, 10) == 80
+    assert blend_risk_score(10, 90) == 42
 
 
 def test_count_resource_warning_events_matches_message_and_count() -> None:

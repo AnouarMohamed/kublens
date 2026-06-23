@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { runReadLoad } from "../../../app/hooks/asyncTask";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useStreamRefresh } from "../../../app/hooks/useStreamRefresh";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
 import type { K8sEvent, Node, NodeAlertLifecycle } from "../../../types";
 import { indexAlertLifecycleByID } from "./nodesUtils";
 
+interface NodeListPayload {
+  nodes: Node[];
+  clusterEvents: K8sEvent[];
+  alertLifecycleByID: Record<string, NodeAlertLifecycle>;
+}
+
 export function useNodeList() {
   const { can, isLoading: authLoading } = useAuthSession();
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [clusterEvents, setClusterEvents] = useState<K8sEvent[]>([]);
   const [alertLifecycleByID, setAlertLifecycleByID] = useState<Record<string, NodeAlertLifecycle>>({});
   const [search, setSearchState] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const canRead = can("read");
   const canWrite = can("write");
@@ -23,48 +26,55 @@ export function useNodeList() {
   }, []);
 
   const reportError = useCallback((message: string) => {
-    setError(message);
+    setActionError(message);
     setNotice(null);
   }, []);
 
   const reportNotice = useCallback((message: string) => {
     setNotice(message);
-    setError(null);
+    setActionError(null);
   }, []);
 
+  const loadNodeList = useCallback(async (signal: AbortSignal): Promise<NodeListPayload> => {
+    const [nodeRows, eventRows, lifecycleRows] = await Promise.all([
+      api.getNodes(signal),
+      api.getEvents(signal),
+      api.getAlertLifecycle(signal).catch(() => [] as NodeAlertLifecycle[]),
+    ]);
+
+    return {
+      nodes: nodeRows,
+      clusterEvents: eventRows,
+      alertLifecycleByID: indexAlertLifecycleByID(lifecycleRows),
+    };
+  }, []);
+
+  const {
+    data: listPayload,
+    isLoading,
+    error: loadError,
+    load: loadNodes,
+  } = useAsyncResource<NodeListPayload>({
+    loader: loadNodeList,
+    fallbackError: "Failed to load nodes",
+    initialData: { nodes: [], clusterEvents: [], alertLifecycleByID: {} },
+    enabled: !authLoading && canRead,
+    disabledData: { nodes: [], clusterEvents: [], alertLifecycleByID: {} },
+    disabledError: authLoading ? null : "Authenticate to view node data.",
+  });
+
+  const { nodes, clusterEvents } = listPayload;
+  const error = actionError ?? loadError;
+
   const load = useCallback(async () => {
-    await runReadLoad({
-      canRead,
-      deniedMessage: "Authenticate to view node data.",
-      fallbackError: "Failed to load nodes",
-      setIsLoading,
-      setError,
-      onDenied: () => {
-        setNodes([]);
-        setClusterEvents([]);
-        setAlertLifecycleByID({});
-        setNotice(null);
-      },
-      load: async () => {
-        const [nodeRows, eventRows, lifecycleRows] = await Promise.all([
-          api.getNodes(),
-          api.getEvents(),
-          api.getAlertLifecycle().catch(() => [] as NodeAlertLifecycle[]),
-        ]);
-        setNodes(nodeRows);
-        setClusterEvents(eventRows);
-        setAlertLifecycleByID(indexAlertLifecycleByID(lifecycleRows));
-        setNotice(null);
-      },
-    });
-  }, [canRead]);
+    setActionError(null);
+    setNotice(null);
+    await loadNodes();
+  }, [loadNodes]);
 
   useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+    setAlertLifecycleByID(listPayload.alertLifecycleByID);
+  }, [listPayload.alertLifecycleByID]);
 
   useStreamRefresh({
     enabled: canRead,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAsyncResource } from "../../app/hooks/useAsyncResource";
 import { KpiStrip } from "../../components/KpiStrip";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { api } from "../../lib/api";
@@ -8,39 +9,35 @@ export default function RightsizingView() {
   const { can } = useAuthSession();
   const canRead = can("read");
 
-  const [overview, setOverview] = useState<RightsizingOverview | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [selectedID, setSelectedID] = useState<string | null>(null);
   const [showBalanced, setShowBalanced] = useState(false);
   const [copyMessage, setCopyMessage] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setOverview(null);
-      setError("Authenticate to view rightsizing recommendations.");
-      setIsLoading(false);
-      return;
-    }
+  const loadRightsizingOverview = useCallback((signal: AbortSignal) => api.getRightsizingOverview(signal), []);
 
-    setIsLoading(true);
-    try {
-      const data = await api.getRightsizingOverview();
-      setOverview(data);
-      setSelectedID((current) =>
-        current && data.items.some((item) => item.id === current) ? current : (data.items[0]?.id ?? null),
-      );
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load rightsizing overview");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canRead]);
+  const {
+    data: overview,
+    isLoading,
+    error,
+    load,
+  } = useAsyncResource<RightsizingOverview | null>({
+    loader: loadRightsizingOverview,
+    fallbackError: "Failed to load rightsizing overview",
+    initialData: null,
+    enabled: canRead,
+    disabledData: null,
+    disabledError: "Authenticate to view rightsizing recommendations.",
+  });
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!overview) {
+      setSelectedID(null);
+      return;
+    }
+    setSelectedID((current) =>
+      current && overview.items.some((item) => item.id === current) ? current : (overview.items[0]?.id ?? null),
+    );
+  }, [overview]);
 
   useEffect(() => {
     if (!copyMessage) {

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useAsyncResource } from "../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { KpiStrip } from "../../components/KpiStrip";
 import { api } from "../../lib/api";
@@ -13,43 +14,35 @@ interface NamespaceRow {
   failedPods: number;
 }
 
+interface NamespacesPayload {
+  namespaces: ResourceRecord[];
+  pods: Pod[];
+}
+
 export default function Namespaces() {
   const { can, isLoading: authLoading } = useAuthSession();
-  const [namespaces, setNamespaces] = useState<ResourceRecord[]>([]);
-  const [pods, setPods] = useState<Pod[]>([]);
   const [search, setSearch] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const canRead = can("read");
 
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setNamespaces([]);
-      setPods([]);
-      setError("Authenticate to view namespaces.");
-      setIsLoading(false);
-      return;
-    }
+  const loadNamespaces = useCallback(async (signal: AbortSignal): Promise<NamespacesPayload> => {
+    const [namespaceRows, podRows] = await Promise.all([api.getResources("namespaces", signal), api.getPods(signal)]);
+    return { namespaces: namespaceRows.items, pods: podRows };
+  }, []);
 
-    setIsLoading(true);
-    try {
-      const [namespaceRows, podRows] = await Promise.all([api.getResources("namespaces"), api.getPods()]);
-      setNamespaces(namespaceRows.items);
-      setPods(podRows);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load namespaces");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canRead]);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+  const {
+    data: { namespaces, pods },
+    isLoading,
+    error,
+    load,
+  } = useAsyncResource<NamespacesPayload>({
+    loader: loadNamespaces,
+    fallbackError: "Failed to load namespaces",
+    initialData: { namespaces: [], pods: [] },
+    autoLoad: !authLoading,
+    enabled: canRead,
+    disabledData: { namespaces: [], pods: [] },
+    disabledError: "Authenticate to view namespaces.",
+  });
 
   const rows = useMemo<NamespaceRow[]>(() => {
     return namespaces.map((namespace) => {

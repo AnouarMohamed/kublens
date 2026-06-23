@@ -248,11 +248,12 @@ helm install kubelens ./helm/kubelens
 
 ## Predictor service
 
-The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions.
+The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions. You can optionally blend pod scores with a joblib model trained by `predictor/app/ml_prototype.py`; install `predictor/requirements-ml.txt` and set `PREDICTOR_MODEL_PATH`.
 
 ```env
 PREDICTOR_BASE_URL=http://localhost:8001
 PREDICTOR_SHARED_SECRET=your-shared-secret
+PREDICTOR_MODEL_PATH=./models/pod-risk.joblib
 ```
 
 ---
@@ -359,6 +360,7 @@ WRITE_ACTIONS_ENABLED=false
 
 PREDICTOR_BASE_URL=
 PREDICTOR_SHARED_SECRET=
+PREDICTOR_MODEL_PATH=
 
 ASSISTANT_PROVIDER=none
 ASSISTANT_API_BASE_URL=
@@ -438,6 +440,7 @@ e2e/                Playwright end-to-end tests
 - [docs/FEATURES.md](docs/FEATURES.md) - complete product feature map and view-by-view capabilities
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - system topology, boundaries, and data flow
 - [docs/api.md](docs/api.md) - endpoint groups, auth model, and request examples
+- [docs/PREDICTOR_ML_READINESS.md](docs/PREDICTOR_ML_READINESS.md) - optional predictor ML readiness plan and rollout policy
 - [docs/SECURITY.md](docs/SECURITY.md) - controls and trust boundaries
 - [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) - threat model details
 - [docs/OPERATIONS_VERIFICATION.md](docs/OPERATIONS_VERIFICATION.md) - production verification checklist

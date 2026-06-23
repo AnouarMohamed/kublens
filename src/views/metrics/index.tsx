@@ -13,10 +13,13 @@ export default function Metrics() {
     autoRefresh,
     tab,
     error,
+    ragTelemetry,
     setAutoRefresh,
     setTab,
     load,
     apiStatusTotals,
+    ragEmptyRate,
+    ragFeedbackBalance,
     nodeReadiness,
     podStability,
     apiSuccess,
@@ -77,6 +80,9 @@ export default function Metrics() {
         podPressureBars={podPressureBars}
         apiStatusStack={apiStatusStack}
         routePerformance={routePerformance}
+        ragTelemetry={ragTelemetry}
+        ragEmptyRate={ragEmptyRate}
+        ragFeedbackBalance={ragFeedbackBalance}
       />
 
       <MetricsRouteSections apiMetrics={apiMetrics} slowRoutes={slowRoutes} />

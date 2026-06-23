@@ -13,7 +13,7 @@ export const incidentsApi = {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  listIncidents: () => requestJson<Incident[]>(apiRoute("/incidents")),
+  listIncidents: (signal?: AbortSignal) => requestJson<Incident[]>(apiRoute("/incidents"), { signal }),
   getIncident: (id: string) => requestJson<Incident>(apiRoute("/incidents/{id}", { id })),
   getIncidentReplay: (id: string) => requestJson<IncidentReplay>(apiRoute("/incidents/{id}/replay", { id })),
   getIncidentEvidence: (id: string) =>

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { getViewItem } from "../../../features/viewCatalog";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
@@ -51,11 +52,9 @@ interface UseResourceCatalogDataResult {
 export function useResourceCatalogData(view: View): UseResourceCatalogDataResult {
   const { can, isLoading: authLoading } = useAuthSession();
   const meta = getViewItem(view);
-  const [resources, setResources] = useState<ResourceRecord[]>([]);
   const [search, setSearchState] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const canRead = can("read");
   const canWrite = can("write");
@@ -86,32 +85,34 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
     setScaleReplicasState(value);
   }, []);
 
+  const loadResources = useCallback(
+    async (signal: AbortSignal) => {
+      const response = await api.getResources(view, signal);
+      return response.items;
+    },
+    [view],
+  );
+
+  const {
+    data: resources,
+    isLoading,
+    error: loadError,
+    load: loadCatalogResources,
+  } = useAsyncResource<ResourceRecord[]>({
+    loader: loadResources,
+    fallbackError: "Failed to load resources",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+    disabledError: authLoading ? null : "Authenticate to view resource data.",
+  });
+
   const load = useCallback(async () => {
-    if (!canRead) {
-      setResources([]);
-      setError("Authenticate to view resource data.");
-      setIsLoading(false);
-      return;
-    }
+    setActionError(null);
+    await loadCatalogResources();
+  }, [loadCatalogResources]);
 
-    setIsLoading(true);
-    try {
-      const response = await api.getResources(view);
-      setResources(response.items);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load resources");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canRead, view]);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+  const error = actionError ?? loadError;
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -134,11 +135,11 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
   const openYAMLEditor = useCallback(
     async (resource: ResourceRecord) => {
       if (!canWrite) {
-        setError("Your role does not allow YAML actions.");
+        setActionError("Your role does not allow YAML actions.");
         return;
       }
       if (!resource.namespace) {
-        setError("YAML actions require a namespaced resource");
+        setActionError("YAML actions require a namespaced resource");
         return;
       }
 
@@ -147,9 +148,9 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
         const response = await api.getResourceYAML(view, resource.namespace, resource.name);
         setYAMLTargetState(resource);
         setYAMLTextState(response.yaml);
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load YAML");
+        setActionError(err instanceof Error ? err.message : "Failed to load YAML");
       } finally {
         setIsActing(false);
       }
@@ -159,7 +160,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
 
   const applyYAML = useCallback(async () => {
     if (!canWrite) {
-      setError("Your role does not allow YAML actions.");
+      setActionError("Your role does not allow YAML actions.");
       return;
     }
     if (!yamlTarget || !yamlTarget.namespace) {
@@ -176,7 +177,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
         );
         if (!force) {
           setMessage(`Apply canceled. Risk score ${response.report.score} requires explicit force override.`);
-          setError(null);
+          setActionError(null);
           return;
         }
 
@@ -188,7 +189,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
           true,
         );
         if ("requiresForce" in forced && forced.requiresForce) {
-          setError("Risk guard still blocked the apply request.");
+          setActionError("Risk guard still blocked the apply request.");
           return;
         }
         finalMessage = forced.message;
@@ -197,10 +198,10 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
       setMessage(finalMessage);
       setYAMLTargetState(null);
       setYAMLTextState("");
-      setError(null);
+      setActionError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to apply YAML");
+      setActionError(err instanceof Error ? err.message : "Failed to apply YAML");
     } finally {
       setIsActing(false);
     }
@@ -209,7 +210,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
   const openScaleEditor = useCallback(
     (resource: ResourceRecord) => {
       if (!canWrite) {
-        setError("Your role does not allow scaling actions.");
+        setActionError("Your role does not allow scaling actions.");
         return;
       }
       if (!resource.namespace) {
@@ -224,7 +225,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
 
   const applyScale = useCallback(async () => {
     if (!canWrite) {
-      setError("Your role does not allow scaling actions.");
+      setActionError("Your role does not allow scaling actions.");
       return;
     }
     if (!scaleTarget || !scaleTarget.namespace) {
@@ -233,7 +234,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
 
     const replicas = Number.parseInt(scaleReplicas, 10);
     if (!Number.isFinite(replicas) || replicas < 0) {
-      setError("Replicas must be a positive integer or zero");
+      setActionError("Replicas must be a positive integer or zero");
       return;
     }
 
@@ -242,10 +243,10 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
       const response = await api.scaleResource(view, scaleTarget.namespace, scaleTarget.name, { replicas });
       setMessage(response.message);
       setScaleTargetState(null);
-      setError(null);
+      setActionError(null);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to scale resource");
+      setActionError(err instanceof Error ? err.message : "Failed to scale resource");
     } finally {
       setIsActing(false);
     }
@@ -254,7 +255,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
   const restartResource = useCallback(
     async (resource: ResourceRecord) => {
       if (!canWrite) {
-        setError("Your role does not allow restart actions.");
+        setActionError("Your role does not allow restart actions.");
         return;
       }
       if (!resource.namespace) {
@@ -268,10 +269,10 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
       try {
         const response = await api.restartResource(view, resource.namespace, resource.name);
         setMessage(response.message);
-        setError(null);
+        setActionError(null);
         await load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to restart resource");
+        setActionError(err instanceof Error ? err.message : "Failed to restart resource");
       } finally {
         setIsActing(false);
       }
@@ -282,7 +283,7 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
   const rollbackResource = useCallback(
     async (resource: ResourceRecord) => {
       if (!canWrite) {
-        setError("Your role does not allow rollback actions.");
+        setActionError("Your role does not allow rollback actions.");
         return;
       }
       if (!resource.namespace) {
@@ -296,10 +297,10 @@ export function useResourceCatalogData(view: View): UseResourceCatalogDataResult
       try {
         const response = await api.rollbackResource(view, resource.namespace, resource.name);
         setMessage(response.message);
-        setError(null);
+        setActionError(null);
         await load();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to rollback resource");
+        setActionError(err instanceof Error ? err.message : "Failed to rollback resource");
       } finally {
         setIsActing(false);
       }

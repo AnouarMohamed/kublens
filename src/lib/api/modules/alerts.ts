@@ -18,7 +18,8 @@ export const alertsApi = {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  getAlertLifecycle: () => requestJson<NodeAlertLifecycle[]>(apiRoute("/alerts/lifecycle")),
+  getAlertLifecycle: (signal?: AbortSignal) =>
+    requestJson<NodeAlertLifecycle[]>(apiRoute("/alerts/lifecycle"), { signal }),
   updateAlertLifecycle: (payload: NodeAlertLifecycleUpdateRequest) =>
     requestJson<NodeAlertLifecycle>(apiRoute("/alerts/lifecycle"), {
       method: "POST",

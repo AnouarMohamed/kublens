@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { api } from "../../../lib/api";
-import type { ApiMetricsSnapshot, ClusterStats, Node, Pod } from "../../../types";
+import type { ApiMetricsSnapshot, ClusterStats, Node, Pod, RAGTelemetry } from "../../../types";
 import {
   buildAPIStatusStack,
   buildAPIStatusTotals,
@@ -14,12 +15,29 @@ import {
   percentage,
 } from "../utils";
 
-export type AnalyticsTab = "cluster" | "workloads" | "api";
+export type AnalyticsTab = "cluster" | "workloads" | "api" | "assistant";
 
 interface MetricsKpi {
   label: string;
   value: string;
 }
+
+interface MetricsPayload {
+  stats: ClusterStats | null;
+  nodes: Node[];
+  pods: Pod[];
+  apiMetrics: ApiMetricsSnapshot | null;
+  ragTelemetry: RAGTelemetry | null;
+}
+
+const METRICS_REFRESH_MS = 15000;
+const EMPTY_METRICS_PAYLOAD: MetricsPayload = {
+  stats: null,
+  nodes: [],
+  pods: [],
+  apiMetrics: null,
+  ragTelemetry: null,
+};
 
 /**
  * State and derived datasets for the metrics view.
@@ -29,6 +47,7 @@ interface UseMetricsDataResult {
   nodes: Node[];
   pods: Pod[];
   apiMetrics: ApiMetricsSnapshot | null;
+  ragTelemetry: RAGTelemetry | null;
   isLoading: boolean;
   autoRefresh: boolean;
   tab: AnalyticsTab;
@@ -39,6 +58,8 @@ interface UseMetricsDataResult {
   requestRatePerMinute: number;
   apiStatusTotals: { ok: number; redirect: number; clientError: number; serverError: number; total: number };
   errorRate: number;
+  ragEmptyRate: number;
+  ragFeedbackBalance: number;
   nodeReadiness: number;
   podStability: number;
   apiSuccess: number;
@@ -59,14 +80,8 @@ interface UseMetricsDataResult {
  * @returns Metrics state, controls, and computed data rows.
  */
 export function useMetricsData(): UseMetricsDataResult {
-  const [stats, setStats] = useState<ClusterStats | null>(null);
-  const [nodes, setNodes] = useState<Node[]>([]);
-  const [pods, setPods] = useState<Pod[]>([]);
-  const [apiMetrics, setApiMetrics] = useState<ApiMetricsSnapshot | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [autoRefresh, setAutoRefreshState] = useState(true);
   const [tab, setTabState] = useState<AnalyticsTab>("cluster");
-  const [error, setError] = useState<string | null>(null);
 
   const setAutoRefresh = useCallback((value: boolean) => {
     setAutoRefreshState(value);
@@ -76,42 +91,49 @@ export function useMetricsData(): UseMetricsDataResult {
     setTabState(nextTab);
   }, []);
 
-  const load = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const [statsPayload, nodesPayload, podsPayload, metricsPayload] = await Promise.all([
-        api.getStats(),
-        api.getNodes(),
-        api.getPods(),
-        api.getApiMetrics(),
-      ]);
-      setStats(statsPayload);
-      setNodes(nodesPayload);
-      setPods(podsPayload);
-      setApiMetrics(metricsPayload);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load metrics");
-    } finally {
-      setIsLoading(false);
-    }
+  const loadMetricsPayload = useCallback(async (signal: AbortSignal): Promise<MetricsPayload> => {
+    const [statsPayload, nodesPayload, podsPayload, metricsPayload, ragPayload] = await Promise.all([
+      api.getStats(signal),
+      api.getNodes(signal),
+      api.getPods(signal),
+      api.getApiMetrics(signal),
+      api.getRAGTelemetry(24, signal).catch(() => null),
+    ]);
+
+    return {
+      stats: statsPayload,
+      nodes: nodesPayload,
+      pods: podsPayload,
+      apiMetrics: metricsPayload,
+      ragTelemetry: ragPayload ?? {
+        enabled: metricsPayload.rag.enabled,
+        indexedAt: "",
+        expiresAt: "",
+        totalQueries: metricsPayload.rag.totalQueries,
+        emptyResults: metricsPayload.rag.emptyResults,
+        hitRate: metricsPayload.rag.hitRate,
+        averageResults: metricsPayload.rag.averageResults,
+        feedbackSignals: metricsPayload.rag.feedbackSignals,
+        positiveFeedback: metricsPayload.rag.positiveFeedback,
+        negativeFeedback: metricsPayload.rag.negativeFeedback,
+        topFeedbackDocs: [],
+        recentQueries: [],
+      },
+    };
   }, []);
 
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    if (!autoRefresh) {
-      return;
-    }
-
-    const handle = window.setInterval(() => {
-      void load();
-    }, 15000);
-
-    return () => window.clearInterval(handle);
-  }, [autoRefresh, load]);
+  const {
+    data: { stats, nodes, pods, apiMetrics, ragTelemetry },
+    isLoading,
+    error,
+    load,
+  } = useAsyncResource({
+    loader: loadMetricsPayload,
+    fallbackError: "Failed to load metrics",
+    initialData: EMPTY_METRICS_PAYLOAD,
+    refreshMs: METRICS_REFRESH_MS,
+    refreshEnabled: autoRefresh,
+  });
 
   const requestRatePerMinute = useMemo(() => {
     if (!apiMetrics || apiMetrics.uptimeSeconds <= 0) {
@@ -128,6 +150,24 @@ export function useMetricsData(): UseMetricsDataResult {
     }
     return (apiMetrics.totalErrors / apiMetrics.totalRequests) * 100;
   }, [apiMetrics]);
+
+  const ragEmptyRate = useMemo(() => {
+    const totalQueries = ragTelemetry?.totalQueries ?? apiMetrics?.rag.totalQueries ?? 0;
+    if (totalQueries === 0) {
+      return 0;
+    }
+    return percentage(ragTelemetry?.emptyResults ?? apiMetrics?.rag.emptyResults ?? 0, totalQueries);
+  }, [apiMetrics, ragTelemetry]);
+
+  const ragFeedbackBalance = useMemo(() => {
+    const positive = ragTelemetry?.positiveFeedback ?? apiMetrics?.rag.positiveFeedback ?? 0;
+    const negative = ragTelemetry?.negativeFeedback ?? apiMetrics?.rag.negativeFeedback ?? 0;
+    const total = positive + negative;
+    if (total === 0) {
+      return 0;
+    }
+    return percentage(positive, total);
+  }, [apiMetrics, ragTelemetry]);
 
   const nodeReadiness = useMemo(() => {
     if (!stats) {
@@ -166,8 +206,12 @@ export function useMetricsData(): UseMetricsDataResult {
       { label: "Req/min", value: requestRatePerMinute.toFixed(1) },
       { label: "Avg Latency", value: `${(apiMetrics?.avgLatencyMs ?? 0).toFixed(1)}ms` },
       { label: "Error Rate", value: `${errorRate.toFixed(2)}%` },
+      {
+        label: "RAG Hit Rate",
+        value: `${((ragTelemetry?.hitRate ?? apiMetrics?.rag.hitRate ?? 0) * 100).toFixed(1)}%`,
+      },
     ],
-    [stats, requestRatePerMinute, apiMetrics, errorRate],
+    [stats, requestRatePerMinute, apiMetrics, errorRate, ragTelemetry],
   );
 
   return {
@@ -175,6 +219,7 @@ export function useMetricsData(): UseMetricsDataResult {
     nodes,
     pods,
     apiMetrics,
+    ragTelemetry,
     isLoading,
     autoRefresh,
     tab,
@@ -185,6 +230,8 @@ export function useMetricsData(): UseMetricsDataResult {
     requestRatePerMinute,
     apiStatusTotals,
     errorRate,
+    ragEmptyRate,
+    ragFeedbackBalance,
     nodeReadiness,
     podStability,
     apiSuccess,

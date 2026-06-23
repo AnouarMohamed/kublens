@@ -4,24 +4,24 @@ This document is the canonical feature map for KubeLens AI. It describes what ex
 
 ## Core platform capabilities
 
-| Capability                      | What it does                                                                                                  | Primary APIs                                                                         |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Cluster inventory               | Lists and summarizes Kubernetes workloads, networking, storage, and access resources.                         | `/api/resources/{kind}`, `/api/pods`, `/api/nodes`, `/api/namespaces`, `/api/events` |
-| Safe write operations           | Performs controlled pod/resource/node actions behind RBAC + write gate controls.                              | `/api/pods/*`, `/api/resources/*`, `/api/nodes/*`                                    |
-| Deterministic diagnostics       | Produces evidence-based issue findings with severity and recommendations.                                     | `/api/diagnostics`                                                                   |
-| Risk predictions                | Scores likely incidents from current runtime signals (predictor-backed with fallback).                        | `/api/predictions`                                                                   |
-| SLO control center              | Tracks service objectives, burn rate posture, error-budget usage, and fast-route health in one view.          | `/api/slo`, `/api/metrics`, `/api/incidents`, `/api/alerts/lifecycle`                |
-| Ops assistant                   | Combines deterministic cluster context with optional LLM and RAG grounding.                                   | `/api/assistant`, `/api/rag/telemetry`, `/api/assistant/references/feedback`         |
-| Incident workflow               | Creates/updates incidents with timeline and runbook execution state.                                          | `/api/incidents/*`                                                                   |
-| Incident replay + evidence      | Produces replay timelines and exportable evidence bundles backed by audit, timeline, and remediation data.    | `/api/incidents/{id}/replay`, `/api/incidents/{id}/evidence`                         |
-| Remediation workflow            | Generates, approves, executes, and rejects remediation proposals.                                             | `/api/remediation/*`                                                                 |
-| GitOps remediation mode         | Produces persisted PR-ready patch bundles or advisory change requests for remediation proposals.              | `/api/remediation/{id}/gitops`                                                       |
-| Cost and rightsizing advisor    | Scores live request/limit efficiency, highlights reclaimable capacity, and emits GitOps-ready patch previews. | `/api/rightsizing`                                                                   |
-| Cluster memory                  | Stores reusable runbooks and fix patterns from executed operations.                                           | `/api/memory/runbooks*`, `/api/memory/fixes*`                                        |
-| Postmortems                     | Generates and serves incident postmortems with timeline/runbook sections.                                     | `/api/incidents/{id}/postmortem`, `/api/postmortems*`                                |
-| Alert dispatch + lifecycle      | Sends alerts to external channels and tracks alert lifecycle state.                                           | `/api/alerts/dispatch`, `/api/alerts/test`, `/api/alerts/lifecycle`                  |
-| Streaming + audit               | Streams operational events and preserves request/action audit history with reconnect-safe live feed behavior. | `/api/stream`, `/api/stream/ws`, `/api/audit`                                        |
-| Multi-cluster runtime switching | Switches active cluster context without restarting the UI.                                                    | `/api/clusters`, `/api/clusters/select`                                              |
+| Capability                      | What it does                                                                                                        | Primary APIs                                                                         |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Cluster inventory               | Lists and summarizes Kubernetes workloads, networking, storage, and access resources.                               | `/api/resources/{kind}`, `/api/pods`, `/api/nodes`, `/api/namespaces`, `/api/events` |
+| Safe write operations           | Performs controlled pod/resource/node actions behind RBAC + write gate controls.                                    | `/api/pods/*`, `/api/resources/*`, `/api/nodes/*`                                    |
+| Deterministic diagnostics       | Produces evidence-based issue findings with severity and recommendations.                                           | `/api/diagnostics`                                                                   |
+| Risk predictions                | Scores likely incidents from current runtime signals (predictor-backed with fallback).                              | `/api/predictions`                                                                   |
+| SLO control center              | Tracks service objectives, burn rate posture, error-budget usage, and fast-route health in one view.                | `/api/slo`, `/api/metrics`, `/api/incidents`, `/api/alerts/lifecycle`                |
+| Ops assistant                   | Combines deterministic cluster context with optional LLM, RAG grounding, reference feedback, and quality telemetry. | `/api/assistant`, `/api/rag/telemetry`, `/api/assistant/references/feedback`         |
+| Incident workflow               | Creates/updates incidents with timeline and runbook execution state.                                                | `/api/incidents/*`                                                                   |
+| Incident replay + evidence      | Produces replay timelines and exportable evidence bundles backed by audit, timeline, and remediation data.          | `/api/incidents/{id}/replay`, `/api/incidents/{id}/evidence`                         |
+| Remediation workflow            | Generates, approves, executes, and rejects remediation proposals.                                                   | `/api/remediation/*`                                                                 |
+| GitOps remediation mode         | Produces persisted PR-ready patch bundles or advisory change requests for remediation proposals.                    | `/api/remediation/{id}/gitops`                                                       |
+| Cost and rightsizing advisor    | Scores live request/limit efficiency, highlights reclaimable capacity, and emits GitOps-ready patch previews.       | `/api/rightsizing`                                                                   |
+| Cluster memory                  | Stores reusable runbooks and fix patterns from executed operations.                                                 | `/api/memory/runbooks*`, `/api/memory/fixes*`                                        |
+| Postmortems                     | Generates and serves incident postmortems with timeline/runbook sections.                                           | `/api/incidents/{id}/postmortem`, `/api/postmortems*`                                |
+| Alert dispatch + lifecycle      | Sends alerts to external channels and tracks alert lifecycle state.                                                 | `/api/alerts/dispatch`, `/api/alerts/test`, `/api/alerts/lifecycle`                  |
+| Streaming + audit               | Streams operational events and preserves request/action audit history with reconnect-safe live feed behavior.       | `/api/stream`, `/api/stream/ws`, `/api/audit`                                        |
+| Multi-cluster runtime switching | Switches active cluster context without restarting the UI.                                                          | `/api/clusters`, `/api/clusters/select`                                              |
 
 ## User-facing views
 
@@ -51,7 +51,7 @@ This document is the canonical feature map for KubeLens AI. It describes what ex
 | Settings Panel         | Per-user workspace settings (refresh cadence, panel width, notification limits, muted keywords, sensitive-value redaction, desktop alerts).                              | Local browser settings persistence                                                                              |
 | Service Accounts       | Workload identity inventory in resource catalog.                                                                                                                         | `/api/resources/serviceaccounts`                                                                                |
 | RBAC                   | Role/rolebinding/cluster-role summary view.                                                                                                                              | `/api/resources/rbac`                                                                                           |
-| Metrics                | Interactive telemetry dashboards and API metrics surfaces.                                                                                                               | `/api/metrics`, `/api/metrics/prometheus`                                                                       |
+| Metrics                | Interactive cluster, workload, API, and assistant quality telemetry surfaces.                                                                                            | `/api/metrics`, `/api/metrics/prometheus`, `/api/rag/telemetry`                                                 |
 | SLO Center             | Error-budget control center with objective health, burn-rate posture, and alert-focused summaries.                                                                       | `/api/slo`                                                                                                      |
 | Rightsizing Advisor    | Resource-efficiency view with live usage, request/limit recommendations, reclaimable capacity, and GitOps previews.                                                      | `/api/rightsizing`                                                                                              |
 | Audit Trail            | Live and historical request-level audit activity with attribution, websocket reconnect backoff, pause/resume buffering, and virtualized row rendering for large streams. | `/api/audit`, `/api/stream/ws`                                                                                  |
@@ -77,14 +77,14 @@ In production mode, remediation execution enforces a four-eyes policy: the appro
 
 ## Optional integrations
 
-| Integration                          | Purpose                                              | Config keys                                                    |
-| ------------------------------------ | ---------------------------------------------------- | -------------------------------------------------------------- |
-| Predictor service                    | External deterministic risk scoring service.         | `PREDICTOR_BASE_URL`, `PREDICTOR_SHARED_SECRET`                |
-| OpenAI-compatible assistant provider | Natural-language enrichment for assistant output.    | `ASSISTANT_PROVIDER`, `ASSISTANT_API_*`, `ASSISTANT_MODEL`     |
-| RAG embeddings                       | Semantic retrieval for assistant grounding.          | `OLLAMA_*` and/or `ASSISTANT_EMBEDDING_*`                      |
-| ChatOps webhook                      | Sends incident/remediation/postmortem notifications. | `CHATOPS_*`                                                    |
-| Alert channels                       | Dispatches alerts to Alertmanager/Slack/PagerDuty.   | `ALERTMANAGER_WEBHOOK_URL`, `SLACK_WEBHOOK_URL`, `PAGERDUTY_*` |
-| OpenTelemetry                        | Trace export for backend and predictor paths.        | `OTEL_*`                                                       |
+| Integration                          | Purpose                                                                          | Config keys                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Predictor service                    | External deterministic risk scoring service with optional joblib model blending. | `PREDICTOR_BASE_URL`, `PREDICTOR_SHARED_SECRET`, `PREDICTOR_MODEL_PATH` |
+| OpenAI-compatible assistant provider | Natural-language enrichment for assistant output.                                | `ASSISTANT_PROVIDER`, `ASSISTANT_API_*`, `ASSISTANT_MODEL`              |
+| RAG embeddings                       | Semantic retrieval for assistant grounding.                                      | `OLLAMA_*` and/or `ASSISTANT_EMBEDDING_*`                               |
+| ChatOps webhook                      | Sends incident/remediation/postmortem notifications.                             | `CHATOPS_*`                                                             |
+| Alert channels                       | Dispatches alerts to Alertmanager/Slack/PagerDuty.                               | `ALERTMANAGER_WEBHOOK_URL`, `SLACK_WEBHOOK_URL`, `PAGERDUTY_*`          |
+| OpenTelemetry                        | Trace export for backend and predictor paths.                                    | `OTEL_*`                                                                |
 
 ## Feature flags and mode defaults
 
@@ -94,7 +94,7 @@ In production mode, remediation execution enforces a four-eyes policy: the appro
 - `ASSISTANT_PROVIDER=none` disables assistant LLM enrichment.
 - `ASSISTANT_RAG_ENABLED` toggles docs retrieval grounding.
 
-For exact settings, use `.env.example` and `README.md`.
+For exact settings, use `.env.example` and `README.md`. The optional ML production-readiness plan is tracked in `docs/PREDICTOR_ML_READINESS.md`.
 
 ## Workspace auth and notification safeguards
 

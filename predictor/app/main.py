@@ -15,6 +15,7 @@ Environment variables:
     OTEL_SERVICE_NAME: Service name for trace resource attributes.
     OTEL_TRACES_SAMPLE_RATIO: Trace sampling ratio in [0.0, 1.0].
     PREDICTOR_SHARED_SECRET: Optional shared secret for /predict requests.
+    PREDICTOR_MODEL_PATH: Optional joblib model used for pod score blending.
 """
 
 from __future__ import annotations
@@ -36,6 +37,8 @@ from pydantic import BaseModel, Field
 
 api = FastAPI(title="k8s-ops-predictor", version="1.0.0")
 logger = logging.getLogger("predictor.telemetry")
+_ml_model_cache_path: str | None = None
+_ml_model_cache: object | None = None
 
 
 def configure_telemetry(app: FastAPI) -> None:
@@ -212,6 +215,85 @@ def require_predictor_secret(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized predictor request")
 
 
+def get_optional_ml_model() -> object | None:
+    """Load the optional joblib model configured for pod risk blending.
+
+    The predictor remains deterministic by default. Operators can opt in to ML
+    scoring by setting ``PREDICTOR_MODEL_PATH`` and installing the optional ML
+    requirements. Model loading is cached per path to avoid repeated disk I/O.
+
+    Returns:
+        object | None: Loaded model object, or ``None`` when ML is disabled or unavailable.
+    """
+
+    path = os.getenv("PREDICTOR_MODEL_PATH", "").strip()
+    if path == "":
+        return None
+
+    global _ml_model_cache_path, _ml_model_cache
+    if _ml_model_cache_path == path:
+        return _ml_model_cache
+
+    try:
+        import joblib
+
+        _ml_model_cache = joblib.load(path)
+        _ml_model_cache_path = path
+        logger.info("Loaded optional predictor ML model from %s", path)
+        return _ml_model_cache
+    except Exception as exc:  # pragma: no cover - environment dependent startup path
+        _ml_model_cache = None
+        _ml_model_cache_path = path
+        logger.warning("Optional predictor ML model disabled: %s", exc)
+        return None
+
+
+def pod_ml_features(pod: PodSummary, cpu_milli: int, mem_mi: int) -> list[float]:
+    """Build the stable pod feature vector consumed by optional ML models."""
+
+    return [float(pod.restarts), float(max(cpu_milli, 0)), float(max(mem_mi, 0))]
+
+
+def score_pod_with_ml(pod: PodSummary, cpu_milli: int, mem_mi: int) -> int | None:
+    """Return an optional ML risk score for a pod.
+
+    Models may expose either ``predict_proba`` with a positive-class column or
+    ``predict`` returning a value in ``[0, 1]`` or ``[0, 100]``.
+    """
+
+    model = get_optional_ml_model()
+    if model is None:
+        return None
+
+    features = [pod_ml_features(pod, cpu_milli, mem_mi)]
+    try:
+        if hasattr(model, "predict_proba"):
+            probabilities = model.predict_proba(features)
+            first_row = probabilities[0]
+            probability = float(first_row[1] if len(first_row) > 1 else first_row[0])
+        elif hasattr(model, "predict"):
+            prediction = model.predict(features)
+            probability = float(prediction[0])
+        else:
+            logger.warning("Optional predictor ML model has no predict interface")
+            return None
+    except Exception as exc:  # pragma: no cover - depends on external model behavior
+        logger.warning("Optional predictor ML model inference failed: %s", exc)
+        return None
+
+    if probability > 1:
+        probability = probability / 100
+    probability = max(0.0, min(1.0, probability))
+    return clamp(round(probability * 100), 0, 100)
+
+
+def blend_risk_score(deterministic_score: int, ml_score: int) -> int:
+    """Blend deterministic risk with optional ML risk while preserving explainability."""
+
+    blended = round(deterministic_score * 0.60 + ml_score * 0.40)
+    return clamp(max(deterministic_score, blended), 0, 100)
+
+
 @api.post("/predict", response_model=PredictionResponse)
 # Intentionally sync: prediction is CPU-bound in-memory scoring with no blocking I/O.
 def predict(request: PredictionRequest, _: None = Depends(require_predictor_secret)) -> PredictionResponse:
@@ -263,6 +345,11 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
 
         if resource_warnings > 0 and status != "running":
             score += min(12, resource_warnings * 2)
+
+        ml_score = score_pod_with_ml(pod, cpu_milli, mem_mi)
+        if ml_score is not None:
+            score = blend_risk_score(score, ml_score)
+            signals.append(PredictionSignal(key="mlRisk", value=f"{ml_score}%"))
 
         score = clamp(score, 0, 100)
         if score < 35:

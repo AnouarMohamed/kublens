@@ -17,7 +17,7 @@ export const remediationApi = {
       method: "POST",
       body: JSON.stringify({}),
     }),
-  listRemediation: () => requestJson<RemediationProposal[]>(apiRoute("/remediation")),
+  listRemediation: (signal?: AbortSignal) => requestJson<RemediationProposal[]>(apiRoute("/remediation"), { signal }),
   getRemediationGitOpsArtifact: (id: string) =>
     requestJson<RemediationGitOpsArtifact>(apiRoute("/remediation/{id}/gitops", { id })),
   generateRemediationGitOpsArtifact: (id: string) =>
@@ -40,9 +40,9 @@ export const remediationApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  searchMemoryRunbooks: (query = "") => {
+  searchMemoryRunbooks: (query = "", signal?: AbortSignal) => {
     const suffix = query.trim() === "" ? "" : `?q=${encodeURIComponent(query.trim())}`;
-    return requestJson<MemoryRunbook[]>(`${apiRoute("/memory/runbooks")}${suffix}`);
+    return requestJson<MemoryRunbook[]>(`${apiRoute("/memory/runbooks")}${suffix}`, { signal });
   },
   createMemoryRunbook: (payload: MemoryRunbookUpsertRequest) =>
     requestJson<MemoryRunbook>(apiRoute("/memory/runbooks"), {
@@ -54,9 +54,9 @@ export const remediationApi = {
       method: "PUT",
       body: JSON.stringify(payload),
     }),
-  listMemoryFixes: (query = "") => {
+  listMemoryFixes: (query = "", signal?: AbortSignal) => {
     const suffix = query.trim() === "" ? "" : `?q=${encodeURIComponent(query.trim())}`;
-    return requestJson<MemoryFixPattern[]>(`${apiRoute("/memory/fixes")}${suffix}`);
+    return requestJson<MemoryFixPattern[]>(`${apiRoute("/memory/fixes")}${suffix}`, { signal });
   },
   recordMemoryFix: (payload: MemoryFixCreateRequest) =>
     requestJson<MemoryFixPattern>(apiRoute("/memory/fixes"), {

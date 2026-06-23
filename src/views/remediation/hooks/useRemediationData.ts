@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { runAsyncAction, runReadLoad } from "../../../app/hooks/asyncTask";
+import { runAsyncAction } from "../../../app/hooks/asyncTask";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { ApiError } from "../../../lib/api";
 import { api } from "../../../lib/api";
@@ -64,11 +65,10 @@ interface UseRemediationDataResult {
  * @returns Remediation state and action handlers.
  */
 export function useRemediationData(): UseRemediationDataResult {
-  const { can } = useAuthSession();
+  const { can, isLoading: authLoading } = useAuthSession();
   const canRead = can("read");
   const canWrite = can("write");
 
-  const [items, setItems] = useState<RemediationProposal[]>([]);
   const [selectedID, setSelectedIDState] = useState<string | null>(null);
   const [rejectingID, setRejectingIDState] = useState<string | null>(null);
   const [rejectReason, setRejectReasonState] = useState("");
@@ -76,9 +76,8 @@ export function useRemediationData(): UseRemediationDataResult {
   const [gitopsArtifact, setGitOpsArtifact] = useState<RemediationGitOpsArtifact | null>(null);
   const [gitopsLoading, setGitOpsLoading] = useState(false);
   const [gitopsError, setGitOpsError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [statusFilter, setStatusFilterState] = useState<StatusFilter>("all");
   const [riskFilter, setRiskFilterState] = useState<RiskFilter>("all");
@@ -121,25 +120,29 @@ export function useRemediationData(): UseRemediationDataResult {
     setSelectedIDState(next.id);
   }, []);
 
+  const loadRemediationRows = useCallback((signal: AbortSignal) => api.listRemediation(signal), []);
+
+  const {
+    data: items,
+    isLoading,
+    error: loadError,
+    load: loadRemediation,
+    updateData: updateItems,
+  } = useAsyncResource<RemediationProposal[]>({
+    loader: loadRemediationRows,
+    fallbackError: "Failed to load remediation proposals",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+    disabledError: authLoading ? null : "Authenticate to view remediation proposals.",
+  });
+
+  const error = actionError ?? loadError;
+
   const refresh = useCallback(async () => {
-    await runReadLoad({
-      canRead,
-      deniedMessage: "Authenticate to view remediation proposals.",
-      fallbackError: "Failed to load remediation proposals",
-      setIsLoading,
-      setError,
-      onDenied: () => {
-        setItems([]);
-      },
-      load: async () => {
-        const data = await api.listRemediation();
-        setItems(data);
-        setSelectedIDState((current) =>
-          current && data.some((item) => item.id === current) ? current : (data[0]?.id ?? null),
-        );
-      },
-    });
-  }, [canRead]);
+    setActionError(null);
+    await loadRemediation();
+  }, [loadRemediation]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -150,8 +153,10 @@ export function useRemediationData(): UseRemediationDataResult {
   }, []);
 
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    setSelectedIDState((current) =>
+      current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? null),
+    );
+  }, [items]);
 
   const sortedItems = useMemo(() => [...items].sort(compareProposalPriority), [items]);
 
@@ -269,17 +274,17 @@ export function useRemediationData(): UseRemediationDataResult {
   const propose = useCallback(async () => {
     await runAsyncAction({
       setBusy: setIsActing,
-      setError,
+      setError: setActionError,
       fallbackError: "Failed to generate proposals",
       action: async () => {
         const proposals = await api.proposeRemediation();
-        setItems(proposals);
+        updateItems(proposals);
         chooseDefaultSelection(proposals);
         setMessage(`Generated ${proposals.length} remediation proposal(s).`);
-        setError(null);
+        setActionError(null);
       },
     });
-  }, [chooseDefaultSelection]);
+  }, [chooseDefaultSelection, updateItems]);
 
   const approve = useCallback(
     async (id: string) => {
@@ -289,18 +294,18 @@ export function useRemediationData(): UseRemediationDataResult {
       let updated: RemediationProposal | null = null;
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to approve proposal",
         action: async () => {
           updated = await api.approveRemediation(id);
-          setItems((current) => current.map((item) => (item.id === id ? updated! : item)));
+          updateItems((current) => current.map((item) => (item.id === id ? updated! : item)));
           setMessage(`Proposal ${id} approved.`);
-          setError(null);
+          setActionError(null);
         },
       });
       return updated;
     },
-    [canWrite],
+    [canWrite, updateItems],
   );
 
   const approveAndPrepareExecute = useCallback(
@@ -322,7 +327,7 @@ export function useRemediationData(): UseRemediationDataResult {
       }
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to generate GitOps artifact",
         action: async () => {
           const artifact = await api.generateRemediationGitOpsArtifact(proposal.id);
@@ -330,7 +335,7 @@ export function useRemediationData(): UseRemediationDataResult {
           setGitOpsError(null);
           setSelectedIDState(proposal.id);
           setMessage(`Prepared GitOps artifact for ${proposal.id}.`);
-          setError(null);
+          setActionError(null);
         },
       });
     },
@@ -344,18 +349,18 @@ export function useRemediationData(): UseRemediationDataResult {
       }
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to execute proposal",
         action: async () => {
           const updated = await api.executeRemediation(proposal.id);
-          setItems((current) => current.map((item) => (item.id === proposal.id ? updated : item)));
+          updateItems((current) => current.map((item) => (item.id === proposal.id ? updated : item)));
           setExecutingState(null);
           setMessage(`Proposal ${proposal.id} executed.`);
-          setError(null);
+          setActionError(null);
         },
       });
     },
-    [canWrite],
+    [canWrite, updateItems],
   );
 
   const reject = useCallback(
@@ -365,19 +370,19 @@ export function useRemediationData(): UseRemediationDataResult {
       }
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to reject proposal",
         action: async () => {
           const updated = await api.rejectRemediation(id, { reason });
-          setItems((current) => current.map((item) => (item.id === id ? updated : item)));
+          updateItems((current) => current.map((item) => (item.id === id ? updated : item)));
           setRejectingIDState(null);
           setRejectReasonState("");
           setMessage(`Proposal ${id} rejected.`);
-          setError(null);
+          setActionError(null);
         },
       });
     },
-    [canRead],
+    [canRead, updateItems],
   );
 
   return {

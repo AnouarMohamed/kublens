@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useStreamRefresh } from "../../../app/hooks/useStreamRefresh";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
@@ -21,30 +22,26 @@ interface UseDiagnosticsDataResult {
 
 export function useDiagnosticsData(): UseDiagnosticsDataResult {
   const { can } = useAuthSession();
-  const [diagnostics, setDiagnostics] = useState<DiagnosticsResult | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAlerting, setIsAlerting] = useState(false);
   const [alertMessage, setAlertMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const canWrite = can("write");
   const canRead = can("read");
 
-  const refresh = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const response = await api.getDiagnostics();
-      setDiagnostics(response);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load diagnostics");
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const loadDiagnostics = useCallback((signal: AbortSignal) => api.getDiagnostics(signal), []);
 
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  const {
+    data: diagnostics,
+    isLoading,
+    error,
+    load: refresh,
+  } = useAsyncResource<DiagnosticsResult | null>({
+    loader: loadDiagnostics,
+    fallbackError: "Failed to load diagnostics",
+    initialData: null,
+    enabled: canRead,
+    disabledData: null,
+    disabledError: "Authenticate to view diagnostics.",
+  });
 
   useStreamRefresh({
     enabled: canRead,

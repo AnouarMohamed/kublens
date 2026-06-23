@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { runReadLoad } from "../../../app/hooks/asyncTask";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
 import type {
@@ -85,18 +85,15 @@ interface UseIncidentDataResult {
  * @returns Incident view state and command handlers.
  */
 export function useIncidentData(): UseIncidentDataResult {
-  const { can } = useAuthSession();
+  const { can, isLoading: authLoading } = useAuthSession();
   const canRead = can("read");
   const canWrite = can("write");
 
-  const [incidents, setIncidents] = useState<Incident[]>([]);
   const [selected, setSelected] = useState<Incident | null>(null);
   const [replay, setReplay] = useState<IncidentReplay | null>(null);
   const [evidence, setEvidence] = useState<IncidentEvidenceBundle | null>(null);
-  const [remediations, setRemediations] = useState<RemediationProposal[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [fixPromptDismissed, setFixPromptDismissed] = useState(false);
   const [fixForm, setFixForm] = useState<MemoryFixCreateRequest | null>(null);
@@ -136,31 +133,40 @@ export function useIncidentData(): UseIncidentDataResult {
     setFixPromptDismissed(true);
   }, []);
 
+  const loadIncidentRows = useCallback((signal: AbortSignal) => api.listIncidents(signal), []);
+
+  const {
+    data: incidents,
+    isLoading,
+    error: incidentLoadError,
+    load: loadIncidents,
+    updateData: updateIncidents,
+  } = useAsyncResource<Incident[]>({
+    loader: loadIncidentRows,
+    fallbackError: "Failed to load incidents",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+    disabledError: authLoading ? null : "Authenticate to view incidents.",
+  });
+
+  const loadRemediationRows = useCallback((signal: AbortSignal) => api.listRemediation(signal), []);
+
+  const { data: remediations, load: loadRemediations } = useAsyncResource<RemediationProposal[]>({
+    loader: loadRemediationRows,
+    fallbackError: "Failed to load remediation proposals",
+    initialData: [],
+    autoLoad: false,
+    enabled: !authLoading && canRead,
+    disabledData: [],
+  });
+
+  const error = actionError ?? incidentLoadError;
+
   const refreshIncidents = useCallback(async () => {
-    await runReadLoad({
-      canRead,
-      deniedMessage: "Authenticate to view incidents.",
-      fallbackError: "Failed to load incidents",
-      setIsLoading,
-      setError,
-      onDenied: () => {
-        setIncidents([]);
-        setSelected(null);
-        setReplay(null);
-        setEvidence(null);
-      },
-      load: async () => {
-        const data = await api.listIncidents();
-        setIncidents(data);
-        if (selected?.id) {
-          const fresh = data.find((item) => item.id === selected.id);
-          if (fresh) {
-            setSelected(fresh);
-          }
-        }
-      },
-    });
-  }, [canRead, selected?.id]);
+    setActionError(null);
+    await loadIncidents();
+  }, [loadIncidents]);
 
   const loadIncidentArtifacts = useCallback(async (id: string) => {
     const [replayResult, evidenceResult] = await Promise.allSettled([
@@ -204,34 +210,40 @@ export function useIncidentData(): UseIncidentDataResult {
       setEvidence(evidenceResult.status === "fulfilled" ? evidenceResult.value : null);
       setFixPromptDismissed(false);
       setTimelineFilterState("all");
-      setError(null);
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load incident detail");
+      setActionError(err instanceof Error ? err.message : "Failed to load incident detail");
     } finally {
       setIsActing(false);
     }
   }, []);
 
-  const refreshRemediations = useCallback(async () => {
-    try {
-      const data = await api.listRemediation();
-      setRemediations(data);
-    } catch {
-      setRemediations([]);
+  useEffect(() => {
+    if (authLoading || canRead) {
+      return;
     }
-  }, []);
+    setSelected(null);
+    setReplay(null);
+    setEvidence(null);
+  }, [authLoading, canRead]);
 
   useEffect(() => {
-    void refreshIncidents();
-  }, [refreshIncidents]);
+    if (!selected?.id) {
+      return;
+    }
+    const fresh = incidents.find((item) => item.id === selected.id);
+    if (fresh) {
+      setSelected(fresh);
+    }
+  }, [incidents, selected?.id]);
 
   useEffect(() => {
     if (!selected || selected.status !== "resolved") {
       setFixForm(null);
       return;
     }
-    void refreshRemediations();
-  }, [selected, refreshRemediations]);
+    void loadRemediations();
+  }, [loadRemediations, selected]);
 
   const associatedExecutedRemediations = useMemo(() => {
     if (!selected) {
@@ -271,9 +283,9 @@ export function useIncidentData(): UseIncidentDataResult {
       setMessage(`Incident ${created.id} created.`);
       await refreshIncidents();
       await loadIncidentDetail(created.id);
-      setError(null);
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to trigger incident");
+      setActionError(err instanceof Error ? err.message : "Failed to trigger incident");
     } finally {
       setIsActing(false);
     }
@@ -288,17 +300,18 @@ export function useIncidentData(): UseIncidentDataResult {
       try {
         const updated = await api.updateIncidentStep(selected.id, step.id, { status: target });
         setSelected(updated);
+        updateIncidents((current) => current.map((incident) => (incident.id === updated.id ? updated : incident)));
         await loadIncidentArtifacts(updated.id);
         setMessage(`Step ${step.id} updated to ${target}.`);
         await refreshIncidents();
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to update step");
+        setActionError(err instanceof Error ? err.message : "Failed to update step");
       } finally {
         setIsActing(false);
       }
     },
-    [canWrite, loadIncidentArtifacts, refreshIncidents, selected],
+    [canWrite, loadIncidentArtifacts, refreshIncidents, selected, updateIncidents],
   );
 
   const resolveIncident = useCallback(async () => {
@@ -309,17 +322,18 @@ export function useIncidentData(): UseIncidentDataResult {
     try {
       const updated = await api.resolveIncident(selected.id);
       setSelected(updated);
+      updateIncidents((current) => current.map((incident) => (incident.id === updated.id ? updated : incident)));
       await loadIncidentArtifacts(updated.id);
       setMessage(`Incident ${updated.id} resolved.`);
       await refreshIncidents();
-      await refreshRemediations();
-      setError(null);
+      await loadRemediations();
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to resolve incident");
+      setActionError(err instanceof Error ? err.message : "Failed to resolve incident");
     } finally {
       setIsActing(false);
     }
-  }, [canWrite, loadIncidentArtifacts, refreshIncidents, refreshRemediations, selected]);
+  }, [canWrite, loadIncidentArtifacts, loadRemediations, refreshIncidents, selected, updateIncidents]);
 
   const generatePostmortem = useCallback(async () => {
     if (!selected || !canWrite) {
@@ -330,9 +344,9 @@ export function useIncidentData(): UseIncidentDataResult {
       const created = await api.generatePostmortem(selected.id);
       await loadIncidentArtifacts(selected.id);
       setMessage(`Postmortem ${created.id} generated (${created.method.toUpperCase()}).`);
-      setError(null);
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to generate postmortem");
+      setActionError(err instanceof Error ? err.message : "Failed to generate postmortem");
     } finally {
       setIsActing(false);
     }
@@ -348,9 +362,9 @@ export function useIncidentData(): UseIncidentDataResult {
       setMessage("Fix pattern recorded in cluster memory.");
       setFixForm(null);
       setFixPromptDismissed(true);
-      setError(null);
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to record fix");
+      setActionError(err instanceof Error ? err.message : "Failed to record fix");
     } finally {
       setIsActing(false);
     }
@@ -429,9 +443,9 @@ export function useIncidentData(): UseIncidentDataResult {
     try {
       await navigator.clipboard.writeText(evidence.markdown);
       setMessage("Incident evidence bundle copied.");
-      setError(null);
+      setActionError(null);
     } catch {
-      setError("Failed to copy incident evidence bundle.");
+      setActionError("Failed to copy incident evidence bundle.");
     }
   }, [evidence?.markdown]);
 

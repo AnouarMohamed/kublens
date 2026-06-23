@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { AMBER, BLUE, RED } from "../constants";
-import { riskColor } from "../utils";
 
 export function RiskRail({ label, value, onClick }: { label: string; value: number; onClick?: () => void }) {
-  const color = riskColor(value);
+  const color = riskRailColor(value);
   const baseClass = "rounded-xl border border-zinc-700 bg-zinc-900 p-4";
 
   if (onClick) {
@@ -136,7 +135,7 @@ export function FindingCard({
   const severityColor = severity === "critical" ? RED : severity === "warning" ? AMBER : BLUE;
 
   return (
-    <article className="pl-3 border-l-2 py-2" style={{ borderLeftColor: severityColor }}>
+    <article className="rounded-md border border-zinc-700 bg-zinc-900/50 px-3 py-2">
       <div className="flex items-center gap-2">
         <span className="text-[10px] font-mono font-semibold uppercase" style={{ color: severityColor }}>
           {severity}
@@ -159,14 +158,7 @@ export function LifecycleMiniStat({
   value: string;
   tone: "neutral" | "good" | "bad" | "info";
 }) {
-  const valueClass =
-    tone === "good"
-      ? "text-[#00d4a8]"
-      : tone === "bad"
-        ? "text-[#ff4444]"
-        : tone === "info"
-          ? "text-[#3b82f6]"
-          : "text-[#e8e8e8]";
+  const valueClass = tone === "bad" ? "text-[#ff4444]" : tone === "info" ? "text-[#3b82f6]" : "text-[#e8e8e8]";
 
   return (
     <div className="rounded-md border border-zinc-800 bg-zinc-900/45 px-2.5 py-2">
@@ -174,4 +166,14 @@ export function LifecycleMiniStat({
       <p className={`mt-1 text-sm font-mono font-semibold ${valueClass}`}>{value}</p>
     </div>
   );
+}
+
+function riskRailColor(value: number): string {
+  if (value > 20) {
+    return RED;
+  }
+  if (value > 5) {
+    return AMBER;
+  }
+  return "#e8e8e8";
 }

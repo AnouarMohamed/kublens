@@ -97,4 +97,4 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | Incident replay and evidence bundles       | shipped | TBD   | Phase 1      |
 | GitOps remediation mode                    | shipped | TBD   | Phase 2      |
 | Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
-| Assistant quality and evaluation dashboard | planned | TBD   | Phase 3      |
+| Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |

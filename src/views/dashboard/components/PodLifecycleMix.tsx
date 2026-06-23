@@ -8,7 +8,7 @@ function lifecycleSignalTone(atRiskPercent: number): string {
   if (atRiskPercent >= 10) {
     return "text-[#f59e0b]";
   }
-  return "text-[#00d4a8]";
+  return "text-[#e8e8e8]";
 }
 
 export function PodLifecycleMix({ data }: { data: Array<{ name: string; value: number; color: string }> }) {
@@ -109,7 +109,7 @@ export function PodLifecycleMix({ data }: { data: Array<{ name: string; value: n
       <div className="mt-3 pt-3 border-t border-[#1f1f1f] grid grid-cols-3 gap-4">
         <div>
           <p className="text-[10px] font-mono uppercase tracking-[0.15em] text-[#444444]">Running</p>
-          <p className="mt-1 text-lg font-mono font-semibold text-[#00d4a8]">{runningCount}</p>
+          <p className="mt-1 text-lg font-mono font-semibold text-[#e8e8e8]">{runningCount}</p>
         </div>
         <div>
           <p className="text-[10px] font-mono uppercase tracking-[0.15em] text-[#444444]">Pending</p>

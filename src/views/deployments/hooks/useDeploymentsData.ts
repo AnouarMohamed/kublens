@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { runAsyncAction, runReadLoad } from "../../../app/hooks/asyncTask";
+import { useCallback, useMemo, useState } from "react";
+import { runAsyncAction } from "../../../app/hooks/asyncTask";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
 import type { ResourceRecord } from "../../../types";
@@ -47,12 +48,10 @@ interface UseDeploymentsDataResult {
  */
 export function useDeploymentsData(): UseDeploymentsDataResult {
   const { can, isLoading: authLoading } = useAuthSession();
-  const [items, setItems] = useState<ResourceRecord[]>([]);
   const [search, setSearchState] = useState("");
   const [namespaceFilter, setNamespaceFilterState] = useState("All");
-  const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [scaleTarget, setScaleTargetState] = useState<ResourceRecord | null>(null);
   const [scaleReplicas, setScaleReplicasState] = useState("1");
@@ -89,29 +88,31 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
     setYAMLEditorState((state) => (state ? { ...state, yaml } : null));
   }, []);
 
-  const load = useCallback(async () => {
-    await runReadLoad({
-      canRead,
-      deniedMessage: "Authenticate to view deployments.",
-      fallbackError: "Failed to load deployments",
-      setIsLoading,
-      setError,
-      onDenied: () => {
-        setItems([]);
-      },
-      load: async () => {
-        const response = await api.getResources("deployments");
-        setItems(response.items);
-      },
-    });
-  }, [canRead]);
+  const loadDeployments = useCallback(async (signal: AbortSignal) => {
+    const response = await api.getResources("deployments", signal);
+    return response.items;
+  }, []);
 
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+  const {
+    data: items,
+    isLoading,
+    error: loadError,
+    load: loadDeploymentResources,
+  } = useAsyncResource<ResourceRecord[]>({
+    loader: loadDeployments,
+    fallbackError: "Failed to load deployments",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+    disabledError: authLoading ? null : "Authenticate to view deployments.",
+  });
+
+  const load = useCallback(async () => {
+    setActionError(null);
+    await loadDeploymentResources();
+  }, [loadDeploymentResources]);
+
+  const error = actionError ?? loadError;
 
   const namespaces = useMemo(() => {
     return Array.from(
@@ -137,18 +138,18 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
   const openDetail = useCallback(
     async (item: ResourceRecord) => {
       if (!canRead || !item.namespace) {
-        setError("Deployment detail requires read access and namespace.");
+        setActionError("Deployment detail requires read access and namespace.");
         return;
       }
       const namespace = item.namespace;
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to load deployment detail",
         action: async () => {
           const response = await api.getResourceYAML("deployments", namespace, item.name);
           setDetailState({ target: item, yaml: response.yaml });
-          setError(null);
+          setActionError(null);
         },
       });
     },
@@ -158,18 +159,18 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
   const openYAMLEditor = useCallback(
     async (item: ResourceRecord) => {
       if (!canWrite || !item.namespace) {
-        setError("Your role does not allow YAML actions.");
+        setActionError("Your role does not allow YAML actions.");
         return;
       }
       const namespace = item.namespace;
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to load deployment YAML",
         action: async () => {
           const response = await api.getResourceYAML("deployments", namespace, item.name);
           setYAMLEditorState({ target: item, yaml: response.yaml });
-          setError(null);
+          setActionError(null);
         },
       });
     },
@@ -178,7 +179,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
 
   const applyYAML = useCallback(async () => {
     if (!canWrite || !yamlEditor?.target.namespace) {
-      setError("Your role does not allow YAML actions.");
+      setActionError("Your role does not allow YAML actions.");
       return;
     }
     const namespace = yamlEditor.target.namespace;
@@ -186,7 +187,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
     const yaml = yamlEditor.yaml;
     await runAsyncAction({
       setBusy: setIsActing,
-      setError,
+      setError: setActionError,
       fallbackError: "Failed to apply YAML",
       action: async () => {
         const response = await api.applyResourceYAML("deployments", namespace, name, { yaml });
@@ -197,13 +198,13 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
           );
           if (!force) {
             setMessage(`Apply canceled. Risk score ${response.report.score} requires explicit force override.`);
-            setError(null);
+            setActionError(null);
             return;
           }
 
           const forced = await api.applyResourceYAMLWithForce("deployments", namespace, name, { yaml }, true);
           if ("requiresForce" in forced && forced.requiresForce) {
-            setError("Risk guard still blocked the apply request.");
+            setActionError("Risk guard still blocked the apply request.");
             return;
           }
           finalMessage = forced.message;
@@ -212,34 +213,34 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
         setMessage(finalMessage);
         setYAMLEditorState(null);
         await load();
-        setError(null);
+        setActionError(null);
       },
     });
   }, [canWrite, load, yamlEditor]);
 
   const scale = useCallback(async () => {
     if (!canWrite || !scaleTarget?.namespace) {
-      setError("Your role does not allow scaling.");
+      setActionError("Your role does not allow scaling.");
       return;
     }
     const namespace = scaleTarget.namespace;
     const name = scaleTarget.name;
     const replicas = Number.parseInt(scaleReplicas, 10);
     if (!Number.isFinite(replicas) || replicas < 0) {
-      setError("Replicas must be a positive integer or zero.");
+      setActionError("Replicas must be a positive integer or zero.");
       return;
     }
 
     await runAsyncAction({
       setBusy: setIsActing,
-      setError,
+      setError: setActionError,
       fallbackError: "Failed to scale deployment",
       action: async () => {
         const response = await api.scaleResource("deployments", namespace, name, { replicas });
         setMessage(response.message);
         setScaleTargetState(null);
         await load();
-        setError(null);
+        setActionError(null);
       },
     });
   }, [canWrite, load, scaleReplicas, scaleTarget]);
@@ -247,7 +248,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
   const restart = useCallback(
     async (item: ResourceRecord) => {
       if (!canWrite || !item.namespace) {
-        setError("Your role does not allow restart.");
+        setActionError("Your role does not allow restart.");
         return;
       }
       const namespace = item.namespace;
@@ -256,7 +257,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
       }
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to restart deployment",
         action: async () => {
           const response = await api.restartResource("deployments", namespace, item.name);
@@ -271,7 +272,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
   const rollback = useCallback(
     async (item: ResourceRecord) => {
       if (!canWrite || !item.namespace) {
-        setError("Your role does not allow rollback.");
+        setActionError("Your role does not allow rollback.");
         return;
       }
       const namespace = item.namespace;
@@ -280,7 +281,7 @@ export function useDeploymentsData(): UseDeploymentsDataResult {
       }
       await runAsyncAction({
         setBusy: setIsActing,
-        setError,
+        setError: setActionError,
         fallbackError: "Failed to rollback deployment",
         action: async () => {
           const response = await api.rollbackResource("deployments", namespace, item.name);

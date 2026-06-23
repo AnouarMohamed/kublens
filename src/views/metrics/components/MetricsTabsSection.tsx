@@ -1,6 +1,7 @@
 import type { AnalyticsTab } from "../hooks/useMetricsData";
 import { TabButton } from "./MetricsPrimitives";
-import { APITabPanel, ClusterTabPanel, WorkloadsTabPanel } from "./MetricsTabPanels";
+import type { RAGTelemetry } from "../../../types";
+import { APITabPanel, AssistantQualityTabPanel, ClusterTabPanel, WorkloadsTabPanel } from "./MetricsTabPanels";
 
 interface MetricsTabsSectionProps {
   tab: AnalyticsTab;
@@ -12,6 +13,9 @@ interface MetricsTabsSectionProps {
   podPressureBars: Array<{ name: string; score: number; cpuMilli: number; memMi: number; color: string }>;
   apiStatusStack: Array<{ name: string; ok: number; redirect: number; clientError: number; serverError: number }>;
   routePerformance: Array<{ route: string; requests: number; avgLatencyMs: number }>;
+  ragTelemetry: RAGTelemetry | null;
+  ragEmptyRate: number;
+  ragFeedbackBalance: number;
 }
 
 export function MetricsTabsSection({
@@ -24,6 +28,9 @@ export function MetricsTabsSection({
   podPressureBars,
   apiStatusStack,
   routePerformance,
+  ragTelemetry,
+  ragEmptyRate,
+  ragFeedbackBalance,
 }: MetricsTabsSectionProps) {
   return (
     <section className="surface p-4">
@@ -31,6 +38,7 @@ export function MetricsTabsSection({
         <TabButton label="Cluster" active={tab === "cluster"} onClick={() => onTabChange("cluster")} />
         <TabButton label="Workloads" active={tab === "workloads"} onClick={() => onTabChange("workloads")} />
         <TabButton label="API" active={tab === "api"} onClick={() => onTabChange("api")} />
+        <TabButton label="Assistant Quality" active={tab === "assistant"} onClick={() => onTabChange("assistant")} />
       </div>
 
       {tab === "cluster" && <ClusterTabPanel nodeUtilizationBars={nodeUtilizationBars} nodeCPUTrend={nodeCPUTrend} />}
@@ -42,6 +50,13 @@ export function MetricsTabsSection({
         />
       )}
       {tab === "api" && <APITabPanel apiStatusStack={apiStatusStack} routePerformance={routePerformance} />}
+      {tab === "assistant" && (
+        <AssistantQualityTabPanel
+          ragTelemetry={ragTelemetry}
+          ragEmptyRate={ragEmptyRate}
+          ragFeedbackBalance={ragFeedbackBalance}
+        />
+      )}
     </section>
   );
 }

@@ -1,6 +1,6 @@
 import { Line, LineChart, ResponsiveContainer, XAxis, YAxis } from "recharts";
 import type { DiagnosticsResult, K8sEvent, Pod } from "../../../types";
-import { ACCENT, AMBER, RED } from "../constants";
+import { AMBER, RED } from "../constants";
 import { formatTimestamp, restartCountColorClass } from "../utils";
 
 export function TopRiskPodsCard({ pods }: { pods: Pod[] }) {
@@ -152,7 +152,7 @@ export function HealthSnapshotCard({
 
 function getHealthColor(score: number): string {
   if (score >= 75) {
-    return ACCENT;
+    return "#e8e8e8";
   }
   if (score >= 50) {
     return AMBER;
@@ -174,7 +174,7 @@ function getHealthTrend(healthHistory: Array<{ t: number; score: number }>): { l
   if (latest.score > previous.score) {
     return {
       label: "↑ improving",
-      className: "text-[#00d4a8]",
+      className: "text-zinc-100",
     };
   }
   if (latest.score < previous.score) {

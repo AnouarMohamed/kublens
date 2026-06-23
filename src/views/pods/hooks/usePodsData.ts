@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { runReadLoad } from "../../../app/hooks/asyncTask";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useStreamRefresh } from "../../../app/hooks/useStreamRefresh";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
@@ -19,6 +19,11 @@ const defaultCreateForm: PodCreateRequest = {
 
 const defaultLogTailLines = 100;
 const maxLogLines = 500;
+
+interface PodInventory {
+  pods: Pod[];
+  namespaces: string[];
+}
 
 /**
  * UI state and actions for the pods view.
@@ -83,8 +88,6 @@ function trimLogLines(lines: string[]): string[] {
  */
 export function usePodsData(): UsePodsDataResult {
   const { can, isLoading: authLoading } = useAuthSession();
-  const [pods, setPods] = useState<Pod[]>([]);
-  const [namespaces, setNamespaces] = useState<string[]>([]);
   const [search, setSearchState] = useState("");
   const [statusFilter, setStatusFilterState] = useState<PodStatusFilter>("All");
   const [namespaceFilter, setNamespaceFilterState] = useState("All");
@@ -98,8 +101,7 @@ export function usePodsData(): UsePodsDataResult {
   const [createForm, setCreateForm] = useState<PodCreateRequest>(defaultCreateForm);
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
   const [isBusy, setIsBusy] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const canRead = can("read");
   const canWrite = can("write");
   const logStreamRef = useRef<EventSource | null>(null);
@@ -136,32 +138,36 @@ export function usePodsData(): UsePodsDataResult {
     setLogStreaming(false);
   }, []);
 
+  const loadPodInventory = useCallback(async (signal: AbortSignal): Promise<PodInventory> => {
+    const [podRows, namespaceRows] = await Promise.all([api.getPods(signal), api.getNamespaces(signal)]);
+    return { pods: podRows, namespaces: namespaceRows };
+  }, []);
+
+  const {
+    data: inventory,
+    isLoading,
+    error: loadError,
+    load: loadPodResources,
+  } = useAsyncResource<PodInventory>({
+    loader: loadPodInventory,
+    fallbackError: "Failed to load pods",
+    initialData: { pods: [], namespaces: [] },
+    enabled: !authLoading && canRead,
+    disabledData: { pods: [], namespaces: [] },
+    disabledError: authLoading ? null : "Authenticate to view pod data.",
+  });
+
   const load = useCallback(async () => {
-    await runReadLoad({
-      canRead,
-      deniedMessage: "Authenticate to view pod data.",
-      fallbackError: "Failed to load pods",
-      setIsLoading,
-      setError,
-      onDenied: () => {
-        setPods([]);
-        setNamespaces([]);
-      },
-      load: async () => {
-        const [podRows, namespaceRows] = await Promise.all([api.getPods(), api.getNamespaces()]);
-        setPods(podRows);
-        setNamespaces(namespaceRows);
-        setConfirmingDeleteId(null);
-      },
-    });
-  }, [canRead]);
+    setActionError(null);
+    await loadPodResources();
+  }, [loadPodResources]);
+
+  const { pods, namespaces } = inventory;
+  const error = actionError ?? loadError;
 
   useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+    setConfirmingDeleteId(null);
+  }, [pods]);
 
   useEffect(() => {
     return () => {
@@ -190,7 +196,7 @@ export function usePodsData(): UsePodsDataResult {
   const openDetail = useCallback(
     async (namespace: string, podName: string) => {
       if (!canRead) {
-        setError("Authenticate to view pod details.");
+        setActionError("Authenticate to view pod details.");
         return;
       }
 
@@ -205,9 +211,9 @@ export function usePodsData(): UsePodsDataResult {
         ]);
         setSelectedPod({ ...detail, events, describe });
         setActiveTabState("specs");
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load pod details");
+        setActionError(err instanceof Error ? err.message : "Failed to load pod details");
       } finally {
         setIsBusy(false);
       }
@@ -218,7 +224,7 @@ export function usePodsData(): UsePodsDataResult {
   const openLogs = useCallback(
     async (namespace: string, podName: string, container?: string) => {
       if (!canRead) {
-        setError("Authenticate to view pod logs.");
+        setActionError("Authenticate to view pod logs.");
         return;
       }
 
@@ -230,9 +236,9 @@ export function usePodsData(): UsePodsDataResult {
         const logs = await api.getPodLogs(namespace, podName, defaultLogTailLines, container);
         setLogPodName(`${namespace}/${podName}`);
         setLogLines(trimLogLines(splitLogText(logs)));
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load pod logs");
+        setActionError(err instanceof Error ? err.message : "Failed to load pod logs");
       } finally {
         setIsBusy(false);
       }
@@ -243,7 +249,7 @@ export function usePodsData(): UsePodsDataResult {
   const startLogStream = useCallback(
     (namespace: string, podName: string, container?: string) => {
       if (!canRead) {
-        setError("Authenticate to view pod logs.");
+        setActionError("Authenticate to view pod logs.");
         return;
       }
 
@@ -264,7 +270,7 @@ export function usePodsData(): UsePodsDataResult {
       setLogStreaming(true);
       setLogError(null);
       setConfirmingDeleteId(null);
-      setError(null);
+      setActionError(null);
 
       source.onmessage = (event) => {
         if (logStreamTokenRef.current !== streamToken) {
@@ -311,11 +317,11 @@ export function usePodsData(): UsePodsDataResult {
 
   const createPod = useCallback(async () => {
     if (!canWrite) {
-      setError("Your role does not allow pod creation.");
+      setActionError("Your role does not allow pod creation.");
       return;
     }
     if (createForm.name.trim() === "") {
-      setError("Pod name is required");
+      setActionError("Pod name is required");
       return;
     }
 
@@ -329,9 +335,9 @@ export function usePodsData(): UsePodsDataResult {
       setCreateForm(defaultCreateForm);
       setShowCreateForm(false);
       await load();
-      setError(null);
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create pod");
+      setActionError(err instanceof Error ? err.message : "Failed to create pod");
     } finally {
       setIsBusy(false);
     }
@@ -340,7 +346,7 @@ export function usePodsData(): UsePodsDataResult {
   const restartPod = useCallback(
     async (namespace: string, podName: string) => {
       if (!canWrite) {
-        setError("Your role does not allow pod restart.");
+        setActionError("Your role does not allow pod restart.");
         return;
       }
       if (!window.confirm(`Restart pod ${namespace}/${podName}?`)) {
@@ -352,9 +358,9 @@ export function usePodsData(): UsePodsDataResult {
       try {
         await api.restartPod(namespace, podName);
         await load();
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to restart pod");
+        setActionError(err instanceof Error ? err.message : "Failed to restart pod");
       } finally {
         setIsBusy(false);
       }
@@ -365,7 +371,7 @@ export function usePodsData(): UsePodsDataResult {
   const deletePod = useCallback(
     async (namespace: string, podName: string) => {
       if (!canWrite) {
-        setError("Your role does not allow pod deletion.");
+        setActionError("Your role does not allow pod deletion.");
         return;
       }
       setConfirmingDeleteId(null);
@@ -374,9 +380,9 @@ export function usePodsData(): UsePodsDataResult {
       try {
         await api.deletePod(namespace, podName);
         await load();
-        setError(null);
+        setActionError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to delete pod");
+        setActionError(err instanceof Error ? err.message : "Failed to delete pod");
       } finally {
         setIsBusy(false);
       }

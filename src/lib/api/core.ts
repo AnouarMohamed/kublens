@@ -7,6 +7,7 @@ const unresolvedTemplatePattern = /\{[A-Za-z0-9_]+\}/;
 
 type PathParamValue = string | number | boolean;
 type PathParamMap = Record<string, PathParamValue>;
+export type JsonValidator<T> = (value: unknown) => value is T;
 
 /**
  * Represents a failed API request with an attached HTTP status code.
@@ -86,10 +87,11 @@ async function parseJsonSafely(response: Response): Promise<unknown> {
  * @typeParam T - Expected JSON payload type.
  * @param url - Request URL.
  * @param init - Optional fetch init.
+ * @param validate - Optional runtime response validator.
  * @returns Parsed response payload.
  * @throws {ApiError} When the response status is non-2xx.
  */
-export async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
+export async function requestJson<T>(url: string, init?: RequestInit, validate?: JsonValidator<T>): Promise<T> {
   const response = await fetch(url, {
     credentials: "same-origin",
     ...init,
@@ -109,7 +111,11 @@ export async function requestJson<T>(url: string, init?: RequestInit): Promise<T
     throw new ApiError(message, response.status);
   }
 
-  return (await response.json()) as T;
+  const payload = (await response.json()) as unknown;
+  if (validate && !validate(payload)) {
+    throw new ApiError(`Unexpected response shape from ${url}`, 502);
+  }
+  return payload as T;
 }
 
 /**

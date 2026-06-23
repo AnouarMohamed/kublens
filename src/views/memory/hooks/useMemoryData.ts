@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useAsyncResource } from "../../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../../context/AuthSessionContext";
 import { api } from "../../../lib/api";
 import type {
@@ -34,19 +35,18 @@ interface UseMemoryDataResult {
 }
 
 export function useMemoryData(): UseMemoryDataResult {
-  const { can } = useAuthSession();
+  const { can, isLoading: authLoading } = useAuthSession();
   const canRead = can("read");
   const canWrite = can("write");
 
   const [query, setQueryState] = useState("");
-  const [runbooks, setRunbooks] = useState<MemoryRunbook[]>([]);
-  const [fixes, setFixes] = useState<MemoryFixPattern[]>([]);
+  const [runbookSearchQuery, setRunbookSearchQuery] = useState("");
+  const [fixSearchQuery, setFixSearchQuery] = useState("");
   const [editingID, setEditingID] = useState<string | null>(null);
   const [runbookForm, setRunbookForm] = useState<MemoryRunbookUpsertRequest>(EMPTY_RUNBOOK);
   const [fixForm, setFixForm] = useState<MemoryFixCreateRequest>(EMPTY_FIX);
-  const [isLoading, setIsLoading] = useState(true);
   const [isActing, setIsActing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const setQuery = useCallback((value: string) => {
@@ -61,49 +61,45 @@ export function useMemoryData(): UseMemoryDataResult {
     setFixForm((current) => ({ ...current, ...patch }));
   }, []);
 
-  const refreshRunbooks = useCallback(
-    async (q = query) => {
-      if (!canRead) {
-        setRunbooks([]);
-        setError("Authenticate to view memory runbooks.");
-        setIsLoading(false);
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const data = await api.searchMemoryRunbooks(q);
-        setRunbooks(data);
-        setError(null);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to load runbooks");
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [canRead, query],
+  const loadRunbookRows = useCallback(
+    (signal: AbortSignal) => api.searchMemoryRunbooks(runbookSearchQuery, signal),
+    [runbookSearchQuery],
   );
 
-  const refreshFixes = useCallback(
-    async (q = query) => {
-      if (!canRead) {
-        setFixes([]);
-        return;
-      }
-      try {
-        const data = await api.listMemoryFixes(q);
-        setFixes(data);
-      } catch {
-        setFixes([]);
-      }
-    },
-    [canRead, query],
+  const {
+    data: runbooks,
+    isLoading: runbooksLoading,
+    error: runbooksError,
+    load: loadRunbooks,
+  } = useAsyncResource<MemoryRunbook[]>({
+    loader: loadRunbookRows,
+    fallbackError: "Failed to load runbooks",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+    disabledError: authLoading ? null : "Authenticate to view memory runbooks.",
+  });
+
+  const loadFixRows = useCallback(
+    (signal: AbortSignal) => api.listMemoryFixes(fixSearchQuery, signal),
+    [fixSearchQuery],
   );
 
-  useEffect(() => {
-    void refreshRunbooks("");
-    void refreshFixes("");
-  }, [refreshFixes, refreshRunbooks]);
+  const {
+    data: fixes,
+    isLoading: fixesLoading,
+    error: fixesError,
+    load: loadFixes,
+  } = useAsyncResource<MemoryFixPattern[]>({
+    loader: loadFixRows,
+    fallbackError: "Failed to load fix patterns",
+    initialData: [],
+    enabled: !authLoading && canRead,
+    disabledData: [],
+  });
+
+  const isLoading = runbooksLoading || fixesLoading;
+  const error = actionError ?? runbooksError ?? fixesError;
 
   const startEditingRunbook = useCallback((runbook: MemoryRunbook) => {
     setEditingID(runbook.id);
@@ -143,14 +139,18 @@ export function useMemoryData(): UseMemoryDataResult {
       }
 
       resetRunbookForm();
-      await refreshRunbooks(query);
-      setError(null);
+      if (query === runbookSearchQuery) {
+        await loadRunbooks();
+      } else {
+        setRunbookSearchQuery(query);
+      }
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save runbook");
+      setActionError(err instanceof Error ? err.message : "Failed to save runbook");
     } finally {
       setIsActing(false);
     }
-  }, [canWrite, editingID, query, refreshRunbooks, resetRunbookForm, runbookForm]);
+  }, [canWrite, editingID, loadRunbooks, query, resetRunbookForm, runbookForm, runbookSearchQuery]);
 
   const saveFix = useCallback(async () => {
     if (!canWrite) {
@@ -171,22 +171,36 @@ export function useMemoryData(): UseMemoryDataResult {
       const created = await api.recordMemoryFix(payload);
       setMessage(`Fix pattern ${created.id} recorded.`);
       setFixForm(EMPTY_FIX);
-      await refreshFixes();
-      setError(null);
+      if (query === fixSearchQuery) {
+        await loadFixes();
+      } else {
+        setFixSearchQuery(query);
+      }
+      setActionError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to record fix");
+      setActionError(err instanceof Error ? err.message : "Failed to record fix");
     } finally {
       setIsActing(false);
     }
-  }, [canWrite, fixForm, refreshFixes]);
+  }, [canWrite, fixForm, fixSearchQuery, loadFixes, query]);
 
   const searchRunbooks = useCallback(async () => {
-    await refreshRunbooks(query);
-  }, [query, refreshRunbooks]);
+    setActionError(null);
+    if (query === runbookSearchQuery) {
+      await loadRunbooks();
+      return;
+    }
+    setRunbookSearchQuery(query);
+  }, [loadRunbooks, query, runbookSearchQuery]);
 
   const searchFixes = useCallback(async () => {
-    await refreshFixes(query);
-  }, [query, refreshFixes]);
+    setActionError(null);
+    if (query === fixSearchQuery) {
+      await loadFixes();
+      return;
+    }
+    setFixSearchQuery(query);
+  }, [fixSearchQuery, loadFixes, query]);
 
   return {
     canRead,

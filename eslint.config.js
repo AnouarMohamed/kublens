@@ -10,6 +10,7 @@ export default tseslint.config(
       "dist/**",
       "node_modules/**",
       ".tmp-vite/**",
+      "ghost-engine/build/**",
       ".gocache/**",
       ".gomodcache/**",
       ".tmp-go/**",

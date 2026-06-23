@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
+import { useAsyncResource } from "../../app/hooks/useAsyncResource";
 import { useAuthSession } from "../../context/AuthSessionContext";
 import { api } from "../../lib/api";
 import { useStreamRefresh } from "../../app/hooks/useStreamRefresh";
@@ -9,39 +10,26 @@ const EVENT_TYPES = ["All", "Warning", "Normal"] as const;
 
 export default function Events() {
   const { can, isLoading: authLoading } = useAuthSession();
-  const [events, setEvents] = useState<K8sEvent[]>([]);
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<(typeof EVENT_TYPES)[number]>("All");
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const canRead = can("read");
 
-  const load = useCallback(async () => {
-    if (!canRead) {
-      setEvents([]);
-      setError("Authenticate to view cluster events.");
-      setIsLoading(false);
-      return;
-    }
+  const loadEvents = useCallback((signal: AbortSignal) => api.getEvents(signal), []);
 
-    setIsLoading(true);
-    try {
-      const rows = await api.getEvents();
-      setEvents(rows);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load events");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [canRead]);
-
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    void load();
-  }, [authLoading, load]);
+  const {
+    data: events,
+    isLoading,
+    error,
+    load,
+  } = useAsyncResource<K8sEvent[]>({
+    loader: loadEvents,
+    fallbackError: "Failed to load events",
+    initialData: [],
+    autoLoad: !authLoading,
+    enabled: canRead,
+    disabledData: [],
+    disabledError: "Authenticate to view cluster events.",
+  });
 
   useStreamRefresh({
     enabled: canRead,

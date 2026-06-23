@@ -1,5 +1,6 @@
 import type { ActionResult, AssistantReferenceFeedbackRequest, AssistantResponse, RAGTelemetry } from "../../../types";
 import { apiRoute, requestJson } from "../core";
+import { isRAGTelemetry } from "../validators";
 
 export const assistantApi = {
   askAssistant: (message: string, namespace?: string) =>
@@ -12,6 +13,10 @@ export const assistantApi = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  getRAGTelemetry: (limit = 24) =>
-    requestJson<RAGTelemetry>(`${apiRoute("/rag/telemetry")}?limit=${encodeURIComponent(String(limit))}`),
+  getRAGTelemetry: (limit = 24, signal?: AbortSignal) =>
+    requestJson<RAGTelemetry>(
+      `${apiRoute("/rag/telemetry")}?limit=${encodeURIComponent(String(limit))}`,
+      { signal },
+      isRAGTelemetry,
+    ),
 };
