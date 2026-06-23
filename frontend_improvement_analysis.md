@@ -89,7 +89,9 @@ This report describes working-tree improvements plus backlog recommendations. It
   - [useMemoryData.ts](file:///home/anouar/KubLens-AI/src/views/memory/hooks/useMemoryData.ts) (Migrated runbook/fix reads to shared loading with explicit submitted search state)
   - [useNodeList.ts](file:///home/anouar/KubLens-AI/src/views/nodes/hooks/useNodeList.ts) (Migrated node inventory loading to shared loading)
   - [useIncidentData.ts](file:///home/anouar/KubLens-AI/src/views/incident/hooks/useIncidentData.ts) (Migrated incident and associated-remediation reads to shared loading)
+  - [useIncidentData.test.tsx](file:///home/anouar/KubLens-AI/src/views/incident/hooks/useIncidentData.test.tsx) (Covers incident step updates and resolved-incident fix prompt behavior)
   - [useRemediationData.ts](file:///home/anouar/KubLens-AI/src/views/remediation/hooks/useRemediationData.ts) (Migrated remediation proposal loading to shared loading)
+  - [useRemediationData.test.tsx](file:///home/anouar/KubLens-AI/src/views/remediation/hooks/useRemediationData.test.tsx) (Covers proposal selection and approve/execute/reject mutations)
   - [resources.ts](file:///home/anouar/KubLens-AI/src/lib/api/modules/resources.ts) (Added abort signal support for namespace loading)
   - [alerts.ts](file:///home/anouar/KubLens-AI/src/lib/api/modules/alerts.ts) (Added abort signal support for alert lifecycle loading)
   - [incidents.ts](file:///home/anouar/KubLens-AI/src/lib/api/modules/incidents.ts) (Added abort signal support for incident list loading)
@@ -101,6 +103,7 @@ This report describes working-tree improvements plus backlog recommendations. It
   - Fixed shared-hook stability for inline array/object defaults so migrated views do not retrigger auto-load loops.
   - Metrics, SLO, Rightsizing, Diagnostics, Events, Namespaces, Pods, Deployments, Resource Catalog, Memory, Nodes, Incident, and Remediation no longer maintain bespoke read-loader state machines for their primary inventory data.
   - Mutation/detail flows remain local to their hooks so operational actions stay explicit.
+  - Incident and Remediation now have focused hook tests around the highest-risk action-state paths.
 
 ---
 

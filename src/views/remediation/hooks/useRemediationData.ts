@@ -153,10 +153,13 @@ export function useRemediationData(): UseRemediationDataResult {
   }, []);
 
   useEffect(() => {
+    if (isLoading) {
+      return;
+    }
     setSelectedIDState((current) =>
       current && items.some((item) => item.id === current) ? current : (items[0]?.id ?? null),
     );
-  }, [items]);
+  }, [isLoading, items]);
 
   const sortedItems = useMemo(() => [...items].sort(compareProposalPriority), [items]);
 
