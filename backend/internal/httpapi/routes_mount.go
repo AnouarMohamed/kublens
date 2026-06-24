@@ -27,35 +27,20 @@ func (s *Server) mountSystemRoutes(api chi.Router) {
 func (s *Server) mountClusterRoutes(api chi.Router) {
 	api.Get("/cluster-info", s.handleClusterInfo)
 	api.Get("/namespaces", s.handleNamespaces)
-	api.Get("/pods", s.handlePods)
-	api.Post("/pods", s.handleCreatePod)
-	api.Get("/nodes", s.handleNodes)
 	api.Get("/events", s.handleEvents)
 	api.Get("/stats", s.handleStats)
 	api.Get("/diagnostics", s.handleDiagnostics)
 
-	api.Get("/resources/{kind}", s.handleResources)
-	api.Get("/resources/{kind}/{namespace}/{name}/yaml", s.handleGetResourceYAML)
-	api.Put("/resources/{kind}/{namespace}/{name}/yaml", s.handleApplyResourceYAML)
-	api.Post("/resources/{kind}/{namespace}/{name}/scale", s.handleScaleResource)
-	api.Post("/resources/{kind}/{namespace}/{name}/restart", s.handleRestartResource)
-	api.Post("/resources/{kind}/{namespace}/{name}/rollback", s.handleRollbackResource)
-
-	api.Get("/pods/{namespace}/{name}/events", s.handlePodEvents)
-	api.Get("/pods/{namespace}/{name}/logs", s.handlePodLogs)
-	api.Get("/pods/{namespace}/{name}/logs/stream", s.handlePodLogsStream)
-	api.Get("/pods/{namespace}/{name}/describe", s.handlePodDescribe)
-	api.Post("/pods/{namespace}/{name}/restart", s.handleRestartPod)
-	api.Delete("/pods/{namespace}/{name}", s.handleDeletePod)
-	api.Get("/pods/{namespace}/{name}", s.handlePodDetail)
-
-	api.Post("/nodes/{name}/cordon", s.handleCordonNode)
-	api.Post("/nodes/{name}/uncordon", s.handleUncordonNode)
-	api.Get("/nodes/{name}/drain/preview", s.handleNodeDrainPreview)
-	api.Post("/nodes/{name}/drain", s.handleDrainNode)
-	api.Get("/nodes/{name}/pods", s.handleNodePods)
-	api.Get("/nodes/{name}/events", s.handleNodeEvents)
-	api.Get("/nodes/{name}", s.handleNodeDetail)
+	api.Mount("/pods", NewPodController(s.cluster, s.logger, s.decodeJSONBody, s.invalidatePredictionsCache).Routes())
+	api.Mount("/nodes", NewNodeController(s.cluster, s.audit, s.now, s.decodeJSONBody, s.invalidatePredictionsCache).Routes())
+	api.Mount("/resources", NewResourceController(
+		s.cluster,
+		s.audit,
+		s.now,
+		s.decodeJSONBody,
+		s.evaluateManifestRisk,
+		s.invalidatePredictionsCache,
+	).Routes())
 }
 
 func (s *Server) mountObservabilityRoutes(api chi.Router) {

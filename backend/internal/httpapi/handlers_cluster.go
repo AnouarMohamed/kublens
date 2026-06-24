@@ -7,8 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"kubelens-backend/internal/apperrors"
 	"kubelens-backend/internal/model"
 )
@@ -33,35 +31,6 @@ func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 
 func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.cluster.ListNamespaces(r.Context()))
-}
-
-func (s *Server) handlePods(w http.ResponseWriter, r *http.Request) {
-	pods, _ := s.cluster.Snapshot(r.Context())
-	writeJSON(w, http.StatusOK, pods)
-}
-
-func (s *Server) handleNodes(w http.ResponseWriter, r *http.Request) {
-	_, nodes := s.cluster.Snapshot(r.Context())
-	writeJSON(w, http.StatusOK, nodes)
-}
-
-func (s *Server) handleResources(w http.ResponseWriter, r *http.Request) {
-	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
-	if kind == "" {
-		writeError(w, http.StatusBadRequest, "resource kind is required")
-		return
-	}
-
-	items, err := s.cluster.ListResources(r.Context(), kind)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	writeJSON(w, http.StatusOK, model.ResourceList{
-		Kind:  kind,
-		Items: items,
-	})
 }
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {

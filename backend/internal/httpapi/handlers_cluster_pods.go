@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,38 +17,87 @@ import (
 	"kubelens-backend/internal/model"
 )
 
-func (s *Server) handleCreatePod(w http.ResponseWriter, r *http.Request) {
+type PodController struct {
+	cluster                    ClusterReader
+	logger                     *slog.Logger
+	decodeJSONBody             func(*http.Request, any) error
+	invalidatePredictionsCache func()
+}
+
+func NewPodController(
+	cluster ClusterReader,
+	logger *slog.Logger,
+	decode func(*http.Request, any) error,
+	invalidatePredictionsCache func(),
+) *PodController {
+	if decode == nil {
+		decode = decodeJSONBody
+	}
+	if invalidatePredictionsCache == nil {
+		invalidatePredictionsCache = func() {}
+	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &PodController{
+		cluster:                    cluster,
+		logger:                     logger,
+		decodeJSONBody:             decode,
+		invalidatePredictionsCache: invalidatePredictionsCache,
+	}
+}
+
+func (pc *PodController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", pc.handlePods)
+	r.Post("/", pc.handleCreatePod)
+	r.Get("/{namespace}/{name}/events", pc.handlePodEvents)
+	r.Get("/{namespace}/{name}/logs", pc.handlePodLogs)
+	r.Get("/{namespace}/{name}/logs/stream", pc.handlePodLogsStream)
+	r.Get("/{namespace}/{name}/describe", pc.handlePodDescribe)
+	r.Post("/{namespace}/{name}/restart", pc.handleRestartPod)
+	r.Delete("/{namespace}/{name}", pc.handleDeletePod)
+	r.Get("/{namespace}/{name}", pc.handlePodDetail)
+	return r
+}
+
+func (pc *PodController) handlePods(w http.ResponseWriter, r *http.Request) {
+	pods, _ := pc.cluster.Snapshot(r.Context())
+	writeJSON(w, http.StatusOK, pods)
+}
+
+func (pc *PodController) handleCreatePod(w http.ResponseWriter, r *http.Request) {
 	var req model.PodCreateRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := pc.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	result, err := s.cluster.CreatePod(r.Context(), req)
+	result, err := pc.cluster.CreatePod(r.Context(), req)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.invalidatePredictionsCache()
+	pc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handlePodEvents(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handlePodEvents(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
-	writeJSON(w, http.StatusOK, s.cluster.PodEvents(r.Context(), namespace, name))
+	writeJSON(w, http.StatusOK, pc.cluster.PodEvents(r.Context(), namespace, name))
 }
 
-func (s *Server) handlePodLogs(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handlePodLogs(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 	container := strings.TrimSpace(r.URL.Query().Get("container"))
 	lines := parsePositiveIntWithMax(r.URL.Query().Get("lines"), 50, 500)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-	_, _ = w.Write([]byte(s.cluster.PodLogs(r.Context(), namespace, name, container, lines)))
+	_, _ = w.Write([]byte(pc.cluster.PodLogs(r.Context(), namespace, name, container, lines)))
 }
 
-func (s *Server) handlePodLogsStream(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handlePodLogsStream(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
@@ -60,7 +110,7 @@ func (s *Server) handlePodLogsStream(w http.ResponseWriter, r *http.Request) {
 	tailLines := parsePositiveIntWithMax(r.URL.Query().Get("tailLines"), 100, 1000)
 	follow := parseBoolDefault(r.URL.Query().Get("follow"), true)
 
-	stream, err := s.cluster.StreamPodLogs(r.Context(), namespace, name, container, tailLines, follow)
+	stream, err := pc.cluster.StreamPodLogs(r.Context(), namespace, name, container, tailLines, follow)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to stream pod logs")
 		return
@@ -113,7 +163,7 @@ func (s *Server) handlePodLogsStream(w http.ResponseWriter, r *http.Request) {
 			return
 		case err := <-errCh:
 			if err != nil {
-				s.logger.Warn("pod log stream ended with error", "namespace", namespace, "name", name, "error", err)
+				pc.logger.Warn("pod log stream ended with error", "namespace", namespace, "name", name, "error", err)
 			}
 			return
 		case line, ok := <-lineCh:
@@ -127,11 +177,11 @@ func (s *Server) handlePodLogsStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handlePodDescribe(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handlePodDescribe(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 
-	pod, err := s.cluster.PodDetail(r.Context(), namespace, name)
+	pod, err := pc.cluster.PodDetail(r.Context(), namespace, name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Pod not found")
@@ -140,17 +190,17 @@ func (s *Server) handlePodDescribe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "Failed to describe pod")
 		return
 	}
-	events := s.cluster.PodEvents(r.Context(), namespace, name)
+	events := pc.cluster.PodEvents(r.Context(), namespace, name)
 
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	_, _ = w.Write([]byte(renderPodDescribe(pod, events)))
 }
 
-func (s *Server) handleRestartPod(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handleRestartPod(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 
-	result, err := s.cluster.RestartPod(r.Context(), namespace, name)
+	result, err := pc.cluster.RestartPod(r.Context(), namespace, name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Pod not found")
@@ -160,15 +210,15 @@ func (s *Server) handleRestartPod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.invalidatePredictionsCache()
+	pc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleDeletePod(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handleDeletePod(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 
-	result, err := s.cluster.DeletePod(r.Context(), namespace, name)
+	result, err := pc.cluster.DeletePod(r.Context(), namespace, name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Pod not found")
@@ -178,15 +228,15 @@ func (s *Server) handleDeletePod(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.invalidatePredictionsCache()
+	pc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handlePodDetail(w http.ResponseWriter, r *http.Request) {
+func (pc *PodController) handlePodDetail(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	name := chi.URLParam(r, "name")
 
-	pod, err := s.cluster.PodDetail(r.Context(), namespace, name)
+	pod, err := pc.cluster.PodDetail(r.Context(), namespace, name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Pod not found")
