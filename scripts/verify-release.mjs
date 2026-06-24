@@ -55,21 +55,21 @@ assertPattern(
 const k8sDeployment = readFile("k8s/base/deployment.yaml");
 assertPattern(
   k8sDeployment,
-  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kubelens-ai:${escapedTag}`),
+  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kublens:${escapedTag}`),
   "k8s dashboard image tag",
 );
 
 const k8sPredictor = readFile("k8s/base/predictor-deployment.yaml");
 assertPattern(
   k8sPredictor,
-  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kubelens-ai-predictor:${escapedTag}`),
+  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kublenspredictor:${escapedTag}`),
   "k8s predictor image tag",
 );
 
 const k8sGhostEngine = readFile("k8s/base/ghost-engine-deployment.yaml");
 assertPattern(
   k8sGhostEngine,
-  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kubelens-ai-ghost-engine:${escapedTag}`),
+  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kublensghost:${escapedTag}`),
   "k8s Ghost Engine image tag",
 );
 

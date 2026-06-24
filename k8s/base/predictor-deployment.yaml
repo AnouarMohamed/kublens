@@ -21,7 +21,7 @@ spec:
       serviceAccountName: kubelens-predictor
       containers:
         - name: predictor
-          image: ghcr.io/anouarmohamed/kubelens-ai-predictor:v0.4.1
+          image: ghcr.io/anouarmohamed/kublenspredictor:v0.4.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

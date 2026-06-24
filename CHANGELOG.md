@@ -2,6 +2,13 @@
 
 All notable changes to this project are documented here.
 
+## v0.4.2
+
+### Fixed
+
+- Made the Ghost Engine container build self-contained by using Fedora runtime and development packages instead of untracked local `third_party` files.
+- Aligned Kubernetes defaults, release checks, and registry documentation with the renamed `kublens`, `kublenspredictor`, and `kublensghost` package names.
+
 ## v0.4.1
 
 ### Added

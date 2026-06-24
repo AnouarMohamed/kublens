@@ -21,7 +21,7 @@ spec:
       serviceAccountName: kubelens-dashboard
       containers:
         - name: dashboard
-          image: ghcr.io/anouarmohamed/kubelens-ai:v0.4.1
+          image: ghcr.io/anouarmohamed/kublens:v0.4.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: http

@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: ghost-engine
-          image: ghcr.io/anouarmohamed/kubelens-ai-ghost-engine:v0.4.1
+          image: ghcr.io/anouarmohamed/kublensghost:v0.4.2
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc

@@ -5,9 +5,9 @@ Documentation review refresh: 2026-05-07 (policy remains current).
 
 ## 1) Scope
 
-- Dashboard images: `ghcr.io/<owner>/kubelens-ai`, `docker.io/<docker-username>/kubelens-ai`
-- Predictor images: `ghcr.io/<owner>/kubelens-ai-predictor`, `docker.io/<docker-username>/kubelens-ai-predictor`
-- Ghost Engine images: `ghcr.io/<owner>/kubelens-ai-ghost-engine`, `docker.io/<docker-username>/kubelens-ai-ghost-engine`
+- Dashboard images: `ghcr.io/<owner>/kublens`, `docker.io/<docker-username>/kublens`
+- Predictor images: `ghcr.io/<owner>/kublenspredictor`, `docker.io/<docker-username>/kublenspredictor`
+- Ghost Engine images: `ghcr.io/<owner>/kublensghost`, `docker.io/<docker-username>/kublensghost`
 - Source repository and release tags
 
 ## 2) Mandatory controls

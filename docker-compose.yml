@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: kubernetes-operations-dashboard:v0.4.1
+    image: kubernetes-operations-dashboard:v0.4.2
     container_name: kubernetes-operations-dashboard
     ports:
       - "3000:3000"
@@ -64,7 +64,7 @@ services:
     build:
       context: ./predictor
       dockerfile: Dockerfile
-    image: k8s-ops-predictor:v0.4.1
+    image: k8s-ops-predictor:v0.4.2
     container_name: k8s-ops-predictor
     ports:
       - "8001:8001"
@@ -81,7 +81,7 @@ services:
     build:
       context: .
       dockerfile: ghost-engine/Dockerfile
-    image: kubelens-ghost-engine:v0.4.1
+    image: kubelens-ghost-engine:v0.4.2
     container_name: k8s-ops-ghost-engine
     ports:
       - "8091:8091"

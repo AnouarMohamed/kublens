@@ -6,21 +6,21 @@ This runbook covers the first signed registry package release for KubeLens AI.
 
 Tagged releases publish both application images to GitHub Container Registry and Docker Hub:
 
-- `ghcr.io/<github-owner>/kubelens-ai:<version-tag>`
-- `ghcr.io/<github-owner>/kubelens-ai-predictor:<version-tag>`
-- `ghcr.io/<github-owner>/kubelens-ai-ghost-engine:<version-tag>`
-- `docker.io/<docker-username>/kubelens-ai:<version-tag>`
-- `docker.io/<docker-username>/kubelens-ai-predictor:<version-tag>`
-- `docker.io/<docker-username>/kubelens-ai-ghost-engine:<version-tag>`
+- `ghcr.io/<github-owner>/kublens:<version-tag>`
+- `ghcr.io/<github-owner>/kublenspredictor:<version-tag>`
+- `ghcr.io/<github-owner>/kublensghost:<version-tag>`
+- `docker.io/<docker-username>/kublens:<version-tag>`
+- `docker.io/<docker-username>/kublenspredictor:<version-tag>`
+- `docker.io/<docker-username>/kublensghost:<version-tag>`
 
-Example for release `v0.4.1`:
+Example for release `v0.4.2`:
 
-- `ghcr.io/<github-owner>/kubelens-ai:v0.4.1`
-- `ghcr.io/<github-owner>/kubelens-ai-predictor:v0.4.1`
-- `ghcr.io/<github-owner>/kubelens-ai-ghost-engine:v0.4.1`
-- `docker.io/<docker-username>/kubelens-ai:v0.4.1`
-- `docker.io/<docker-username>/kubelens-ai-predictor:v0.4.1`
-- `docker.io/<docker-username>/kubelens-ai-ghost-engine:v0.4.1`
+- `ghcr.io/<github-owner>/kublens:v0.4.2`
+- `ghcr.io/<github-owner>/kublenspredictor:v0.4.2`
+- `ghcr.io/<github-owner>/kublensghost:v0.4.2`
+- `docker.io/<docker-username>/kublens:v0.4.2`
+- `docker.io/<docker-username>/kublenspredictor:v0.4.2`
+- `docker.io/<docker-username>/kublensghost:v0.4.2`
 
 The release workflow intentionally publishes immutable version tags only. Do not add `latest` until the release policy defines how it is promoted and rolled back.
 
@@ -39,9 +39,9 @@ Use a Docker Hub access token, not the account password.
 
 Create these repositories under the Docker Hub namespace from `DOCKER_USERNAME` before the first release:
 
-- `kubelens-ai`
-- `kubelens-ai-predictor`
-- `kubelens-ai-ghost-engine`
+- `kublens`
+- `kublenspredictor`
+- `kublensghost`
 
 If the Docker Hub account allows repository creation on push, the workflow can create them implicitly. Creating them ahead of time gives cleaner permission failures and lets the visibility be set intentionally.
 
@@ -54,11 +54,11 @@ If the Docker Hub account allows repository creation on push, the workflow can c
 5. Push a release tag:
 
 ```bash
-git tag v0.4.1
-git push origin v0.4.1
+git tag v0.4.2
+git push origin v0.4.2
 ```
 
-Use the next release tag if `v0.4.1` already exists.
+Use the next release tag if `v0.4.2` already exists.
 
 ## What the workflow does
 

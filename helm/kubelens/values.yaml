@@ -1,6 +1,6 @@
 image:
   repository: kubernetes-operations-dashboard
-  tag: "v0.4.1"
+  tag: "v0.4.2"
   pullPolicy: IfNotPresent
 
 service:
@@ -11,7 +11,7 @@ predictor:
   enabled: true
   image:
     repository: k8s-ops-predictor
-    tag: "v0.4.1"
+    tag: "v0.4.2"
     pullPolicy: IfNotPresent
   service:
     port: 8001
@@ -20,7 +20,7 @@ ghostEngine:
   enabled: true
   image:
     repository: kubelens-ghost-engine
-    tag: "v0.4.1"
+    tag: "v0.4.2"
     pullPolicy: IfNotPresent
   service:
     port: 8091

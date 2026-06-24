@@ -15,7 +15,7 @@ on:
           - staging
           - prod
       version_tag:
-        description: "Existing release tag to deploy (for example v0.4.1)"
+        description: "Existing release tag to deploy (for example v0.4.2)"
         required: true
         type: string
       namespace:
@@ -373,7 +373,7 @@ jobs:
           case "$VERSION_TAG" in
             v*) ;;
             *)
-              echo "version_tag must start with 'v' (example: v0.4.1)"
+              echo "version_tag must start with 'v' (example: v0.4.2)"
               exit 1
               ;;
           esac

@@ -5,20 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Manually define protobuf target
-add_library(protobuf::libprotobuf SHARED IMPORTED)
-set_target_properties(protobuf::libprotobuf PROPERTIES
-  IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/lib64/libprotobuf.so"
-  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/include"
-)
-
-# Manually define gRPC target
-add_library(gRPC::grpc++ SHARED IMPORTED)
-set_target_properties(gRPC::grpc++ PROPERTIES
-  IMPORTED_LOCATION "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/lib64/libgrpc++.so"
-  INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/include"
-)
-
 add_executable(ghost-engine
   src/main.cc
   src/simulator.cc
@@ -29,16 +15,11 @@ add_executable(ghost-engine
 target_include_directories(ghost-engine PRIVATE
   src
   generated
-  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/include"
-)
-
-target_link_directories(ghost-engine PRIVATE
-  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/lib64"
 )
 
 target_link_libraries(ghost-engine PRIVATE
-  gRPC::grpc++
-  protobuf::libprotobuf
+  grpc++
+  protobuf
   absl_synchronization
   absl_time
   absl_strings

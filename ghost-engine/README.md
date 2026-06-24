@@ -23,7 +23,7 @@ This directory contains the C++20 standalone service for **Project Ghost Cluster
 Build from the repository root so the Docker build can access the vendored `third_party` runtime libraries:
 
 ```bash
-docker build -t kubelens-ghost-engine:v0.4.1 -f ghost-engine/Dockerfile .
+docker build -t kubelens-ghost-engine:v0.4.2 -f ghost-engine/Dockerfile .
 ```
 
 ## How to Run
@@ -36,7 +36,7 @@ docker build -t kubelens-ghost-engine:v0.4.1 -f ghost-engine/Dockerfile .
 2. Or run the containerized service:
 
    ```bash
-   docker run --rm -p 8091:8091 kubelens-ghost-engine:v0.4.1
+   docker run --rm -p 8091:8091 kubelens-ghost-engine:v0.4.2
    ```
 
 3. Make sure `GHOST_ENABLED=true` and `GHOST_ENGINE_ADDR=localhost:8091` are configured in your backend environment `.env` to enable production gRPC forwarding from the Go backend.
