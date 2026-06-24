@@ -70,6 +70,7 @@ Every epic and sub-feature must satisfy all checks below before merge:
 1. Code quality
    - Module boundaries respected (`npm run lint` and structure checks pass).
    - No dead paths, unclear coupling, or untested critical branches.
+   - Shared frontend hooks must avoid render-phase ref mutation and keep request lifecycle behavior covered by focused tests.
 2. Testing
    - Unit/integration tests for backend/frontend/predictor changes.
    - E2E coverage for user-facing workflows where behavior changes.

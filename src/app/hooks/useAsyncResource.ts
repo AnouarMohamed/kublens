@@ -48,8 +48,10 @@ export function useAsyncResource<T>({
   const requestSeqRef = useRef(0);
   const activeControllerRef = useRef<AbortController | null>(null);
 
-  initialDataRef.current = initialData;
-  disabledDataRef.current = disabledData;
+  useEffect(() => {
+    initialDataRef.current = initialData;
+    disabledDataRef.current = disabledData;
+  }, [disabledData, initialData]);
 
   const load = useCallback(
     async (backgroundRefresh = false) => {
