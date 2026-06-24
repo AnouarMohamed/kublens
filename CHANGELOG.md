@@ -2,6 +2,18 @@
 
 All notable changes to this project are documented here.
 
+## v0.4.1
+
+### Added
+
+- Docker Hub publication for dashboard, predictor, and Ghost Engine release images alongside GHCR, with Cosign signatures and CycloneDX SBOM attestations for both registry references.
+- First-class Ghost Engine container packaging, Compose service wiring, Kubernetes manifests, Helm templates, and CI Docker validation.
+- Registry release runbook covering Docker Hub secrets, repository setup, tag publication, and post-release verification.
+
+### Changed
+
+- Release metadata bumped to `v0.4.1` across package, Docker, Compose, Helm, and Kubernetes manifests.
+
 ## v0.4.0
 
 ### Added

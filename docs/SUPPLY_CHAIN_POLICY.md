@@ -5,8 +5,9 @@ Documentation review refresh: 2026-05-07 (policy remains current).
 
 ## 1) Scope
 
-- Dashboard image: `ghcr.io/<owner>/kubelens-ai`
-- Predictor image: `ghcr.io/<owner>/kubelens-ai-predictor`
+- Dashboard images: `ghcr.io/<owner>/kubelens-ai`, `docker.io/<docker-username>/kubelens-ai`
+- Predictor images: `ghcr.io/<owner>/kubelens-ai-predictor`, `docker.io/<docker-username>/kubelens-ai-predictor`
+- Ghost Engine images: `ghcr.io/<owner>/kubelens-ai-ghost-engine`, `docker.io/<docker-username>/kubelens-ai-ghost-engine`
 - Source repository and release tags
 
 ## 2) Mandatory controls
@@ -61,5 +62,6 @@ Before approving release deployment:
 
 - [SECURITY.md](SECURITY.md)
 - [OPERATIONS_VERIFICATION.md](OPERATIONS_VERIFICATION.md)
+- [REGISTRY_RELEASE.md](REGISTRY_RELEASE.md)
 - [SECRET_ROTATION_RUNBOOK.md](SECRET_ROTATION_RUNBOOK.md)
 - [DOCUMENTATION_GOVERNANCE.md](DOCUMENTATION_GOVERNANCE.md)

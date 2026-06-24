@@ -1,6 +1,6 @@
 image:
   repository: kubernetes-operations-dashboard
-  tag: "v0.4.0"
+  tag: "v0.4.1"
   pullPolicy: IfNotPresent
 
 service:
@@ -11,10 +11,19 @@ predictor:
   enabled: true
   image:
     repository: k8s-ops-predictor
-    tag: "v0.4.0"
+    tag: "v0.4.1"
     pullPolicy: IfNotPresent
   service:
     port: 8001
+
+ghostEngine:
+  enabled: true
+  image:
+    repository: kubelens-ghost-engine
+    tag: "v0.4.1"
+    pullPolicy: IfNotPresent
+  service:
+    port: 8091
 
 env:
   APP_MODE: demo
@@ -25,7 +34,7 @@ env:
   PREDICTOR_BASE_URL: ""
   PREDICTOR_SHARED_SECRET: ""
   GHOST_ENABLED: "true"
-  GHOST_ENGINE_ADDR: ""
+  GHOST_ENGINE_ADDR: "kubelens-ghost-engine:8091"
   GHOST_ENGINE_TIMEOUT_SECONDS: "5"
   OTEL_EXPORTER_OTLP_ENDPOINT: ""
   OTEL_EXPORTER_OTLP_PROTOCOL: grpc

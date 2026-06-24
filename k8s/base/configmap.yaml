@@ -15,7 +15,7 @@ data:
   PREDICTOR_BASE_URL: "http://k8s-ops-predictor:8001"
   PREDICTOR_TIMEOUT_SECONDS: "4"
   GHOST_ENABLED: "true"
-  GHOST_ENGINE_ADDR: ""
+  GHOST_ENGINE_ADDR: "k8s-ops-ghost-engine:8091"
   GHOST_ENGINE_TIMEOUT_SECONDS: "5"
 
   ASSISTANT_PROVIDER: "none"

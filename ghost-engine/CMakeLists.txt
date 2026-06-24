@@ -5,9 +5,6 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Linker directories for transitive shared library resolution at build time
-link_directories("${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/lib64")
-
 # Manually define protobuf target
 add_library(protobuf::libprotobuf SHARED IMPORTED)
 set_target_properties(protobuf::libprotobuf PROPERTIES
@@ -35,6 +32,10 @@ target_include_directories(ghost-engine PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/include"
 )
 
+target_link_directories(ghost-engine PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/usr/lib64"
+)
+
 target_link_libraries(ghost-engine PRIVATE
   gRPC::grpc++
   protobuf::libprotobuf
@@ -45,6 +46,9 @@ target_link_libraries(ghost-engine PRIVATE
   absl_throw_delegate
   absl_int128
   absl_raw_logging_internal
+  cares
+  icuuc
+  re2
 )
 
 target_compile_options(ghost-engine PRIVATE -Wall -Wextra -Wpedantic)

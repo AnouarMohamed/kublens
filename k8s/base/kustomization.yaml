@@ -9,6 +9,8 @@ resources:
   - service.yaml
   - predictor-deployment.yaml
   - predictor-service.yaml
+  - ghost-engine-deployment.yaml
+  - ghost-engine-service.yaml
   - jaeger-deployment.yaml
   - jaeger-service.yaml
   - pdb.yaml

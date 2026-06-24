@@ -46,6 +46,11 @@ assertPattern(
   "docker-compose dashboard image tag",
 );
 assertPattern(compose, new RegExp(`image:\\s*k8s-ops-predictor:${escapedTag}`), "docker-compose predictor image tag");
+assertPattern(
+  compose,
+  new RegExp(`image:\\s*kubelens-ghost-engine:${escapedTag}`),
+  "docker-compose Ghost Engine image tag",
+);
 
 const k8sDeployment = readFile("k8s/base/deployment.yaml");
 assertPattern(
@@ -61,6 +66,13 @@ assertPattern(
   "k8s predictor image tag",
 );
 
+const k8sGhostEngine = readFile("k8s/base/ghost-engine-deployment.yaml");
+assertPattern(
+  k8sGhostEngine,
+  new RegExp(`image:\\s*ghcr\\.io/anouarmohamed/kubelens-ai-ghost-engine:${escapedTag}`),
+  "k8s Ghost Engine image tag",
+);
+
 const dockerBuildScript = String(pkg.scripts?.["docker:build"] ?? "");
 if (!dockerBuildScript.includes(`:${releaseTag}`)) {
   fail(`package.json script docker:build must tag image with ${releaseTag}`);
@@ -68,6 +80,10 @@ if (!dockerBuildScript.includes(`:${releaseTag}`)) {
 const dockerBuildPredictorScript = String(pkg.scripts?.["docker:build:predictor"] ?? "");
 if (!dockerBuildPredictorScript.includes(`:${releaseTag}`)) {
   fail(`package.json script docker:build:predictor must tag image with ${releaseTag}`);
+}
+const dockerBuildGhostScript = String(pkg.scripts?.["docker:build:ghost"] ?? "");
+if (!dockerBuildGhostScript.includes(`:${releaseTag}`)) {
+  fail(`package.json script docker:build:ghost must tag image with ${releaseTag}`);
 }
 
 if (process.env.GITHUB_REF_TYPE === "tag") {

@@ -15,7 +15,7 @@ on:
           - staging
           - prod
       version_tag:
-        description: "Existing release tag to deploy (for example v0.4.0)"
+        description: "Existing release tag to deploy (for example v0.4.1)"
         required: true
         type: string
       namespace:
@@ -42,6 +42,10 @@ jobs:
     env:
       DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
       PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
+      DOCKERHUB_DASHBOARD_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai
+      DOCKERHUB_PREDICTOR_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai-predictor
+      DOCKERHUB_GHOST_ENGINE_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai-ghost-engine
       VERSION_TAG: ${{ github.ref_name }}
     steps:
       - name: Checkout
@@ -50,12 +54,29 @@ jobs:
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v4
 
+      - name: Validate Docker Hub credentials
+        env:
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          if [ -z "$DOCKER_USERNAME" ] || [ -z "$DOCKER_PASSWORD" ]; then
+            echo "DOCKER_USERNAME and DOCKER_PASSWORD repository secrets are required for release publication."
+            exit 1
+          fi
+
       - name: Login to GHCR
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
 
       - name: Build and push dashboard image
         id: build_dashboard
@@ -64,7 +85,9 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: ${{ env.DASHBOARD_IMAGE }}:${{ env.VERSION_TAG }}
+          tags: |
+            ${{ env.DASHBOARD_IMAGE }}:${{ env.VERSION_TAG }}
+            ${{ env.DOCKERHUB_DASHBOARD_IMAGE }}:${{ env.VERSION_TAG }}
 
       - name: Build and push predictor image
         id: build_predictor
@@ -73,7 +96,20 @@ jobs:
           context: ./predictor
           file: ./predictor/Dockerfile
           push: true
-          tags: ${{ env.PREDICTOR_IMAGE }}:${{ env.VERSION_TAG }}
+          tags: |
+            ${{ env.PREDICTOR_IMAGE }}:${{ env.VERSION_TAG }}
+            ${{ env.DOCKERHUB_PREDICTOR_IMAGE }}:${{ env.VERSION_TAG }}
+
+      - name: Build and push Ghost Engine image
+        id: build_ghost_engine
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./ghost-engine/Dockerfile
+          push: true
+          tags: |
+            ${{ env.GHOST_ENGINE_IMAGE }}:${{ env.VERSION_TAG }}
+            ${{ env.DOCKERHUB_GHOST_ENGINE_IMAGE }}:${{ env.VERSION_TAG }}
 
       - name: Install Syft
         uses: anchore/sbom-action/download-syft@v0
@@ -88,6 +124,11 @@ jobs:
           syft "${{ env.PREDICTOR_IMAGE }}@${{ steps.build_predictor.outputs.digest }}" \
             -o cyclonedx-json > predictor.sbom.cdx.json
 
+      - name: Generate Ghost Engine SBOM
+        run: |
+          syft "${{ env.GHOST_ENGINE_IMAGE }}@${{ steps.build_ghost_engine.outputs.digest }}" \
+            -o cyclonedx-json > ghost-engine.sbom.cdx.json
+
       - name: Upload SBOM artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -95,6 +136,7 @@ jobs:
           path: |
             dashboard.sbom.cdx.json
             predictor.sbom.cdx.json
+            ghost-engine.sbom.cdx.json
 
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.2
@@ -104,6 +146,18 @@ jobs:
 
       - name: Sign predictor image
         run: cosign sign --yes "${{ env.PREDICTOR_IMAGE }}@${{ steps.build_predictor.outputs.digest }}"
+
+      - name: Sign Ghost Engine image
+        run: cosign sign --yes "${{ env.GHOST_ENGINE_IMAGE }}@${{ steps.build_ghost_engine.outputs.digest }}"
+
+      - name: Sign Docker Hub dashboard image
+        run: cosign sign --yes "${{ env.DOCKERHUB_DASHBOARD_IMAGE }}@${{ steps.build_dashboard.outputs.digest }}"
+
+      - name: Sign Docker Hub predictor image
+        run: cosign sign --yes "${{ env.DOCKERHUB_PREDICTOR_IMAGE }}@${{ steps.build_predictor.outputs.digest }}"
+
+      - name: Sign Docker Hub Ghost Engine image
+        run: cosign sign --yes "${{ env.DOCKERHUB_GHOST_ENGINE_IMAGE }}@${{ steps.build_ghost_engine.outputs.digest }}"
 
       - name: Attest dashboard SBOM
         run: |
@@ -117,6 +171,30 @@ jobs:
             --predicate predictor.sbom.cdx.json \
             "${{ env.PREDICTOR_IMAGE }}@${{ steps.build_predictor.outputs.digest }}"
 
+      - name: Attest Ghost Engine SBOM
+        run: |
+          cosign attest --yes --type cyclonedx \
+            --predicate ghost-engine.sbom.cdx.json \
+            "${{ env.GHOST_ENGINE_IMAGE }}@${{ steps.build_ghost_engine.outputs.digest }}"
+
+      - name: Attest Docker Hub dashboard SBOM
+        run: |
+          cosign attest --yes --type cyclonedx \
+            --predicate dashboard.sbom.cdx.json \
+            "${{ env.DOCKERHUB_DASHBOARD_IMAGE }}@${{ steps.build_dashboard.outputs.digest }}"
+
+      - name: Attest Docker Hub predictor SBOM
+        run: |
+          cosign attest --yes --type cyclonedx \
+            --predicate predictor.sbom.cdx.json \
+            "${{ env.DOCKERHUB_PREDICTOR_IMAGE }}@${{ steps.build_predictor.outputs.digest }}"
+
+      - name: Attest Docker Hub Ghost Engine SBOM
+        run: |
+          cosign attest --yes --type cyclonedx \
+            --predicate ghost-engine.sbom.cdx.json \
+            "${{ env.DOCKERHUB_GHOST_ENGINE_IMAGE }}@${{ steps.build_ghost_engine.outputs.digest }}"
+
   deploy-dev:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [signed-release]
@@ -125,6 +203,7 @@ jobs:
     env:
       DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
       PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
       VERSION_TAG: ${{ github.ref_name }}
       HELM_RELEASE_NAME: kubelens
       HELM_NAMESPACE: kubernetes-operations-dashboard-dev
@@ -166,7 +245,9 @@ jobs:
             --set image.repository="$DASHBOARD_IMAGE" \
             --set image.tag="$VERSION_TAG" \
             --set predictor.image.repository="$PREDICTOR_IMAGE" \
-            --set predictor.image.tag="$VERSION_TAG"
+            --set predictor.image.tag="$VERSION_TAG" \
+            --set ghostEngine.image.repository="$GHOST_ENGINE_IMAGE" \
+            --set ghostEngine.image.tag="$VERSION_TAG"
 
       - name: Snapshot deployed resources
         if: steps.kubeconfig.outputs.available == 'true'
@@ -182,6 +263,7 @@ jobs:
     env:
       DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
       PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
       VERSION_TAG: ${{ github.ref_name }}
       HELM_RELEASE_NAME: kubelens
       HELM_NAMESPACE: kubernetes-operations-dashboard-staging
@@ -223,7 +305,9 @@ jobs:
             --set image.repository="$DASHBOARD_IMAGE" \
             --set image.tag="$VERSION_TAG" \
             --set predictor.image.repository="$PREDICTOR_IMAGE" \
-            --set predictor.image.tag="$VERSION_TAG"
+            --set predictor.image.tag="$VERSION_TAG" \
+            --set ghostEngine.image.repository="$GHOST_ENGINE_IMAGE" \
+            --set ghostEngine.image.tag="$VERSION_TAG"
 
       - name: Snapshot deployed resources
         if: steps.kubeconfig.outputs.available == 'true'
@@ -238,6 +322,7 @@ jobs:
     env:
       DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
       PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
       VERSION_TAG: ${{ inputs.version_tag }}
       HELM_RELEASE_NAME: ${{ inputs.release_name }}
       HELM_NAMESPACE: ${{ inputs.namespace }}
@@ -256,7 +341,7 @@ jobs:
           case "$VERSION_TAG" in
             v*) ;;
             *)
-              echo "version_tag must start with 'v' (example: v0.4.0)"
+              echo "version_tag must start with 'v' (example: v0.4.1)"
               exit 1
               ;;
           esac
@@ -289,7 +374,9 @@ jobs:
             --set image.repository="$DASHBOARD_IMAGE" \
             --set image.tag="$VERSION_TAG" \
             --set predictor.image.repository="$PREDICTOR_IMAGE" \
-            --set predictor.image.tag="$VERSION_TAG"
+            --set predictor.image.tag="$VERSION_TAG" \
+            --set ghostEngine.image.repository="$GHOST_ENGINE_IMAGE" \
+            --set ghostEngine.image.tag="$VERSION_TAG"
 
       - name: Snapshot deployed resources
         if: steps.kubeconfig.outputs.available == 'true'

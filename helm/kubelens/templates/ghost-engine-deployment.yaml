@@ -1,0 +1,41 @@
+{{- if .Values.ghostEngine.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "kubelens.fullname" . }}-ghost-engine
+  labels:
+    {{- include "kubelens.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ghost-engine
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "kubelens.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+      app.kubernetes.io/component: ghost-engine
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "kubelens.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: ghost-engine
+    spec:
+      containers:
+        - name: ghost-engine
+          image: "{{ .Values.ghostEngine.image.repository }}:{{ .Values.ghostEngine.image.tag }}"
+          imagePullPolicy: {{ .Values.ghostEngine.image.pullPolicy }}
+          ports:
+            - name: grpc
+              containerPort: {{ .Values.ghostEngine.service.port }}
+              protocol: TCP
+          readinessProbe:
+            grpc:
+              port: {{ .Values.ghostEngine.service.port }}
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            grpc:
+              port: {{ .Values.ghostEngine.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 15
+{{- end }}

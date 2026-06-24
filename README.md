@@ -409,11 +409,11 @@ CI runs all of the above plus:
 - Go linting via `go vet` and `ineffassign`
 - Trivy filesystem scan + hadolint for Dockerfiles
 - Dependency vulnerability audits for Go (`govulncheck`), npm (`npm audit`), and predictor Python dependencies (`pip-audit`)
-- Docker builds for both images
+- Docker builds for dashboard, predictor, and Ghost Engine images
 
 Release/CD workflow (`.github/workflows/release-supply-chain.yml`) adds:
 
-- Tag-triggered signed image publication + SBOM attestations
+- Tag-triggered signed image publication to GHCR and Docker Hub + SBOM attestations
 - Automatic Helm deployment to `dev` then `staging`
 - Manual Helm deployment dispatch to `dev`/`staging`/`prod` (with environment protections)
 
@@ -445,6 +445,7 @@ e2e/                Playwright end-to-end tests
 - [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) - threat model details
 - [docs/OPERATIONS_VERIFICATION.md](docs/OPERATIONS_VERIFICATION.md) - production verification checklist
 - [docs/SUPPLY_CHAIN_POLICY.md](docs/SUPPLY_CHAIN_POLICY.md) - signed release and SBOM requirements
+- [docs/REGISTRY_RELEASE.md](docs/REGISTRY_RELEASE.md) - registry package release runbook
 - [docs/SECRET_ROTATION_RUNBOOK.md](docs/SECRET_ROTATION_RUNBOOK.md) - formal secret-rotation controls and procedures
 - [docs/DOCUMENTATION_GOVERNANCE.md](docs/DOCUMENTATION_GOVERNANCE.md) - mandatory docs update policy and review cadence
 - [docs/IMPLEMENTATION_PROGRAM.md](docs/IMPLEMENTATION_PROGRAM.md) - phased execution contract for shipping roadmap epics with quality and security gates
@@ -481,7 +482,7 @@ e2e/                Playwright end-to-end tests
 - Continuous CodeQL SAST scans across Go, TypeScript/JavaScript, and Python
 - Continuous documentation governance checks in CI plus scheduled staleness monitoring
 
-Full details: [SECURITY.md](docs/SECURITY.md) | [THREAT_MODEL.md](docs/THREAT_MODEL.md) | [OPERATIONS_VERIFICATION.md](docs/OPERATIONS_VERIFICATION.md) | [SUPPLY_CHAIN_POLICY.md](docs/SUPPLY_CHAIN_POLICY.md) | [SECRET_ROTATION_RUNBOOK.md](docs/SECRET_ROTATION_RUNBOOK.md) | [DOCUMENTATION_GOVERNANCE.md](docs/DOCUMENTATION_GOVERNANCE.md) | [IMPLEMENTATION_PROGRAM.md](docs/IMPLEMENTATION_PROGRAM.md)
+Full details: [SECURITY.md](docs/SECURITY.md) | [THREAT_MODEL.md](docs/THREAT_MODEL.md) | [OPERATIONS_VERIFICATION.md](docs/OPERATIONS_VERIFICATION.md) | [SUPPLY_CHAIN_POLICY.md](docs/SUPPLY_CHAIN_POLICY.md) | [REGISTRY_RELEASE.md](docs/REGISTRY_RELEASE.md) | [SECRET_ROTATION_RUNBOOK.md](docs/SECRET_ROTATION_RUNBOOK.md) | [DOCUMENTATION_GOVERNANCE.md](docs/DOCUMENTATION_GOVERNANCE.md) | [IMPLEMENTATION_PROGRAM.md](docs/IMPLEMENTATION_PROGRAM.md)
 
 ---
 

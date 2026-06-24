@@ -151,11 +151,9 @@ ghost::v1::SimulationResult Simulator::Run(const ghost::v1::SimulationRequest& r
     
     // 2. Find target node in topology
     bool node_found = false;
-    int target_node_idx = -1;
     for (int i = 0; i < initial_topology.nodes_size(); ++i) {
         if (initial_topology.nodes(i).name() == node_name) {
             node_found = true;
-            target_node_idx = i;
             break;
         }
     }
@@ -230,7 +228,7 @@ ghost::v1::SimulationResult Simulator::Run(const ghost::v1::SimulationRequest& r
         pods_state.push_back(initial_topology.pods(i));
     }
     
-    // Target node is at nodes_state[target_node_idx] (or matching name)
+    // Target node is selected by matching name in each generated frame.
     // Cordon the node
     for (auto& n : nodes_state) {
         if (n.name() == node_name) {

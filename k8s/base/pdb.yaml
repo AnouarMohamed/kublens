@@ -19,3 +19,14 @@ spec:
   selector:
     matchLabels:
       app.kubernetes.io/name: k8s-ops-predictor
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: kubelens-ghost-engine-pdb
+  namespace: kubernetes-operations-dashboard
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: k8s-ops-ghost-engine

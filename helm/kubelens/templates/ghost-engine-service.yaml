@@ -1,0 +1,20 @@
+{{- if .Values.ghostEngine.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "kubelens.fullname" . }}-ghost-engine
+  labels:
+    {{- include "kubelens.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ghost-engine
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.ghostEngine.service.port }}
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+  selector:
+    app.kubernetes.io/name: {{ include "kubelens.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: ghost-engine
+{{- end }}

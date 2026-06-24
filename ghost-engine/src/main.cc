@@ -2,6 +2,8 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <atomic>
+#include <chrono>
 #include <csignal>
 #include <grpcpp/grpcpp.h>
 #include "ghost/v1/ghost.grpc.pb.h"
@@ -13,6 +15,7 @@ class SimulationServiceImpl final : public ghost::v1::SimulationService::Service
         const ghost::v1::SimulationRequest* request,
         ghost::v1::SimulationResult* response
     ) override {
+        (void)context;
         *response = ghost::Simulator::Run(*request);
         return grpc::Status::OK;
     }
@@ -20,12 +23,10 @@ class SimulationServiceImpl final : public ghost::v1::SimulationService::Service
 
 namespace {
 std::unique_ptr<grpc::Server> server;
+std::atomic_bool shutdown_requested{false};
 
 void handle_signal(int) {
-    if (server) {
-        std::cout << "Shutting down Ghost Engine gRPC server..." << std::endl;
-        server->Shutdown();
-    }
+    shutdown_requested.store(true, std::memory_order_relaxed);
 }
 }
 
@@ -51,6 +52,20 @@ int main(int argc, char** argv) {
     }
     std::cout << "Ghost Engine Server listening on " << address << std::endl;
 
+    std::thread shutdown_thread([] {
+        while (!shutdown_requested.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        }
+        if (server) {
+            std::cout << "Shutting down Ghost Engine gRPC server..." << std::endl;
+            server->Shutdown();
+        }
+    });
+
     server->Wait();
+    shutdown_requested.store(true, std::memory_order_relaxed);
+    if (shutdown_thread.joinable()) {
+        shutdown_thread.join();
+    }
     return 0;
 }

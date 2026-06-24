@@ -11,3 +11,4 @@ coverage
 backend/server.exe
 screenshots
 predictor/__pycache__
+ghost-engine/build

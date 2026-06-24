@@ -24,7 +24,7 @@ WORKDIR /app
 
 RUN addgroup -S app && adduser -S app -G app && apk add --no-cache ca-certificates
 
-ARG APP_VERSION=v0.4.0
+ARG APP_VERSION=v0.4.1
 ARG APP_COMMIT=local
 ARG APP_BUILT_AT=unknown
 

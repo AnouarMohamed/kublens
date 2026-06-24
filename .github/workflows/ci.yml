@@ -290,6 +290,12 @@ jobs:
           dockerfile: predictor/Dockerfile
           config: .hadolint.yaml
 
+      - name: Hadolint Ghost Engine Dockerfile
+        uses: hadolint/hadolint-action@v3.3.0
+        with:
+          dockerfile: ghost-engine/Dockerfile
+          config: .hadolint.yaml
+
   docker-build:
     runs-on: ubuntu-latest
     needs: [release-discipline, docs-discipline, frontend, backend, predictor, e2e, manifests, security]
@@ -318,8 +324,20 @@ jobs:
           load: true
           tags: k8s-ops-predictor:ci
 
+      - name: Build Ghost Engine image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./ghost-engine/Dockerfile
+          push: false
+          load: true
+          tags: kubelens-ghost-engine:ci
+
       - name: Smoke test dashboard image
         run: docker run --rm --env APP_MODE=demo --entrypoint /bin/sh kubernetes-operations-dashboard:ci -c "sleep 1 && exit 0"
 
       - name: Smoke test predictor image
         run: docker run --rm --entrypoint /bin/sh k8s-ops-predictor:ci -c "sleep 1 && exit 0"
+
+      - name: Smoke test Ghost Engine image
+        run: docker run --rm --entrypoint /bin/sh kubelens-ghost-engine:ci -c "sleep 1 && exit 0"

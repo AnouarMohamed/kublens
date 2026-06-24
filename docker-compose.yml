@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: kubernetes-operations-dashboard:v0.4.0
+    image: kubernetes-operations-dashboard:v0.4.1
     container_name: kubernetes-operations-dashboard
     ports:
       - "3000:3000"
@@ -18,7 +18,7 @@ services:
       PREDICTOR_TIMEOUT_SECONDS: ${PREDICTOR_TIMEOUT_SECONDS:-4}
       PREDICTOR_SHARED_SECRET: ${PREDICTOR_SHARED_SECRET:-}
       GHOST_ENABLED: ${GHOST_ENABLED:-true}
-      GHOST_ENGINE_ADDR: ${GHOST_ENGINE_ADDR:-}
+      GHOST_ENGINE_ADDR: ${GHOST_ENGINE_ADDR:-k8s-ops-ghost-engine:8091}
       GHOST_ENGINE_TIMEOUT_SECONDS: ${GHOST_ENGINE_TIMEOUT_SECONDS:-5}
       ASSISTANT_PROVIDER: ${ASSISTANT_PROVIDER:-none}
       ASSISTANT_TIMEOUT_SECONDS: ${ASSISTANT_TIMEOUT_SECONDS:-8}
@@ -57,13 +57,14 @@ services:
       OTEL_TRACES_SAMPLE_RATIO: ${OTEL_TRACES_SAMPLE_RATIO:-1}
     depends_on:
       - k8s-ops-predictor
+      - k8s-ops-ghost-engine
     restart: unless-stopped
 
   k8s-ops-predictor:
     build:
       context: ./predictor
       dockerfile: Dockerfile
-    image: k8s-ops-predictor:v0.4.0
+    image: k8s-ops-predictor:v0.4.1
     container_name: k8s-ops-predictor
     ports:
       - "8001:8001"
@@ -74,4 +75,14 @@ services:
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE:-true}
       OTEL_SERVICE_NAME: ${OTEL_PREDICTOR_SERVICE_NAME:-kubelens-predictor}
       OTEL_TRACES_SAMPLE_RATIO: ${OTEL_TRACES_SAMPLE_RATIO:-1}
+    restart: unless-stopped
+
+  k8s-ops-ghost-engine:
+    build:
+      context: .
+      dockerfile: ghost-engine/Dockerfile
+    image: kubelens-ghost-engine:v0.4.1
+    container_name: k8s-ops-ghost-engine
+    ports:
+      - "8091:8091"
     restart: unless-stopped
