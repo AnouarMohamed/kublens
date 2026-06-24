@@ -1,4 +1,5 @@
 # KubeLens
+
 [![CodeQL](https://github.com/AnouarMohamed/kublens/actions/workflows/codeql.yml/badge.svg)](https://github.com/AnouarMohamed/kublens/actions/workflows/codeql.yml) [![Release Supply Chain](https://github.com/AnouarMohamed/kublens/actions/workflows/release-supply-chain.yml/badge.svg)](https://github.com/AnouarMohamed/kublens/actions/workflows/release-supply-chain.yml)
 
 AI-powered Kubernetes operations assistant for deterministic diagnostics and root-cause analysis.
