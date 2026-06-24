@@ -73,6 +73,7 @@ Every epic and sub-feature must satisfy all checks below before merge:
 2. Testing
    - Unit/integration tests for backend/frontend/predictor changes.
    - E2E coverage for user-facing workflows where behavior changes.
+   - Incident and remediation UI smoke coverage verifies authenticated navigation, incident detail rendering, remediation proposal generation, and GitOps artifact rendering.
 3. Security
    - Auth/RBAC implications reviewed and tested.
    - Audit log coverage confirmed for critical operations.
