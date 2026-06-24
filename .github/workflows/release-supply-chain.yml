@@ -50,6 +50,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Lowercase image names
         run: |
@@ -104,7 +107,7 @@ jobs:
         id: build_predictor
         uses: docker/build-push-action@v7
         with:
-          context: ./predictor
+          context: .
           file: ./predictor/Dockerfile
           push: true
           tags: |
@@ -221,6 +224,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Lowercase image names
         run: |
@@ -288,6 +294,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Lowercase image names
         run: |
@@ -354,6 +363,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Lowercase image names
         run: |
