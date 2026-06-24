@@ -93,11 +93,8 @@ export function CommandPalette({ paletteOpen, setPaletteOpen, sections, searchab
     if (!paletteOpen) {
       return;
     }
-    const frame = window.requestAnimationFrame(() => {
-      inputRef.current?.focus();
-      inputRef.current?.select();
-    });
-    return () => window.cancelAnimationFrame(frame);
+    inputRef.current?.focus();
+    inputRef.current?.select();
   }, [paletteOpen]);
 
   const viewItems = useMemo(
