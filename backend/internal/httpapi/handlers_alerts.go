@@ -4,18 +4,50 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"kubelens-backend/internal/auth"
 	"kubelens-backend/internal/model"
 )
 
-func (s *Server) handleAlertDispatch(w http.ResponseWriter, r *http.Request) {
-	if s.alerts == nil || !s.alerts.Enabled() {
+type AlertController struct {
+	alerts         alertDispatcher
+	alertLifecycle alertLifecycleStateStore
+	decodeJSONBody func(*http.Request, any) error
+}
+
+func NewAlertController(
+	alerts alertDispatcher,
+	alertLifecycle alertLifecycleStateStore,
+	decode func(*http.Request, any) error,
+) *AlertController {
+	if decode == nil {
+		decode = decodeJSONBody
+	}
+	return &AlertController{
+		alerts:         alerts,
+		alertLifecycle: alertLifecycle,
+		decodeJSONBody: decode,
+	}
+}
+
+func (ac *AlertController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Post("/dispatch", ac.handleAlertDispatch)
+	r.Post("/test", ac.handleAlertTest)
+	r.Get("/lifecycle", ac.handleListAlertLifecycle)
+	r.Post("/lifecycle", ac.handleUpsertAlertLifecycle)
+	return r
+}
+
+func (ac *AlertController) handleAlertDispatch(w http.ResponseWriter, r *http.Request) {
+	if ac.alerts == nil || !ac.alerts.Enabled() {
 		writeError(w, http.StatusServiceUnavailable, "alert integrations are not configured")
 		return
 	}
 
 	var req model.AlertDispatchRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := ac.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -27,7 +59,7 @@ func (s *Server) handleAlertDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := s.alerts.Dispatch(r.Context(), req)
+	result := ac.alerts.Dispatch(r.Context(), req)
 	status := http.StatusOK
 	if !result.Success {
 		status = http.StatusBadGateway
@@ -35,8 +67,8 @@ func (s *Server) handleAlertDispatch(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, result)
 }
 
-func (s *Server) handleAlertTest(w http.ResponseWriter, r *http.Request) {
-	if s.alerts == nil || !s.alerts.Enabled() {
+func (ac *AlertController) handleAlertTest(w http.ResponseWriter, r *http.Request) {
+	if ac.alerts == nil || !ac.alerts.Enabled() {
 		writeError(w, http.StatusServiceUnavailable, "alert integrations are not configured")
 		return
 	}
@@ -49,7 +81,7 @@ func (s *Server) handleAlertTest(w http.ResponseWriter, r *http.Request) {
 		Tags:     []string{"test", "diagnostics"},
 	}
 
-	result := s.alerts.Dispatch(r.Context(), req)
+	result := ac.alerts.Dispatch(r.Context(), req)
 	status := http.StatusOK
 	if !result.Success {
 		status = http.StatusBadGateway
@@ -57,22 +89,22 @@ func (s *Server) handleAlertTest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, result)
 }
 
-func (s *Server) handleListAlertLifecycle(w http.ResponseWriter, r *http.Request) {
-	if s.alertLifecycle == nil {
+func (ac *AlertController) handleListAlertLifecycle(w http.ResponseWriter, r *http.Request) {
+	if ac.alertLifecycle == nil {
 		writeJSON(w, http.StatusOK, []model.NodeAlertLifecycle{})
 		return
 	}
-	writeJSON(w, http.StatusOK, s.alertLifecycle.List(r.Context()))
+	writeJSON(w, http.StatusOK, ac.alertLifecycle.List(r.Context()))
 }
 
-func (s *Server) handleUpsertAlertLifecycle(w http.ResponseWriter, r *http.Request) {
-	if s.alertLifecycle == nil {
+func (ac *AlertController) handleUpsertAlertLifecycle(w http.ResponseWriter, r *http.Request) {
+	if ac.alertLifecycle == nil {
 		writeError(w, http.StatusServiceUnavailable, "alert lifecycle store is unavailable")
 		return
 	}
 
 	var req model.NodeAlertLifecycleUpdateRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := ac.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -82,7 +114,7 @@ func (s *Server) handleUpsertAlertLifecycle(w http.ResponseWriter, r *http.Reque
 		actor = strings.TrimSpace(principal.User)
 	}
 
-	item, err := s.alertLifecycle.Upsert(r.Context(), req, actor)
+	item, err := ac.alertLifecycle.Upsert(r.Context(), req, actor)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "invalid alert lifecycle request")
 		return

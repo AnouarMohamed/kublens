@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sort"
 	"strconv"
@@ -32,6 +33,57 @@ type predictorRequest struct {
 
 type predictionProvider interface {
 	Predict(ctx context.Context, input predictorRequest) (model.PredictionsResult, error)
+}
+
+type PredictionController struct {
+	cluster              ClusterReader
+	predictor            predictionProvider
+	logger               *slog.Logger
+	now                  func() time.Time
+	predictionsFromCache func() (model.PredictionsResult, bool)
+	storePredictions     func(model.PredictionsResult)
+	recordSuccess        func()
+	recordFailure        func(error)
+}
+
+func NewPredictionController(
+	cluster ClusterReader,
+	predictor predictionProvider,
+	logger *slog.Logger,
+	now func() time.Time,
+	predictionsFromCache func() (model.PredictionsResult, bool),
+	storePredictions func(model.PredictionsResult),
+	recordSuccess func(),
+	recordFailure func(error),
+) *PredictionController {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	if predictionsFromCache == nil {
+		predictionsFromCache = func() (model.PredictionsResult, bool) { return model.PredictionsResult{}, false }
+	}
+	if storePredictions == nil {
+		storePredictions = func(model.PredictionsResult) {}
+	}
+	if recordSuccess == nil {
+		recordSuccess = func() {}
+	}
+	if recordFailure == nil {
+		recordFailure = func(error) {}
+	}
+	return &PredictionController{
+		cluster:              cluster,
+		predictor:            predictor,
+		logger:               logger,
+		now:                  now,
+		predictionsFromCache: predictionsFromCache,
+		storePredictions:     storePredictions,
+		recordSuccess:        recordSuccess,
+		recordFailure:        recordFailure,
+	}
 }
 
 type predictorClient struct {
@@ -95,38 +147,38 @@ func (p *predictorClient) Predict(ctx context.Context, input predictorRequest) (
 	return out, nil
 }
 
-func (s *Server) handlePredictions(w http.ResponseWriter, r *http.Request) {
+func (pc *PredictionController) handlePredictions(w http.ResponseWriter, r *http.Request) {
 	forceRefresh := queryBool(r, "force")
 	if !forceRefresh {
-		if cached, ok := s.predictionsFromCache(); ok {
+		if cached, ok := pc.predictionsFromCache(); ok {
 			writeJSON(w, http.StatusOK, cached)
 			return
 		}
 	}
 
-	pods, nodes := s.cluster.Snapshot(r.Context())
-	events := s.cluster.ListClusterEvents(r.Context())
+	pods, nodes := pc.cluster.Snapshot(r.Context())
+	events := pc.cluster.ListClusterEvents(r.Context())
 	request := predictorRequest{
 		Pods:      pods,
 		Nodes:     nodes,
 		Events:    events,
-		Timestamp: s.now().UTC().Format(time.RFC3339),
+		Timestamp: pc.now().UTC().Format(time.RFC3339),
 	}
 
-	if s.predictor != nil {
-		predictions, err := s.predictor.Predict(r.Context(), request)
+	if pc.predictor != nil {
+		predictions, err := pc.predictor.Predict(r.Context(), request)
 		if err == nil {
-			s.recordPredictorSuccess()
-			s.storePredictions(predictions)
+			pc.recordSuccess()
+			pc.storePredictions(predictions)
 			writeJSON(w, http.StatusOK, predictions)
 			return
 		}
-		s.recordPredictorFailure(err)
-		s.logger.Warn("predictor service unavailable, using local fallback", "error", err.Error())
+		pc.recordFailure(err)
+		pc.logger.Warn("predictor service unavailable, using local fallback", "error", err.Error())
 	}
 
-	fallback := buildLocalPredictions(pods, nodes, events, s.now())
-	s.storePredictions(fallback)
+	fallback := buildLocalPredictions(pods, nodes, events, pc.now())
+	pc.storePredictions(fallback)
 	writeJSON(w, http.StatusOK, fallback)
 }
 

@@ -62,6 +62,11 @@ Current controller-owned route groups include:
 - `/api/metrics` via `MetricsController`
 - `/api/slo` via `SLOController`
 - `/api/rightsizing` via `RightsizingController`
+- `/api/audit` via `AuditController`
+- `/api/stream` via `StreamController`
+- `/api/predictions` via `PredictionController`
+- `/api/ghost` via `GhostController`
+- `/api/alerts` via `AlertController`
 
 Controllers receive narrow dependencies such as `ClusterReader`, request metrics, clocks, JSON decoders, audit handles, or callback functions. They should not receive the full `Server` unless a route group still requires middleware-level runtime ownership.
 

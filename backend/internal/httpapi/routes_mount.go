@@ -47,19 +47,37 @@ func (s *Server) mountObservabilityRoutes(api chi.Router) {
 	api.Mount("/metrics", NewMetricsController(s.metrics, s.docs, s.runtimeSnapshot).Routes())
 	api.Mount("/slo", NewSLOController(s.metrics, s.incidents, s.currentClusterStats, s.now).Routes())
 	api.Mount("/rightsizing", NewRightsizingController(s.cluster, s.now).Routes())
+	api.Mount("/audit", NewAuditController(s.audit).Routes())
+	api.Mount("/stream", NewStreamController(
+		s.cluster,
+		s.eventBus,
+		s.now,
+		s.currentClusterStats,
+		s.auth.trustedCSRFDomains,
+	).Routes())
+	api.Mount("/ghost", NewGhostController(
+		s.cluster,
+		s.ghostClient,
+		s.remediations,
+		s.logger,
+		s.now,
+		s.decodeJSONBody,
+	).Routes())
 
-	api.Get("/audit", s.handleAuditLog)
-	api.Get("/stream", s.handleStream)
-	api.Get("/stream/ws", s.handleStreamWebSocket)
-	api.Get("/predictions", s.handlePredictions)
-	api.Get("/predictive-incidents", s.handlePredictions) // Backward-compatible alias for older frontend builds.
-	api.Get("/ghost/topology", s.handleGhostTopology)
-	api.Post("/ghost/simulations", s.handleGhostSimulation)
+	predictions := NewPredictionController(
+		s.cluster,
+		s.predictor,
+		s.logger,
+		s.now,
+		s.predictionsFromCache,
+		s.storePredictions,
+		s.recordPredictorSuccess,
+		s.recordPredictorFailure,
+	)
+	api.Get("/predictions", predictions.handlePredictions)
+	api.Get("/predictive-incidents", predictions.handlePredictions) // Backward-compatible alias for older frontend builds.
 
-	api.Post("/alerts/dispatch", s.handleAlertDispatch)
-	api.Post("/alerts/test", s.handleAlertTest)
-	api.Get("/alerts/lifecycle", s.handleListAlertLifecycle)
-	api.Post("/alerts/lifecycle", s.handleUpsertAlertLifecycle)
+	api.Mount("/alerts", NewAlertController(s.alerts, s.alertLifecycle, s.decodeJSONBody).Routes())
 }
 
 func (s *Server) mountOpsRoutes(api chi.Router) {

@@ -4,17 +4,22 @@ This document tracks the frontend hook and backend HTTP routing refactors. Keep 
 
 ## Current Status
 
-| Area                              | Status      | Notes                                                                                                                                  |
-| --------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Nodes frontend hook decomposition | Complete    | `useNodesData.ts` is now a compatibility facade over smaller hooks.                                                                    |
-| Node view composition             | Complete    | `src/views/nodes/index.tsx` consumes the facade while action/list/bulk state lives in dedicated hooks.                                 |
-| Pod HTTP controller               | Complete    | Pod list/detail/log/event/action routes are owned by `PodController`.                                                                  |
-| Node HTTP controller              | Complete    | Node list/detail/scope/maintenance routes are owned by `NodeController`.                                                               |
-| Resource HTTP controller          | Complete    | Generic resource list, YAML apply, scale, restart, and rollback routes are owned by `ResourceController`.                              |
-| Metrics HTTP controller           | Complete    | JSON and Prometheus metrics routes are owned by `MetricsController`.                                                                   |
-| SLO HTTP controller               | Complete    | SLO overview route is owned by `SLOController`.                                                                                        |
-| Rightsizing HTTP controller       | Complete    | Rightsizing overview route is owned by `RightsizingController`.                                                                        |
-| Remaining backend route domains   | In progress | Remaining observability, ops, auth/system, incident, remediation, memory, and assistant routes still mount through `*Server` handlers. |
+| Area                              | Status      | Notes                                                                                                                          |
+| --------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Nodes frontend hook decomposition | Complete    | `useNodesData.ts` is now a compatibility facade over smaller hooks.                                                            |
+| Node view composition             | Complete    | `src/views/nodes/index.tsx` consumes the facade while action/list/bulk state lives in dedicated hooks.                         |
+| Pod HTTP controller               | Complete    | Pod list/detail/log/event/action routes are owned by `PodController`.                                                          |
+| Node HTTP controller              | Complete    | Node list/detail/scope/maintenance routes are owned by `NodeController`.                                                       |
+| Resource HTTP controller          | Complete    | Generic resource list, YAML apply, scale, restart, and rollback routes are owned by `ResourceController`.                      |
+| Metrics HTTP controller           | Complete    | JSON and Prometheus metrics routes are owned by `MetricsController`.                                                           |
+| SLO HTTP controller               | Complete    | SLO overview route is owned by `SLOController`.                                                                                |
+| Rightsizing HTTP controller       | Complete    | Rightsizing overview route is owned by `RightsizingController`.                                                                |
+| Audit HTTP controller             | Complete    | Audit read route is owned by `AuditController`; audit middleware remains server-owned.                                         |
+| Stream HTTP controller            | Complete    | SSE and WebSocket stream routes are owned by `StreamController`.                                                               |
+| Prediction HTTP controller        | Complete    | Prediction and predictive-incident alias routes are owned by `PredictionController`.                                           |
+| Ghost HTTP controller             | Complete    | Ghost topology and simulation routes are owned by `GhostController`.                                                           |
+| Alert HTTP controller             | Complete    | Alert dispatch, test, and lifecycle routes are owned by `AlertController`.                                                     |
+| Remaining backend route domains   | In progress | Ops, auth/system, incident, remediation, memory, assistant, RAG, and Risk Guard routes still mount through `*Server` handlers. |
 
 ## Frontend Refactor
 
@@ -56,6 +61,21 @@ Completed controller splits:
 - `backend/internal/httpapi/handlers_rightsizing.go`
   - `RightsizingController` owns `/api/rightsizing`.
   - Injects `ClusterReader` and clock.
+- `backend/internal/httpapi/audit.go`
+  - `AuditController` owns `/api/audit`.
+  - Audit-write middleware remains server-owned because it wraps all API routes.
+- `backend/internal/httpapi/stream.go`
+  - `StreamController` owns `/api/stream` and `/api/stream/ws`.
+  - Injects `ClusterReader`, event bus, clock, cluster stats callback, and trusted CSRF domains.
+- `backend/internal/httpapi/handlers_predictions.go`
+  - `PredictionController` owns `/api/predictions` and `/api/predictive-incidents`.
+  - Injects `ClusterReader`, predictor provider, logger, clock, prediction-cache callbacks, and predictor-health callbacks.
+- `backend/internal/httpapi/handlers_ghost.go`
+  - `GhostController` owns `/api/ghost/topology` and `/api/ghost/simulations`.
+  - Injects `ClusterReader`, optional gRPC ghost client, remediation store, logger, clock, and JSON decoder.
+- `backend/internal/httpapi/handlers_alerts.go`
+  - `AlertController` owns `/api/alerts/dispatch`, `/api/alerts/test`, and `/api/alerts/lifecycle`.
+  - Injects alert dispatcher, alert lifecycle store, and JSON decoder.
 - `backend/internal/httpapi/routes_mount.go`
   - mounts `PodController.Routes()` at `/pods`.
   - mounts `NodeController.Routes()` at `/nodes`.
@@ -63,16 +83,15 @@ Completed controller splits:
   - mounts `MetricsController.Routes()` at `/metrics`.
   - mounts `SLOController.Routes()` at `/slo`.
   - mounts `RightsizingController.Routes()` at `/rightsizing`.
+  - mounts remaining observability controllers for audit, stream, ghost, predictions, and alerts.
 
 ## Next Refactor Candidates
 
-1. Finish remaining observability controllers.
-   - Candidate groups: predictions, ghost simulations, stream endpoints, audit, alert dispatch, and alert lifecycle.
-2. Extract operations controllers.
+1. Extract operations controllers.
    - Candidate groups: incidents/postmortems, remediation, memory, assistant/RAG, Risk Guard.
-3. Extract auth/system controllers after route-level dependencies are clear.
+2. Extract auth/system controllers after route-level dependencies are clear.
    - Candidate groups: health/ready/version/runtime/OpenAPI, auth session/login/logout, cluster selection.
-4. Revisit `Server` dependencies after each controller split.
+3. Revisit `Server` dependencies after each controller split.
    - Move dependencies out of `Server` only when no remaining server-owned route or middleware needs them.
 
 ## Quality Gates
