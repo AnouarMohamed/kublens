@@ -40,12 +40,12 @@ jobs:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
     env:
-      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
-      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
-      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
-      DOCKERHUB_DASHBOARD_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai
-      DOCKERHUB_PREDICTOR_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai-predictor
-      DOCKERHUB_GHOST_ENGINE_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens-ai-ghost-engine
+      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens
+      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelenspredictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghostengine
+      DOCKERHUB_DASHBOARD_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens
+      DOCKERHUB_PREDICTOR_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelenspredictor
+      DOCKERHUB_GHOST_ENGINE_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelensghost
       VERSION_TAG: ${{ github.ref_name }}
     steps:
       - name: Checkout
@@ -201,9 +201,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: dev
     env:
-      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
-      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
-      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
+      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens
+      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelenspredictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghost
       VERSION_TAG: ${{ github.ref_name }}
       HELM_RELEASE_NAME: kubelens
       HELM_NAMESPACE: kubernetes-operations-dashboard-dev
@@ -320,9 +320,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: ${{ inputs.deploy_environment }}
     env:
-      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
-      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
-      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
+      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens
+      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelenspredictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghost
       VERSION_TAG: ${{ inputs.version_tag }}
       HELM_RELEASE_NAME: ${{ inputs.release_name }}
       HELM_NAMESPACE: ${{ inputs.namespace }}
