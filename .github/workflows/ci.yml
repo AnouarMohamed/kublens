@@ -32,7 +32,7 @@ jobs:
 
       - id: classify
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.filter.outputs.non_docs }}" = "false" ] && { [ "${{ steps.filter.outputs.docs }}" = "true" ] || [ "${{ steps.filter.out[...]
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.filter.outputs.non_docs }}" = "false" ] && { [ "${{ steps.filter.outputs.docs }}" = "true" ] || [ "${{ steps.filter.outputs.workflows }}" = "true" ]; }; then
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           else
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
