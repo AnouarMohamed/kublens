@@ -32,7 +32,7 @@ jobs:
 
       - id: classify
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.filter.outputs.non_docs }}" = "false" ] && { [ "${{ steps.filter.outputs.docs }}" = "true" ] || [ "${{ steps.filter.outputs.workflows }}" = "true" ]; }; then
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ steps.filter.outputs.non_docs }}" = "false" ] && { [ "${{ steps.filter.outputs.docs }}" = "true" ] || [ "${{ steps.filter.out[...]
             echo "docs_only=true" >> "$GITHUB_OUTPUT"
           else
             echo "docs_only=false" >> "$GITHUB_OUTPUT"
@@ -302,6 +302,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          submodules: recursive
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v4
