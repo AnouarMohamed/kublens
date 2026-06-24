@@ -261,9 +261,9 @@ jobs:
     runs-on: ubuntu-latest
     environment: staging
     env:
-      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai
-      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-predictor
-      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens-ai-ghost-engine
+      DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens
+      PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelenspredictor
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghost
       VERSION_TAG: ${{ github.ref_name }}
       HELM_RELEASE_NAME: kubelens
       HELM_NAMESPACE: kubernetes-operations-dashboard-staging
