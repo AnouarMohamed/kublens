@@ -42,7 +42,7 @@ jobs:
     env:
       DASHBOARD_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelens
       PREDICTOR_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelenspredictor
-      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghostengine
+      GHOST_ENGINE_IMAGE: ghcr.io/${{ github.repository_owner }}/kubelensghost
       DOCKERHUB_DASHBOARD_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelens
       DOCKERHUB_PREDICTOR_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelenspredictor
       DOCKERHUB_GHOST_ENGINE_IMAGE: docker.io/${{ secrets.DOCKER_USERNAME }}/kubelensghost
@@ -50,6 +50,17 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Lowercase image names
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          DOCKER_USER_LC=$(echo "${{ secrets.DOCKER_USERNAME }}" | tr '[:upper:]' '[:lower:]')
+          echo "DASHBOARD_IMAGE=ghcr.io/${OWNER_LC}/kubelens" >> $GITHUB_ENV
+          echo "PREDICTOR_IMAGE=ghcr.io/${OWNER_LC}/kubelenspredictor" >> $GITHUB_ENV
+          echo "GHOST_ENGINE_IMAGE=ghcr.io/${OWNER_LC}/kubelensghost" >> $GITHUB_ENV
+          echo "DOCKERHUB_DASHBOARD_IMAGE=docker.io/${DOCKER_USER_LC}/kubelens" >> $GITHUB_ENV
+          echo "DOCKERHUB_PREDICTOR_IMAGE=docker.io/${DOCKER_USER_LC}/kubelenspredictor" >> $GITHUB_ENV
+          echo "DOCKERHUB_GHOST_ENGINE_IMAGE=docker.io/${DOCKER_USER_LC}/kubelensghost" >> $GITHUB_ENV
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -211,6 +222,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Lowercase image names
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "DASHBOARD_IMAGE=ghcr.io/${OWNER_LC}/kubelens" >> $GITHUB_ENV
+          echo "PREDICTOR_IMAGE=ghcr.io/${OWNER_LC}/kubelenspredictor" >> $GITHUB_ENV
+          echo "GHOST_ENGINE_IMAGE=ghcr.io/${OWNER_LC}/kubelensghost" >> $GITHUB_ENV
+
       - name: Setup kubectl
         uses: azure/setup-kubectl@v5
 
@@ -271,6 +289,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
+      - name: Lowercase image names
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "DASHBOARD_IMAGE=ghcr.io/${OWNER_LC}/kubelens" >> $GITHUB_ENV
+          echo "PREDICTOR_IMAGE=ghcr.io/${OWNER_LC}/kubelenspredictor" >> $GITHUB_ENV
+          echo "GHOST_ENGINE_IMAGE=ghcr.io/${OWNER_LC}/kubelensghost" >> $GITHUB_ENV
+
       - name: Setup kubectl
         uses: azure/setup-kubectl@v5
 
@@ -329,6 +354,13 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
+
+      - name: Lowercase image names
+        run: |
+          OWNER_LC=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "DASHBOARD_IMAGE=ghcr.io/${OWNER_LC}/kubelens" >> $GITHUB_ENV
+          echo "PREDICTOR_IMAGE=ghcr.io/${OWNER_LC}/kubelenspredictor" >> $GITHUB_ENV
+          echo "GHOST_ENGINE_IMAGE=ghcr.io/${OWNER_LC}/kubelensghost" >> $GITHUB_ENV
 
       - name: Setup kubectl
         uses: azure/setup-kubectl@v5
