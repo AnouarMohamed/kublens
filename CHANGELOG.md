@@ -14,6 +14,12 @@ All notable changes to this project are documented here.
 
 - Release metadata bumped to `v0.4.1` across package, Docker, Compose, Helm, and Kubernetes manifests.
 
+### Fixed
+
+- Lowercased repository owner name and Docker Hub username in release container tags to prevent invalid reference format errors on uppercase usernames.
+- Aligned Ghost Engine image repository names across signed-release and deploy workflow steps.
+- Fixed a race condition in the CommandPalette component tests where input text selection collided with the typing simulation.
+
 ## v0.4.0
 
 ### Added
