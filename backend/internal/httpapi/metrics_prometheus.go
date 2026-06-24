@@ -4,12 +4,60 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
+
+	"kubelens-backend/internal/model"
 )
 
-func (s *Server) handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {
-	snap := s.metrics.snapshot()
-	runtime := s.runtimeSnapshot()
-	rag := ragMetricsFromRetriever(s.docs)
+type MetricsController struct {
+	metrics         *requestMetrics
+	docs            docsRetriever
+	runtimeSnapshot func() model.RuntimeStatus
+}
+
+func NewMetricsController(
+	metrics *requestMetrics,
+	docs docsRetriever,
+	runtimeSnapshot func() model.RuntimeStatus,
+) *MetricsController {
+	if runtimeSnapshot == nil {
+		runtimeSnapshot = func() model.RuntimeStatus { return model.RuntimeStatus{} }
+	}
+	return &MetricsController{
+		metrics:         metrics,
+		docs:            docs,
+		runtimeSnapshot: runtimeSnapshot,
+	}
+}
+
+func (mc *MetricsController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", mc.handleMetrics)
+	r.Get("/prometheus", mc.handlePrometheusMetrics)
+	return r
+}
+
+func (mc *MetricsController) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	if mc.metrics == nil {
+		writeError(w, http.StatusServiceUnavailable, "request metrics are not configured")
+		return
+	}
+
+	snap := mc.metrics.snapshot()
+	snap.RAG = ragMetricsFromRetriever(mc.docs)
+	writeJSON(w, http.StatusOK, snap)
+}
+
+func (mc *MetricsController) handlePrometheusMetrics(w http.ResponseWriter, _ *http.Request) {
+	if mc.metrics == nil {
+		writeError(w, http.StatusServiceUnavailable, "request metrics are not configured")
+		return
+	}
+
+	snap := mc.metrics.snapshot()
+	runtime := mc.runtimeSnapshot()
+	rag := ragMetricsFromRetriever(mc.docs)
 
 	var b strings.Builder
 	writePrometheusMetric(&b, "kubelens_http_requests_total", float64(snap.TotalRequests), nil)

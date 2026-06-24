@@ -23,12 +23,6 @@ func (s *Server) handleClusterInfo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ClusterInfo{IsRealCluster: s.cluster.IsRealCluster()})
 }
 
-func (s *Server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
-	snap := s.metrics.snapshot()
-	snap.RAG = ragMetricsFromRetriever(s.docs)
-	writeJSON(w, http.StatusOK, snap)
-}
-
 func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.cluster.ListNamespaces(r.Context()))
 }

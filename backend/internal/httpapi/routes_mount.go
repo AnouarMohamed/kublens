@@ -44,10 +44,10 @@ func (s *Server) mountClusterRoutes(api chi.Router) {
 }
 
 func (s *Server) mountObservabilityRoutes(api chi.Router) {
-	api.Get("/metrics", s.handleMetrics)
-	api.Get("/metrics/prometheus", s.handlePrometheusMetrics)
-	api.Get("/slo", s.handleSLOOverview)
-	api.Get("/rightsizing", s.handleRightsizingOverview)
+	api.Mount("/metrics", NewMetricsController(s.metrics, s.docs, s.runtimeSnapshot).Routes())
+	api.Mount("/slo", NewSLOController(s.metrics, s.incidents, s.currentClusterStats, s.now).Routes())
+	api.Mount("/rightsizing", NewRightsizingController(s.cluster, s.now).Routes())
+
 	api.Get("/audit", s.handleAuditLog)
 	api.Get("/stream", s.handleStream)
 	api.Get("/stream/ws", s.handleStreamWebSocket)
