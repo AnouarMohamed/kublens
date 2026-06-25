@@ -52,4 +52,4 @@ run("git diff --exit-code -- backend/cmd backend/internal");
 run("node scripts/go-task.mjs -C backend vet ./...");
 run("node scripts/go-task.mjs -C backend run github.com/gordonklaus/ineffassign@v0.2.0 ./...");
 ensureRaceCompiler();
-run("node scripts/go-task.mjs -C backend test -race ./...", { CGO_ENABLED: "1" });
+run("node scripts/go-task.mjs -C backend test -race -timeout 5m ./...", { CGO_ENABLED: "1" });

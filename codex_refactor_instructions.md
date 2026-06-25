@@ -1,113 +1,111 @@
-# Codex Refactoring Instructions: KubLens-AI
+# KubLens-AI Refactoring Status
 
-This document provides a structured guide and technical specifications for Codex to refactor the frontend hooks and backend routing architecture in the **KubLens-AI** repository.
+This document tracks the frontend hook and backend HTTP routing refactors. Keep it current whenever ownership boundaries or route composition change.
 
-Follow these instructions to improve modularity, maintainability, and clean separation of concerns.
+## Current Status
 
----
+| Area                              | Status      | Notes                                                                                                                          |
+| --------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| Nodes frontend hook decomposition | Complete    | `useNodesData.ts` is now a compatibility facade over smaller hooks.                                                            |
+| Node view composition             | Complete    | `src/views/nodes/index.tsx` consumes the facade while action/list/bulk state lives in dedicated hooks.                         |
+| Pod HTTP controller               | Complete    | Pod list/detail/log/event/action routes are owned by `PodController`.                                                          |
+| Node HTTP controller              | Complete    | Node list/detail/scope/maintenance routes are owned by `NodeController`.                                                       |
+| Resource HTTP controller          | Complete    | Generic resource list, YAML apply, scale, restart, and rollback routes are owned by `ResourceController`.                      |
+| Metrics HTTP controller           | Complete    | JSON and Prometheus metrics routes are owned by `MetricsController`.                                                           |
+| SLO HTTP controller               | Complete    | SLO overview route is owned by `SLOController`.                                                                                |
+| Rightsizing HTTP controller       | Complete    | Rightsizing overview route is owned by `RightsizingController`.                                                                |
+| Audit HTTP controller             | Complete    | Audit read route is owned by `AuditController`; audit middleware remains server-owned.                                         |
+| Stream HTTP controller            | Complete    | SSE and WebSocket stream routes are owned by `StreamController`.                                                               |
+| Prediction HTTP controller        | Complete    | Prediction and predictive-incident alias routes are owned by `PredictionController`.                                           |
+| Ghost HTTP controller             | Complete    | Ghost topology and simulation routes are owned by `GhostController`.                                                           |
+| Alert HTTP controller             | Complete    | Alert dispatch, test, and lifecycle routes are owned by `AlertController`.                                                     |
+| Remaining backend route domains   | In progress | Ops, auth/system, incident, remediation, memory, assistant, RAG, and Risk Guard routes still mount through `*Server` handlers. |
 
-## 🚀 Part 1: Frontend Refactoring (Custom Hooks Decomposition)
+## Frontend Refactor
 
-### Target File
+The original `src/views/nodes/hooks/useNodesData.ts` mixed list loading, search filtering, cordon/drain actions, bulk selection, rule evaluation, and alert lifecycle updates. That file now preserves the public hook shape for the view and tests while delegating responsibilities to focused hooks:
 
-- [useNodesData.ts](file:///home/anouar/KubLens-AI/src/views/nodes/hooks/useNodesData.ts) (approx. 488 lines)
+- `src/views/nodes/hooks/useNodeList.ts`
+  - owns node/event loading, search state, filtering, alert lifecycle loading, and stream-triggered refreshes.
+- `src/views/nodes/hooks/useNodeActions.ts`
+  - owns detail modal retrieval and individual node actions: cordon, uncordon, drain preview, and drain.
+- `src/views/nodes/hooks/useNodeBulkActions.ts`
+  - owns selection state plus bulk cordon, uncordon, and drain flows.
+- `src/views/nodes/hooks/useNodeAlertActions.ts`
+  - owns alert dispatch and lifecycle mutation behavior.
 
-### The Problem
+Keep `useNodesData.ts` as the compatibility facade until the view and tests no longer need a single aggregate hook.
 
-The hook contains too many responsibilities: fetching lists, searching/filtering, managing cordon/drain logic, managing bulk actions, evaluation rules, and alert lifecycle dispatches.
+## Backend Refactor
 
-### Codex Task
+`backend/internal/httpapi/server.go` now delegates API mounting through `routes_mount.go`. The next layer of refactoring is to keep domain routes behind controllers that receive only the dependencies they need.
 
-Decompose [useNodesData.ts](file:///home/anouar/KubLens-AI/src/views/nodes/hooks/useNodesData.ts) into the following three smaller, single-responsibility hooks:
+Completed controller splits:
 
-1. **`useNodeList.ts`**:
-   - Manages basic loading states (`nodes`, `clusterEvents`).
-   - Handles search filtering logic (`filteredNodes`).
-   - Hooks up event stream updates via `useStreamRefresh`.
-2. **`useNodeActions.ts`**:
-   - Handles individual node actions: `cordon`, `uncordon`, `previewDrain`, `drain`, and detail modal retrieval (`openDetail`).
-   - Updates target statuses in-place or triggers a lightweight list refresh callback.
-3. **`useNodeBulkActions.ts`**:
-   - Manages list selections (`selectedNodeNames`) and bulk selections.
-   - Integrates actions for `bulkCordon`, `bulkUncordon`, and `bulkDrain`.
+- `backend/internal/httpapi/handlers_cluster_pods.go`
+  - `PodController` owns `/api/pods` and nested pod routes.
+  - Injects `ClusterReader`, logger, JSON decoder, and prediction-cache invalidation callback.
+- `backend/internal/httpapi/handlers_cluster_nodes.go`
+  - `NodeController` owns `/api/nodes` and nested node routes.
+  - Injects `ClusterReader`, audit log, clock, JSON decoder, and prediction-cache invalidation callback.
+- `backend/internal/httpapi/handlers_cluster_resources.go`
+  - `ResourceController` owns `/api/resources` and nested generic resource routes.
+  - Injects `ClusterReader`, audit log, clock, JSON decoder, manifest risk evaluator, and prediction-cache invalidation callback.
+  - Preserves Risk Guard force-override audit behavior.
+- `backend/internal/httpapi/metrics_prometheus.go`
+  - `MetricsController` owns `/api/metrics` and `/api/metrics/prometheus`.
+  - Injects request metrics, docs retriever, and runtime snapshot callback.
+- `backend/internal/httpapi/handlers_slo.go`
+  - `SLOController` owns `/api/slo`.
+  - Injects request metrics, incident store, cluster stats callback, and clock.
+- `backend/internal/httpapi/handlers_rightsizing.go`
+  - `RightsizingController` owns `/api/rightsizing`.
+  - Injects `ClusterReader` and clock.
+- `backend/internal/httpapi/audit.go`
+  - `AuditController` owns `/api/audit`.
+  - Audit-write middleware remains server-owned because it wraps all API routes.
+- `backend/internal/httpapi/stream.go`
+  - `StreamController` owns `/api/stream` and `/api/stream/ws`.
+  - Injects `ClusterReader`, event bus, clock, cluster stats callback, and trusted CSRF domains.
+- `backend/internal/httpapi/handlers_predictions.go`
+  - `PredictionController` owns `/api/predictions` and `/api/predictive-incidents`.
+  - Injects `ClusterReader`, predictor provider, logger, clock, prediction-cache callbacks, and predictor-health callbacks.
+- `backend/internal/httpapi/handlers_ghost.go`
+  - `GhostController` owns `/api/ghost/topology` and `/api/ghost/simulations`.
+  - Injects `ClusterReader`, optional gRPC ghost client, remediation store, logger, clock, and JSON decoder.
+- `backend/internal/httpapi/handlers_alerts.go`
+  - `AlertController` owns `/api/alerts/dispatch`, `/api/alerts/test`, and `/api/alerts/lifecycle`.
+  - Injects alert dispatcher, alert lifecycle store, and JSON decoder.
+- `backend/internal/httpapi/routes_mount.go`
+  - mounts `PodController.Routes()` at `/pods`.
+  - mounts `NodeController.Routes()` at `/nodes`.
+  - mounts `ResourceController.Routes()` at `/resources`.
+  - mounts `MetricsController.Routes()` at `/metrics`.
+  - mounts `SLOController.Routes()` at `/slo`.
+  - mounts `RightsizingController.Routes()` at `/rightsizing`.
+  - mounts remaining observability controllers for audit, stream, ghost, predictions, and alerts.
 
-### Clean-Up Requirements
+## Next Refactor Candidates
 
-- Update the main view component `src/views/nodes/index.tsx` to pull state from these decomposed hooks.
-- Verify that the unit tests in [useNodesData.test.tsx](file:///home/anouar/KubLens-AI/src/views/nodes/hooks/useNodesData.test.tsx) continue to pass.
+1. Extract operations controllers.
+   - Candidate groups: incidents/postmortems, remediation, memory, assistant/RAG, Risk Guard.
+2. Extract auth/system controllers after route-level dependencies are clear.
+   - Candidate groups: health/ready/version/runtime/OpenAPI, auth session/login/logout, cluster selection.
+3. Revisit `Server` dependencies after each controller split.
+   - Move dependencies out of `Server` only when no remaining server-owned route or middleware needs them.
 
----
+## Quality Gates
 
-## 🛠️ Part 2: Backend Refactoring (Routing & Handlers Decomposition)
+Run the relevant gates for every refactor step:
 
-### Target File
+```bash
+npm run lint
+npm run test:web
+npm run test:go
+```
 
-- [server.go](file:///home/anouar/KubLens-AI/backend/internal/httpapi/server.go)
+For backend-only controller movement, at minimum run:
 
-### The Problem
-
-The `Server` struct is a "God Object" holding every service, database handle, logger, and configuration. Its `Router` method (lines 365–475) registers over 50 endpoints directly, causing high coupling between transport logic and domain services.
-
-### Codex Task
-
-Decouple endpoint routing and handler functions by extracting domain-specific endpoints into separate mounting routers.
-
-1. **Create Sub-Routers / Mounting Routers**:
-   - Rather than registering everything on the main `Server` router, create helper controller structs or mount routes domain-by-domain.
-   - Example structure for clusters/nodes/pods in `backend/internal/httpapi`:
-
-     ```go
-     // backend/internal/httpapi/pods.go
-     type PodController struct {
-         cluster ClusterReader
-         logger  *slog.Logger
-     }
-
-     func NewPodController(c ClusterReader, l *slog.Logger) *PodController {
-         return &PodController{cluster: c, logger: l}
-     }
-
-     func (pc *PodController) Routes() chi.Router {
-         r := chi.NewRouter()
-         r.Get("/", pc.handleListPods)
-         r.Post("/", pc.handleCreatePod)
-         r.Get("/{namespace}/{name}", pc.handlePodDetail)
-         r.Delete("/{namespace}/{name}", pc.handleDeletePod)
-         // ...
-         return r
-     }
-     ```
-
-2. **Mount Domains in main Router**:
-   - In [server.go](file:///home/anouar/KubLens-AI/backend/internal/httpapi/server.go), mount the sub-routers:
-     ```go
-     r.Route(apiMountPrefix, func(api chi.Router) {
-         api.Mount("/pods", NewPodController(s.cluster, s.logger).Routes())
-         api.Mount("/nodes", NewNodeController(s.cluster, s.logger).Routes())
-         // ...
-     })
-     ```
-3. **Decouple Handlers**:
-   - Move handler functions (e.g. `handlePods` from `handlers_cluster_pods.go`) into their corresponding controller structs.
-   - Only pass the required interface dependency (e.g., `ClusterReader`, `incidentStore`) into the controller rather than passing the whole `Server` object.
-
----
-
-## 🧪 Part 3: Validation & Quality Gate
-
-After executing the refactors, make sure to execute all verification commands to ensure no regressions were introduced.
-
-### Commands to Run
-
-- **Type-check & Lint**:
-  ```bash
-  npm run lint
-  ```
-- **Frontend Tests**:
-  ```bash
-  npm run test:web
-  ```
-- **Backend Tests**:
-  ```bash
-  npm run test:go
-  ```
+```bash
+cd backend && go test ./internal/httpapi
+```

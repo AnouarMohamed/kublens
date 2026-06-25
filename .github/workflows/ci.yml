@@ -117,6 +117,7 @@ jobs:
     needs: [changes]
     if: needs.changes.outputs.docs_only != 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v6

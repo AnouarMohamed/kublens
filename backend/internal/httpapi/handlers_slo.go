@@ -1,12 +1,15 @@
 package httpapi
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"kubelens-backend/internal/model"
 )
@@ -15,13 +18,51 @@ const (
 	sloLatencyThresholdMs = 750.0
 )
 
-func (s *Server) handleSLOOverview(w http.ResponseWriter, r *http.Request) {
-	snapshot := s.metrics.snapshot()
-	stats := s.currentClusterStats(r.Context())
+type SLOController struct {
+	metrics      *requestMetrics
+	incidents    incidentStore
+	clusterStats func(context.Context) model.ClusterStats
+	now          func() time.Time
+}
+
+func NewSLOController(
+	metrics *requestMetrics,
+	incidents incidentStore,
+	clusterStats func(context.Context) model.ClusterStats,
+	now func() time.Time,
+) *SLOController {
+	if clusterStats == nil {
+		clusterStats = func(context.Context) model.ClusterStats { return model.ClusterStats{} }
+	}
+	if now == nil {
+		now = time.Now
+	}
+	return &SLOController{
+		metrics:      metrics,
+		incidents:    incidents,
+		clusterStats: clusterStats,
+		now:          now,
+	}
+}
+
+func (sc *SLOController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", sc.handleSLOOverview)
+	return r
+}
+
+func (sc *SLOController) handleSLOOverview(w http.ResponseWriter, r *http.Request) {
+	if sc.metrics == nil {
+		writeError(w, http.StatusServiceUnavailable, "request metrics are not configured")
+		return
+	}
+
+	snapshot := sc.metrics.snapshot()
+	stats := sc.clusterStats(r.Context())
 
 	incidents := []model.Incident{}
-	if s.incidents != nil {
-		items, err := listIncidentsWithContext(r.Context(), s.incidents)
+	if sc.incidents != nil {
+		items, err := listIncidentsWithContext(r.Context(), sc.incidents)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, "failed to load incidents for slo overview")
 			return
@@ -29,7 +70,7 @@ func (s *Server) handleSLOOverview(w http.ResponseWriter, r *http.Request) {
 		incidents = items
 	}
 
-	overview := buildSLOOverview(snapshot, stats, incidents, s.now())
+	overview := buildSLOOverview(snapshot, stats, incidents, sc.now())
 	writeJSON(w, http.StatusOK, overview)
 }
 

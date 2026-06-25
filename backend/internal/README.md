@@ -39,7 +39,8 @@ Use-case file conventions:
   - `service_*` -> service lifecycle/cache/runtime wiring
   - `support_*` -> shared utility helpers
 - `httpapi/`
-  - `handlers_*` -> endpoint-group handlers
+  - `routes_mount.go` -> API route composition by domain
+  - `handlers_*` -> endpoint-group handlers; domain controllers expose `Routes()` when a route group has been decoupled from `Server`
   - `assistant_*` -> assistant orchestration helpers
   - `auth_*`/`audit*` -> auth, RBAC and audit transport concerns
 - `diagnostics/`

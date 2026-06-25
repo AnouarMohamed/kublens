@@ -27,54 +27,57 @@ func (s *Server) mountSystemRoutes(api chi.Router) {
 func (s *Server) mountClusterRoutes(api chi.Router) {
 	api.Get("/cluster-info", s.handleClusterInfo)
 	api.Get("/namespaces", s.handleNamespaces)
-	api.Get("/pods", s.handlePods)
-	api.Post("/pods", s.handleCreatePod)
-	api.Get("/nodes", s.handleNodes)
 	api.Get("/events", s.handleEvents)
 	api.Get("/stats", s.handleStats)
 	api.Get("/diagnostics", s.handleDiagnostics)
 
-	api.Get("/resources/{kind}", s.handleResources)
-	api.Get("/resources/{kind}/{namespace}/{name}/yaml", s.handleGetResourceYAML)
-	api.Put("/resources/{kind}/{namespace}/{name}/yaml", s.handleApplyResourceYAML)
-	api.Post("/resources/{kind}/{namespace}/{name}/scale", s.handleScaleResource)
-	api.Post("/resources/{kind}/{namespace}/{name}/restart", s.handleRestartResource)
-	api.Post("/resources/{kind}/{namespace}/{name}/rollback", s.handleRollbackResource)
-
-	api.Get("/pods/{namespace}/{name}/events", s.handlePodEvents)
-	api.Get("/pods/{namespace}/{name}/logs", s.handlePodLogs)
-	api.Get("/pods/{namespace}/{name}/logs/stream", s.handlePodLogsStream)
-	api.Get("/pods/{namespace}/{name}/describe", s.handlePodDescribe)
-	api.Post("/pods/{namespace}/{name}/restart", s.handleRestartPod)
-	api.Delete("/pods/{namespace}/{name}", s.handleDeletePod)
-	api.Get("/pods/{namespace}/{name}", s.handlePodDetail)
-
-	api.Post("/nodes/{name}/cordon", s.handleCordonNode)
-	api.Post("/nodes/{name}/uncordon", s.handleUncordonNode)
-	api.Get("/nodes/{name}/drain/preview", s.handleNodeDrainPreview)
-	api.Post("/nodes/{name}/drain", s.handleDrainNode)
-	api.Get("/nodes/{name}/pods", s.handleNodePods)
-	api.Get("/nodes/{name}/events", s.handleNodeEvents)
-	api.Get("/nodes/{name}", s.handleNodeDetail)
+	api.Mount("/pods", NewPodController(s.cluster, s.logger, s.decodeJSONBody, s.invalidatePredictionsCache).Routes())
+	api.Mount("/nodes", NewNodeController(s.cluster, s.audit, s.now, s.decodeJSONBody, s.invalidatePredictionsCache).Routes())
+	api.Mount("/resources", NewResourceController(
+		s.cluster,
+		s.audit,
+		s.now,
+		s.decodeJSONBody,
+		s.evaluateManifestRisk,
+		s.invalidatePredictionsCache,
+	).Routes())
 }
 
 func (s *Server) mountObservabilityRoutes(api chi.Router) {
-	api.Get("/metrics", s.handleMetrics)
-	api.Get("/metrics/prometheus", s.handlePrometheusMetrics)
-	api.Get("/slo", s.handleSLOOverview)
-	api.Get("/rightsizing", s.handleRightsizingOverview)
-	api.Get("/audit", s.handleAuditLog)
-	api.Get("/stream", s.handleStream)
-	api.Get("/stream/ws", s.handleStreamWebSocket)
-	api.Get("/predictions", s.handlePredictions)
-	api.Get("/predictive-incidents", s.handlePredictions) // Backward-compatible alias for older frontend builds.
-	api.Get("/ghost/topology", s.handleGhostTopology)
-	api.Post("/ghost/simulations", s.handleGhostSimulation)
+	api.Mount("/metrics", NewMetricsController(s.metrics, s.docs, s.runtimeSnapshot).Routes())
+	api.Mount("/slo", NewSLOController(s.metrics, s.incidents, s.currentClusterStats, s.now).Routes())
+	api.Mount("/rightsizing", NewRightsizingController(s.cluster, s.now).Routes())
+	api.Mount("/audit", NewAuditController(s.audit).Routes())
+	api.Mount("/stream", NewStreamController(
+		s.cluster,
+		s.eventBus,
+		s.now,
+		s.currentClusterStats,
+		s.auth.trustedCSRFDomains,
+	).Routes())
+	api.Mount("/ghost", NewGhostController(
+		s.cluster,
+		s.ghostClient,
+		s.remediations,
+		s.logger,
+		s.now,
+		s.decodeJSONBody,
+	).Routes())
 
-	api.Post("/alerts/dispatch", s.handleAlertDispatch)
-	api.Post("/alerts/test", s.handleAlertTest)
-	api.Get("/alerts/lifecycle", s.handleListAlertLifecycle)
-	api.Post("/alerts/lifecycle", s.handleUpsertAlertLifecycle)
+	predictions := NewPredictionController(
+		s.cluster,
+		s.predictor,
+		s.logger,
+		s.now,
+		s.predictionsFromCache,
+		s.storePredictions,
+		s.recordPredictorSuccess,
+		s.recordPredictorFailure,
+	)
+	api.Get("/predictions", predictions.handlePredictions)
+	api.Get("/predictive-incidents", predictions.handlePredictions) // Backward-compatible alias for older frontend builds.
+
+	api.Mount("/alerts", NewAlertController(s.alerts, s.alertLifecycle, s.decodeJSONBody).Routes())
 }
 
 func (s *Server) mountOpsRoutes(api chi.Router) {

@@ -34,21 +34,41 @@ flowchart TD
 
 ## Major runtime responsibilities
 
-| Layer                                  | Responsibility                                             |
-| -------------------------------------- | ---------------------------------------------------------- |
-| `src/`                                 | UI shell, view routing, feature views, typed API usage     |
-| `internal/httpapi`                     | Transport, middleware, route handlers, streaming endpoints |
-| `internal/auth`                        | Principal extraction, role checks, write-gate policy       |
-| `internal/cluster`                     | Kubernetes read/write integration and model mapping        |
-| `internal/state`                       | Snapshot cache and watcher-fed cluster state               |
-| `internal/intelligence` + `plugins/*`  | Deterministic diagnostics                                  |
-| `internal/rag`                         | Documentation retrieval/ranking and telemetry              |
-| `internal/incident`                    | Incident construction and runbook lifecycle                |
-| `internal/remediation`                 | Proposal generation + controlled execution                 |
-| `internal/memory`                      | Persistent runbook and fix pattern storage                 |
-| `internal/postmortem`                  | Postmortem generation and storage                          |
-| `internal/alerts` + `internal/chatops` | Outbound notifications and alert channels                  |
-| `predictor/app`                        | External deterministic risk scoring service                |
+| Layer                                  | Responsibility                                                |
+| -------------------------------------- | ------------------------------------------------------------- |
+| `src/`                                 | UI shell, view routing, feature views, typed API usage        |
+| `internal/httpapi`                     | Transport, middleware, route controllers, streaming endpoints |
+| `internal/auth`                        | Principal extraction, role checks, write-gate policy          |
+| `internal/cluster`                     | Kubernetes read/write integration and model mapping           |
+| `internal/state`                       | Snapshot cache and watcher-fed cluster state                  |
+| `internal/intelligence` + `plugins/*`  | Deterministic diagnostics                                     |
+| `internal/rag`                         | Documentation retrieval/ranking and telemetry                 |
+| `internal/incident`                    | Incident construction and runbook lifecycle                   |
+| `internal/remediation`                 | Proposal generation + controlled execution                    |
+| `internal/memory`                      | Persistent runbook and fix pattern storage                    |
+| `internal/postmortem`                  | Postmortem generation and storage                             |
+| `internal/alerts` + `internal/chatops` | Outbound notifications and alert channels                     |
+| `predictor/app`                        | External deterministic risk scoring service                   |
+
+## HTTP routing boundaries
+
+The Go API runtime keeps middleware, auth, audit, and shared runtime wiring on `Server`, while route ownership moves into domain controllers as groups mature. `routes_mount.go` composes those controllers under `/api`.
+
+Current controller-owned route groups include:
+
+- `/api/pods` via `PodController`
+- `/api/nodes` via `NodeController`
+- `/api/resources` via `ResourceController`
+- `/api/metrics` via `MetricsController`
+- `/api/slo` via `SLOController`
+- `/api/rightsizing` via `RightsizingController`
+- `/api/audit` via `AuditController`
+- `/api/stream` via `StreamController`
+- `/api/predictions` via `PredictionController`
+- `/api/ghost` via `GhostController`
+- `/api/alerts` via `AlertController`
+
+Controllers receive narrow dependencies such as `ClusterReader`, request metrics, clocks, JSON decoders, audit handles, or callback functions. They should not receive the full `Server` unless a route group still requires middleware-level runtime ownership.
 
 ## Request/response flows
 

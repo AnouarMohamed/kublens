@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
@@ -19,7 +20,49 @@ import (
 const streamHeartbeatInterval = 20 * time.Second
 const streamSnapshotEventLimit = 32 // Keeps initial snapshot useful without over-buffering; too low drops context, too high increases memory/network burst.
 
-func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
+type StreamController struct {
+	cluster            ClusterReader
+	eventBus           *events.Bus
+	now                func() time.Time
+	clusterStats       func(context.Context) model.ClusterStats
+	trustedCSRFDomains []string
+}
+
+func NewStreamController(
+	cluster ClusterReader,
+	eventBus *events.Bus,
+	now func() time.Time,
+	clusterStats func(context.Context) model.ClusterStats,
+	trustedCSRFDomains []string,
+) *StreamController {
+	if now == nil {
+		now = time.Now
+	}
+	if clusterStats == nil {
+		clusterStats = func(context.Context) model.ClusterStats { return model.ClusterStats{} }
+	}
+	return &StreamController{
+		cluster:            cluster,
+		eventBus:           eventBus,
+		now:                now,
+		clusterStats:       clusterStats,
+		trustedCSRFDomains: append([]string(nil), trustedCSRFDomains...),
+	}
+}
+
+func (sc *StreamController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", sc.handleStream)
+	r.Get("/ws", sc.handleStreamWebSocket)
+	return r
+}
+
+func (sc *StreamController) handleStream(w http.ResponseWriter, r *http.Request) {
+	if sc.eventBus == nil {
+		writeError(w, http.StatusServiceUnavailable, "event stream is not configured")
+		return
+	}
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		writeError(w, http.StatusInternalServerError, "streaming is not supported")
@@ -31,19 +74,19 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
 
-	subID, ch := s.eventBus.Subscribe()
-	defer s.eventBus.Unsubscribe(subID)
+	subID, ch := sc.eventBus.Subscribe()
+	defer sc.eventBus.Unsubscribe(subID)
 
 	_ = writeSSE(w, "connected", events.Event{
 		Type:      "connected",
-		Timestamp: s.now().UTC().Format(time.RFC3339),
+		Timestamp: sc.now().UTC().Format(time.RFC3339),
 		Payload: map[string]string{
 			"message": "stream established",
 		},
 	})
 	flusher.Flush()
 
-	s.sendInitialStreamSnapshot(r.Context(), func(evt events.Event) error {
+	sc.sendInitialStreamSnapshot(r.Context(), func(evt events.Event) error {
 		return writeSSE(w, evt.Type, evt)
 	})
 	flusher.Flush()
@@ -70,8 +113,13 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) handleStreamWebSocket(w http.ResponseWriter, r *http.Request) {
-	if err := validateCSRFSameOrigin(r, s.auth.trustedCSRFDomains); err != nil {
+func (sc *StreamController) handleStreamWebSocket(w http.ResponseWriter, r *http.Request) {
+	if sc.eventBus == nil {
+		writeError(w, http.StatusServiceUnavailable, "event stream is not configured")
+		return
+	}
+
+	if err := validateCSRFSameOrigin(r, sc.trustedCSRFDomains); err != nil {
 		writeError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -83,18 +131,18 @@ func (s *Server) handleStreamWebSocket(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close(websocket.StatusNormalClosure, "")
 
 	ctx := r.Context()
-	subID, ch := s.eventBus.Subscribe()
-	defer s.eventBus.Unsubscribe(subID)
+	subID, ch := sc.eventBus.Subscribe()
+	defer sc.eventBus.Unsubscribe(subID)
 
 	_ = wsjson.Write(ctx, conn, events.Event{
 		Type:      "connected",
-		Timestamp: s.now().UTC().Format(time.RFC3339),
+		Timestamp: sc.now().UTC().Format(time.RFC3339),
 		Payload: map[string]string{
 			"message": "stream established",
 		},
 	})
 
-	s.sendInitialStreamSnapshot(ctx, func(evt events.Event) error {
+	sc.sendInitialStreamSnapshot(ctx, func(evt events.Event) error {
 		return wsjson.Write(ctx, conn, evt)
 	})
 
@@ -113,19 +161,19 @@ func (s *Server) handleStreamWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) sendInitialStreamSnapshot(ctx context.Context, send func(events.Event) error) {
-	stats := s.currentClusterStats(ctx)
+func (sc *StreamController) sendInitialStreamSnapshot(ctx context.Context, send func(events.Event) error) {
+	stats := sc.clusterStats(ctx)
 	_ = send(events.Event{
 		Type:      "stats",
-		Timestamp: s.now().UTC().Format(time.RFC3339),
+		Timestamp: sc.now().UTC().Format(time.RFC3339),
 		Payload:   stats,
 	})
 
-	clusterEvents := trimEvents(s.cluster.ListClusterEvents(ctx), streamSnapshotEventLimit)
+	clusterEvents := trimEvents(sc.cluster.ListClusterEvents(ctx), streamSnapshotEventLimit)
 	if len(clusterEvents) > 0 {
 		_ = send(events.Event{
 			Type:      "cluster_events",
-			Timestamp: s.now().UTC().Format(time.RFC3339),
+			Timestamp: sc.now().UTC().Format(time.RFC3339),
 			Payload:   clusterEvents,
 		})
 	}

@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
 	"kubelens-backend/internal/auth"
@@ -184,11 +185,30 @@ func (s *Server) auditMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) handleAuditLog(w http.ResponseWriter, r *http.Request) {
+type AuditController struct {
+	audit *auditLog
+}
+
+func NewAuditController(audit *auditLog) *AuditController {
+	return &AuditController{audit: audit}
+}
+
+func (ac *AuditController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", ac.handleAuditLog)
+	return r
+}
+
+func (ac *AuditController) handleAuditLog(w http.ResponseWriter, r *http.Request) {
+	if ac.audit == nil {
+		writeJSON(w, http.StatusOK, model.AuditLogResponse{})
+		return
+	}
+
 	limit := parsePositiveInt(r.URL.Query().Get("limit"), defaultAuditLimit)
-	items := s.audit.list(limit)
+	items := ac.audit.list(limit)
 	writeJSON(w, http.StatusOK, model.AuditLogResponse{
-		Total: s.audit.total(),
+		Total: ac.audit.total(),
 		Items: items,
 	})
 }

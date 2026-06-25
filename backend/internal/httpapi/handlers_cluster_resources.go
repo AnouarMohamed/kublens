@@ -13,12 +13,83 @@ import (
 	"kubelens-backend/internal/model"
 )
 
-func (s *Server) handleGetResourceYAML(w http.ResponseWriter, r *http.Request) {
+type ResourceController struct {
+	cluster                    ClusterReader
+	audit                      *auditLog
+	now                        func() time.Time
+	decodeJSONBody             func(*http.Request, any) error
+	evaluateManifestRisk       func(string, []model.PodSummary, []model.NodeSummary) model.RiskReport
+	invalidatePredictionsCache func()
+}
+
+func NewResourceController(
+	cluster ClusterReader,
+	audit *auditLog,
+	now func() time.Time,
+	decode func(*http.Request, any) error,
+	evaluateManifestRisk func(string, []model.PodSummary, []model.NodeSummary) model.RiskReport,
+	invalidatePredictionsCache func(),
+) *ResourceController {
+	if now == nil {
+		now = time.Now
+	}
+	if decode == nil {
+		decode = decodeJSONBody
+	}
+	if evaluateManifestRisk == nil {
+		evaluateManifestRisk = func(string, []model.PodSummary, []model.NodeSummary) model.RiskReport {
+			return model.RiskReport{}
+		}
+	}
+	if invalidatePredictionsCache == nil {
+		invalidatePredictionsCache = func() {}
+	}
+	return &ResourceController{
+		cluster:                    cluster,
+		audit:                      audit,
+		now:                        now,
+		decodeJSONBody:             decode,
+		evaluateManifestRisk:       evaluateManifestRisk,
+		invalidatePredictionsCache: invalidatePredictionsCache,
+	}
+}
+
+func (rc *ResourceController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/{kind}", rc.handleResources)
+	r.Get("/{kind}/{namespace}/{name}/yaml", rc.handleGetResourceYAML)
+	r.Put("/{kind}/{namespace}/{name}/yaml", rc.handleApplyResourceYAML)
+	r.Post("/{kind}/{namespace}/{name}/scale", rc.handleScaleResource)
+	r.Post("/{kind}/{namespace}/{name}/restart", rc.handleRestartResource)
+	r.Post("/{kind}/{namespace}/{name}/rollback", rc.handleRollbackResource)
+	return r
+}
+
+func (rc *ResourceController) handleResources(w http.ResponseWriter, r *http.Request) {
+	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
+	if kind == "" {
+		writeError(w, http.StatusBadRequest, "resource kind is required")
+		return
+	}
+
+	items, err := rc.cluster.ListResources(r.Context(), kind)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.ResourceList{
+		Kind:  kind,
+		Items: items,
+	})
+}
+
+func (rc *ResourceController) handleGetResourceYAML(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 
-	yamlText, err := s.cluster.GetResourceYAML(r.Context(), kind, namespace, name)
+	yamlText, err := rc.cluster.GetResourceYAML(r.Context(), kind, namespace, name)
 	if err != nil {
 		handleActionError(w, err, "Resource not found")
 		return
@@ -27,19 +98,19 @@ func (s *Server) handleGetResourceYAML(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.ResourceManifest{YAML: yamlText})
 }
 
-func (s *Server) handleApplyResourceYAML(w http.ResponseWriter, r *http.Request) {
+func (rc *ResourceController) handleApplyResourceYAML(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 
 	var req model.ResourceManifest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := rc.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	pods, nodes := s.cluster.Snapshot(r.Context())
-	risk := s.evaluateManifestRisk(req.YAML, pods, nodes)
+	pods, nodes := rc.cluster.Snapshot(r.Context())
+	risk := rc.evaluateManifestRisk(req.YAML, pods, nodes)
 	force := queryBool(r, "force")
 	if risk.Score >= 50 && !force {
 		writeJSON(w, http.StatusAccepted, model.ResourceApplyRiskResponse{
@@ -49,9 +120,9 @@ func (s *Server) handleApplyResourceYAML(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	if risk.Score >= 50 && force && s.audit != nil {
+	if risk.Score >= 50 && force && rc.audit != nil {
 		entry := model.AuditEntry{
-			Timestamp: s.now().UTC().Format(time.RFC3339),
+			Timestamp: rc.now().UTC().Format(time.RFC3339),
 			RequestID: middleware.GetReqID(r.Context()),
 			Method:    r.Method,
 			Path:      sanitizeAuditPath(r.URL.Path),
@@ -64,64 +135,64 @@ func (s *Server) handleApplyResourceYAML(w http.ResponseWriter, r *http.Request)
 			entry.User = principal.User
 			entry.Role = auth.RoleLabel(principal.Role)
 		}
-		s.audit.append(entry)
+		rc.audit.append(entry)
 	}
 
-	result, err := s.cluster.ApplyResourceYAML(r.Context(), kind, namespace, name, req.YAML)
+	result, err := rc.cluster.ApplyResourceYAML(r.Context(), kind, namespace, name, req.YAML)
 	if err != nil {
 		handleActionError(w, err, "Resource not found")
 		return
 	}
 
-	s.invalidatePredictionsCache()
+	rc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleScaleResource(w http.ResponseWriter, r *http.Request) {
+func (rc *ResourceController) handleScaleResource(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 
 	var req model.ScaleRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := rc.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	result, err := s.cluster.ScaleResource(r.Context(), kind, namespace, name, req.Replicas)
+	result, err := rc.cluster.ScaleResource(r.Context(), kind, namespace, name, req.Replicas)
 	if err != nil {
 		handleActionError(w, err, "Resource not found")
 		return
 	}
 
-	s.invalidatePredictionsCache()
+	rc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleRestartResource(w http.ResponseWriter, r *http.Request) {
+func (rc *ResourceController) handleRestartResource(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 
-	result, err := s.cluster.RestartResource(r.Context(), kind, namespace, name)
+	result, err := rc.cluster.RestartResource(r.Context(), kind, namespace, name)
 	if err != nil {
 		handleActionError(w, err, "Resource not found")
 		return
 	}
-	s.invalidatePredictionsCache()
+	rc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleRollbackResource(w http.ResponseWriter, r *http.Request) {
+func (rc *ResourceController) handleRollbackResource(w http.ResponseWriter, r *http.Request) {
 	kind := strings.TrimSpace(chi.URLParam(r, "kind"))
 	namespace := strings.TrimSpace(chi.URLParam(r, "namespace"))
 	name := strings.TrimSpace(chi.URLParam(r, "name"))
 
-	result, err := s.cluster.RollbackResource(r.Context(), kind, namespace, name)
+	result, err := rc.cluster.RollbackResource(r.Context(), kind, namespace, name)
 	if err != nil {
 		handleActionError(w, err, "Resource not found")
 		return
 	}
-	s.invalidatePredictionsCache()
+	rc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }

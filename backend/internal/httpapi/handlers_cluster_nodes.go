@@ -30,9 +30,60 @@ type nodeScopeReader interface {
 	NodeEvents(ctx context.Context, name string) ([]model.K8sEvent, error)
 }
 
-func (s *Server) handleNodeDetail(w http.ResponseWriter, r *http.Request) {
+type NodeController struct {
+	cluster                    ClusterReader
+	audit                      *auditLog
+	now                        func() time.Time
+	decodeJSONBody             func(*http.Request, any) error
+	invalidatePredictionsCache func()
+}
+
+func NewNodeController(
+	cluster ClusterReader,
+	audit *auditLog,
+	now func() time.Time,
+	decode func(*http.Request, any) error,
+	invalidatePredictionsCache func(),
+) *NodeController {
+	if now == nil {
+		now = time.Now
+	}
+	if decode == nil {
+		decode = decodeJSONBody
+	}
+	if invalidatePredictionsCache == nil {
+		invalidatePredictionsCache = func() {}
+	}
+	return &NodeController{
+		cluster:                    cluster,
+		audit:                      audit,
+		now:                        now,
+		decodeJSONBody:             decode,
+		invalidatePredictionsCache: invalidatePredictionsCache,
+	}
+}
+
+func (nc *NodeController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/", nc.handleNodes)
+	r.Post("/{name}/cordon", nc.handleCordonNode)
+	r.Post("/{name}/uncordon", nc.handleUncordonNode)
+	r.Get("/{name}/drain/preview", nc.handleNodeDrainPreview)
+	r.Post("/{name}/drain", nc.handleDrainNode)
+	r.Get("/{name}/pods", nc.handleNodePods)
+	r.Get("/{name}/events", nc.handleNodeEvents)
+	r.Get("/{name}", nc.handleNodeDetail)
+	return r
+}
+
+func (nc *NodeController) handleNodes(w http.ResponseWriter, r *http.Request) {
+	_, nodes := nc.cluster.Snapshot(r.Context())
+	writeJSON(w, http.StatusOK, nodes)
+}
+
+func (nc *NodeController) handleNodeDetail(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	node, err := s.cluster.NodeDetail(r.Context(), name)
+	node, err := nc.cluster.NodeDetail(r.Context(), name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Node not found")
@@ -44,14 +95,14 @@ func (s *Server) handleNodeDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, node)
 }
 
-func (s *Server) handleNodePods(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleNodePods(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "node name is required")
 		return
 	}
 
-	if provider, ok := s.cluster.(nodeScopeReader); ok {
+	if provider, ok := nc.cluster.(nodeScopeReader); ok {
 		pods, err := provider.NodePods(r.Context(), name)
 		if err != nil {
 			if errors.Is(err, apperrors.ErrNotFound) {
@@ -65,7 +116,7 @@ func (s *Server) handleNodePods(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pods, _ := s.cluster.Snapshot(r.Context())
+	pods, _ := nc.cluster.Snapshot(r.Context())
 	out := make([]model.PodSummary, 0, len(pods))
 	for _, pod := range pods {
 		if pod.NodeName == name {
@@ -75,14 +126,14 @@ func (s *Server) handleNodePods(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleNodeEvents(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleNodeEvents(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if name == "" {
 		writeError(w, http.StatusBadRequest, "node name is required")
 		return
 	}
 
-	if provider, ok := s.cluster.(nodeScopeReader); ok {
+	if provider, ok := nc.cluster.(nodeScopeReader); ok {
 		events, err := provider.NodeEvents(r.Context(), name)
 		if err != nil {
 			if errors.Is(err, apperrors.ErrNotFound) {
@@ -96,7 +147,7 @@ func (s *Server) handleNodeEvents(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	events := s.cluster.ListClusterEvents(r.Context())
+	events := nc.cluster.ListClusterEvents(r.Context())
 	out := make([]model.K8sEvent, 0, len(events))
 	for _, event := range events {
 		if !strings.EqualFold(event.ResourceKind, "Node") {
@@ -110,9 +161,9 @@ func (s *Server) handleNodeEvents(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-func (s *Server) handleCordonNode(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleCordonNode(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	result, err := s.cluster.CordonNode(r.Context(), name)
+	result, err := nc.cluster.CordonNode(r.Context(), name)
 	if err != nil {
 		if errors.Is(err, apperrors.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "Node not found")
@@ -121,14 +172,14 @@ func (s *Server) handleCordonNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.invalidatePredictionsCache()
+	nc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleUncordonNode(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleUncordonNode(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	provider, ok := s.cluster.(nodeMaintenanceWriter)
+	provider, ok := nc.cluster.(nodeMaintenanceWriter)
 	if !ok {
 		writeError(w, http.StatusNotImplemented, "uncordon is not supported by the active cluster provider")
 		return
@@ -143,14 +194,14 @@ func (s *Server) handleUncordonNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.invalidatePredictionsCache()
+	nc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) handleNodeDrainPreview(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleNodeDrainPreview(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	provider, ok := s.cluster.(nodeMaintenanceReader)
+	provider, ok := nc.cluster.(nodeMaintenanceReader)
 	if !ok {
 		writeError(w, http.StatusNotImplemented, "node drain preview is not supported by the active cluster provider")
 		return
@@ -168,10 +219,10 @@ func (s *Server) handleNodeDrainPreview(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, preview)
 }
 
-func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
+func (nc *NodeController) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var req model.NodeDrainRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := nc.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -193,7 +244,7 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	provider, ok := s.cluster.(nodeMaintenanceWriter)
+	provider, ok := nc.cluster.(nodeMaintenanceWriter)
 	if !ok {
 		writeError(w, http.StatusNotImplemented, "node drain is not supported by the active cluster provider")
 		return
@@ -208,9 +259,9 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if force && s.audit != nil {
+	if force && nc.audit != nil {
 		entry := model.AuditEntry{
-			Timestamp: s.now().UTC().Format(time.RFC3339),
+			Timestamp: nc.now().UTC().Format(time.RFC3339),
 			RequestID: middleware.GetReqID(r.Context()),
 			Method:    r.Method,
 			Path:      sanitizeAuditPath(r.URL.Path),
@@ -223,8 +274,8 @@ func (s *Server) handleDrainNode(w http.ResponseWriter, r *http.Request) {
 			entry.User = principal.User
 			entry.Role = auth.RoleLabel(principal.Role)
 		}
-		s.audit.append(entry)
+		nc.audit.append(entry)
 	}
-	s.invalidatePredictionsCache()
+	nc.invalidatePredictionsCache()
 	writeJSON(w, http.StatusOK, result)
 }

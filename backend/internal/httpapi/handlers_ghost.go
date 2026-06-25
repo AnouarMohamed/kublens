@@ -2,21 +2,67 @@ package httpapi
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	ghostengine "kubelens-backend/internal/ghost"
 	"kubelens-backend/internal/model"
 	"kubelens-backend/internal/remediation"
 )
 
-func (s *Server) handleGhostTopology(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, s.currentGhostTopology(r))
+type GhostController struct {
+	cluster        ClusterReader
+	ghostClient    ghostClient
+	remediations   remediationStore
+	logger         *slog.Logger
+	now            func() time.Time
+	decodeJSONBody func(*http.Request, any) error
 }
 
-func (s *Server) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
+func NewGhostController(
+	cluster ClusterReader,
+	ghostClient ghostClient,
+	remediations remediationStore,
+	logger *slog.Logger,
+	now func() time.Time,
+	decode func(*http.Request, any) error,
+) *GhostController {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	if now == nil {
+		now = time.Now
+	}
+	if decode == nil {
+		decode = decodeJSONBody
+	}
+	return &GhostController{
+		cluster:        cluster,
+		ghostClient:    ghostClient,
+		remediations:   remediations,
+		logger:         logger,
+		now:            now,
+		decodeJSONBody: decode,
+	}
+}
+
+func (gc *GhostController) Routes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/topology", gc.handleGhostTopology)
+	r.Post("/simulations", gc.handleGhostSimulation)
+	return r
+}
+
+func (gc *GhostController) handleGhostTopology(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, gc.currentGhostTopology(r))
+}
+
+func (gc *GhostController) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
 	var req model.GhostSimulationRequest
-	if err := s.decodeJSONBody(r, &req); err != nil {
+	if err := gc.decodeJSONBody(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -27,52 +73,52 @@ func (s *Server) handleGhostSimulation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	topology := s.currentGhostTopology(r)
+	topology := gc.currentGhostTopology(r)
 	var result model.GhostSimulationResult
 	var simulated bool
-	if s.ghostClient != nil {
+	if gc.ghostClient != nil {
 		var simErr error
-		result, simErr = s.ghostClient.Simulate(r.Context(), normalized, topology)
+		result, simErr = gc.ghostClient.Simulate(r.Context(), normalized, topology)
 		if simErr != nil {
-			s.logger.Warn("ghost engine gRPC simulation failed, falling back to in-memory simulation", "error", simErr)
+			gc.logger.Warn("ghost engine gRPC simulation failed, falling back to in-memory simulation", "error", simErr)
 		} else {
 			simulated = true
 		}
 	}
 
 	if !simulated {
-		result = ghostengine.SimulateNodeDrain(topology, normalized, s.now())
+		result = ghostengine.SimulateNodeDrain(topology, normalized, gc.now())
 	}
 
 	// Automated Remediation Proposal for favorable verdicts
-	if (result.Verdict.Severity == "warning" || result.Verdict.Severity == "info") && s.remediations != nil {
+	if (result.Verdict.Severity == "warning" || result.Verdict.Severity == "info") && gc.remediations != nil {
 		proposal := model.RemediationProposal{
-			ID:        fmt.Sprintf("ghost-%d", s.now().UnixNano()),
+			ID:        fmt.Sprintf("ghost-%d", gc.now().UnixNano()),
 			Kind:      model.RemediationKind(req.Action),
 			Status:    "proposed",
 			Resource:  req.NodeName,
 			Reason:    result.Verdict.Summary,
 			RiskLevel: "low", // Map simulation warning/info to low-risk proposal
-			CreatedAt: s.now().Format(time.RFC3339),
+			CreatedAt: gc.now().Format(time.RFC3339),
 		}
-		s.remediations.SaveProposals([]model.RemediationProposal{proposal})
-		s.logger.Info("automated remediation proposal created from ghost simulation", "id", proposal.ID, "resource", proposal.Resource)
+		gc.remediations.SaveProposals([]model.RemediationProposal{proposal})
+		gc.logger.Info("automated remediation proposal created from ghost simulation", "id", proposal.ID, "resource", proposal.Resource)
 
 		// Automatically generate GitOps artifact
-		artifact := remediation.BuildGitOpsArtifact(proposal, collectGitOpsWorkloadInventory(r.Context(), s.cluster), s.now())
-		_, err := upsertRemediationGitOpsArtifactWithContext(r.Context(), s.remediations, proposal.ID, artifact, "system/ghost-engine")
+		artifact := remediation.BuildGitOpsArtifact(proposal, collectGitOpsWorkloadInventory(r.Context(), gc.cluster), gc.now())
+		_, err := upsertRemediationGitOpsArtifactWithContext(r.Context(), gc.remediations, proposal.ID, artifact, "system/ghost-engine")
 		if err != nil {
-			s.logger.Error("failed to persist ghost simulation gitops artifact", "proposal_id", proposal.ID, "error", err)
+			gc.logger.Error("failed to persist ghost simulation gitops artifact", "proposal_id", proposal.ID, "error", err)
 		}
 	}
 
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) currentGhostTopology(r *http.Request) model.GhostTopology {
-	if snapshot, ok := s.cluster.StateSnapshot(r.Context()); ok {
-		return ghostengine.BuildTopologyFromState(snapshot, s.now())
+func (gc *GhostController) currentGhostTopology(r *http.Request) model.GhostTopology {
+	if snapshot, ok := gc.cluster.StateSnapshot(r.Context()); ok {
+		return ghostengine.BuildTopologyFromState(snapshot, gc.now())
 	}
-	pods, nodes := s.cluster.Snapshot(r.Context())
-	return ghostengine.BuildTopologyFromSummaries(pods, nodes, s.now())
+	pods, nodes := gc.cluster.Snapshot(r.Context())
+	return ghostengine.BuildTopologyFromSummaries(pods, nodes, gc.now())
 }
