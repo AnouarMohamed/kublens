@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Play, RefreshCw } from "lucide-react";
 import * as THREE from "three";
 import { api } from "../../lib/api";
-import type { GhostFramePod, GhostSimulationResult, GhostTimelineFrame, GhostTopology } from "../../types";
+import type {
+  GhostFramePod,
+  GhostSimulationRecord,
+  GhostSimulationResult,
+  GhostTimelineFrame,
+  GhostTopology,
+} from "../../types";
 
 const DEFAULT_HORIZON_SECONDS = 900;
 
@@ -24,6 +30,7 @@ interface DisposableMeshLike {
 export default function GhostMode() {
   const [topology, setTopology] = useState<GhostTopology | null>(null);
   const [simulation, setSimulation] = useState<GhostSimulationResult | null>(null);
+  const [recentRuns, setRecentRuns] = useState<GhostSimulationRecord[]>([]);
   const [selectedNode, setSelectedNode] = useState("");
   const [horizonSeconds, setHorizonSeconds] = useState(DEFAULT_HORIZON_SECONDS);
   const [frameIndex, setFrameIndex] = useState(0);
@@ -52,9 +59,19 @@ export default function GhostMode() {
     }
   }, []);
 
+  const loadSimulationHistory = useCallback(async () => {
+    try {
+      const next = await api.listGhostSimulations(5);
+      setRecentRuns(next.items);
+    } catch {
+      setRecentRuns([]);
+    }
+  }, []);
+
   useEffect(() => {
     void loadTopology();
-  }, [loadTopology]);
+    void loadSimulationHistory();
+  }, [loadSimulationHistory, loadTopology]);
 
   const runSimulation = useCallback(async () => {
     if (!selectedNode) {
@@ -71,12 +88,13 @@ export default function GhostMode() {
       });
       setSimulation(result);
       setFrameIndex(Math.max(0, result.frames.length - 1));
+      void loadSimulationHistory();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to run ghost simulation");
     } finally {
       setIsRunning(false);
     }
-  }, [horizonSeconds, selectedNode]);
+  }, [horizonSeconds, loadSimulationHistory, selectedNode]);
 
   const activeFrame = simulation?.frames[frameIndex] ?? null;
   const visiblePods = useMemo(() => activeFrame?.pods ?? topology?.pods ?? [], [activeFrame?.pods, topology?.pods]);
@@ -165,14 +183,54 @@ export default function GhostMode() {
                   {simulation.verdict.severity}
                 </div>
                 <p className="text-sm leading-6 text-zinc-200">{simulation.verdict.summary}</p>
+                <div className="grid grid-cols-2 gap-2 border border-zinc-800 bg-zinc-950/70 p-2 text-xs">
+                  <Meta label="Confidence" value={`${simulation.confidence}%`} />
+                  <Meta label="Engine" value={simulation.engine} />
+                  <Meta label="Topology" value={simulation.topologyHash.slice(0, 10)} />
+                  <Meta label="Frames" value={simulation.frames.length.toString()} />
+                </div>
                 <ul className="space-y-2 text-xs text-zinc-400">
                   {simulation.verdict.recommendations.map((item) => (
                     <li key={item}>{item}</li>
                   ))}
                 </ul>
+                <div className="border-t border-zinc-800 pt-3">
+                  <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Limitations</p>
+                  <ul className="mt-2 space-y-2 text-xs leading-5 text-zinc-400">
+                    {simulation.limitations.map((item) => (
+                      <li key={item}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
               </>
             ) : (
               <p className="text-sm text-zinc-400">No simulation has run for the current topology.</p>
+            )}
+          </section>
+
+          <section className="surface p-4 space-y-3">
+            <p className="text-[11px] uppercase tracking-[0.16em] text-zinc-500">Recent Runs</p>
+            {recentRuns.length > 0 ? (
+              <div className="space-y-2">
+                {recentRuns.map((run) => (
+                  <button
+                    key={run.id}
+                    type="button"
+                    className="w-full border border-zinc-800 bg-zinc-950/60 px-3 py-2 text-left hover:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                    onClick={() => {
+                      setSimulation(run.result);
+                      setFrameIndex(Math.max(0, run.result.frames.length - 1));
+                    }}
+                  >
+                    <span className="block truncate font-mono text-xs text-zinc-300">{run.id}</span>
+                    <span className="mt-1 block text-xs text-zinc-500">
+                      {run.request.nodeName} / {run.result.confidence}% / {run.result.verdict.severity}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-zinc-400">Run a simulation to keep a short review trail in this session.</p>
             )}
           </section>
 
@@ -243,6 +301,15 @@ function Metric({ label, value }: { label: string; value: number }) {
     <div className="border-l border-zinc-700 px-3 py-2 first:border-l-0">
       <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">{label}</p>
       <p className="mt-1 text-lg font-semibold text-zinc-100">{value}</p>
+    </div>
+  );
+}
+
+function Meta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+      <p className="mt-1 truncate font-mono text-xs text-zinc-200">{value}</p>
     </div>
   );
 }

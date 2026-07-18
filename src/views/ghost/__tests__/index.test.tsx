@@ -4,6 +4,7 @@ import GhostMode from "..";
 
 const mockAPI = vi.hoisted(() => ({
   getGhostTopology: vi.fn(),
+  listGhostSimulations: vi.fn(),
   simulateGhostScenario: vi.fn(),
 }));
 
@@ -127,11 +128,19 @@ describe("GhostMode", () => {
       ingresses: [],
       edges: [],
     });
+    mockAPI.listGhostSimulations.mockResolvedValue({
+      total: 0,
+      items: [],
+    });
     mockAPI.simulateGhostScenario.mockResolvedValue({
       id: "ghost-1",
       action: "node_drain",
       generatedAt: "2026-06-15T12:01:00Z",
       horizonSeconds: 900,
+      engine: "in-memory",
+      topologyHash: "abc123456789",
+      confidence: 52,
+      limitations: ["Topology came from summary fallback data."],
       verdict: {
         severity: "warning",
         summary: "Drain simulation can move 1 pod(s) from node-a.",
@@ -166,6 +175,8 @@ describe("GhostMode", () => {
       });
     });
     expect(screen.getByText(/Drain simulation can move/)).toBeInTheDocument();
+    expect(screen.getByText("52%")).toBeInTheDocument();
+    expect(screen.getByText("in-memory")).toBeInTheDocument();
     expect(screen.getByText("pod_rescheduled")).toBeInTheDocument();
   });
 });
