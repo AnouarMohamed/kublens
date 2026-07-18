@@ -77,6 +77,7 @@ type Server struct {
 	buildInfo      model.BuildInfo
 	intel          *intelligence.Analyzer
 	ghostClient    ghostClient
+	ghostRuns      ghostSimulationStore
 
 	predictionsTTL   time.Duration
 	predictionsMu    sync.RWMutex
@@ -241,6 +242,12 @@ func WithGhostClient(client ghostClient) Option {
 	}
 }
 
+func WithGhostSimulationStore(store ghostSimulationStore) Option {
+	return func(s *Server) {
+		s.ghostRuns = store
+	}
+}
+
 func WithAlertDispatcher(dispatcher alertDispatcher) Option {
 	return func(s *Server) {
 		s.alerts = dispatcher
@@ -360,6 +367,9 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 	}
 	if server.alertLifecycle == nil {
 		server.alertLifecycle = server.defaultAlertLifecycleStore()
+	}
+	if server.ghostRuns == nil {
+		server.ghostRuns = newMemoryGhostSimulationStore(defaultGhostSimulationLimit)
 	}
 
 	return server

@@ -59,6 +59,7 @@ func (s *Server) mountObservabilityRoutes(api chi.Router) {
 	api.Mount("/ghost", NewGhostController(
 		s.cluster,
 		s.ghostClient,
+		s.ghostRuns,
 		s.remediations,
 		s.logger,
 		s.now,

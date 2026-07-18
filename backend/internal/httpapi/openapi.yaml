@@ -875,6 +875,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/GhostTopology"
   /ghost/simulations:
+    get:
+      operationId: listGhostSimulations
+      summary: List recent Ghost simulation records
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+          required: false
+      responses:
+        "200":
+          description: Recent simulation records
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GhostSimulationListResponse"
     post:
       operationId: postGhostSimulation
       summary: Run a Ghost simulation
@@ -893,6 +909,29 @@ paths:
                 $ref: "#/components/schemas/GhostSimulationResult"
         "400":
           description: Invalid simulation request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /ghost/simulations/{id}:
+    get:
+      operationId: getGhostSimulation
+      summary: Fetch a persisted Ghost simulation record
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Simulation record
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GhostSimulationRecord"
+        "404":
+          description: Simulation record not found
           content:
             application/json:
               schema:
@@ -2231,7 +2270,7 @@ components:
             $ref: "#/components/schemas/GhostTimelineEvent"
     GhostSimulationResult:
       type: object
-      required: [id, action, generatedAt, horizonSeconds, verdict, frames]
+      required: [id, action, generatedAt, horizonSeconds, engine, topologyHash, confidence, limitations, verdict, frames]
       properties:
         id:
           type: string
@@ -2241,12 +2280,48 @@ components:
           type: string
         horizonSeconds:
           type: integer
+        engine:
+          type: string
+        topologyHash:
+          type: string
+        confidence:
+          type: integer
+          minimum: 0
+          maximum: 100
+        limitations:
+          type: array
+          items:
+            type: string
         verdict:
           $ref: "#/components/schemas/GhostSimulationVerdict"
         frames:
           type: array
           items:
             $ref: "#/components/schemas/GhostTimelineFrame"
+    GhostSimulationRecord:
+      type: object
+      required: [id, createdAt, request, topologyHash, result]
+      properties:
+        id:
+          type: string
+        createdAt:
+          type: string
+        request:
+          $ref: "#/components/schemas/GhostSimulationRequest"
+        topologyHash:
+          type: string
+        result:
+          $ref: "#/components/schemas/GhostSimulationResult"
+    GhostSimulationListResponse:
+      type: object
+      required: [total, items]
+      properties:
+        total:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/GhostSimulationRecord"
     TimelineEntry:
       type: object
       required: [timestamp, kind, source, summary, resource, severity]

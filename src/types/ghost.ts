@@ -72,8 +72,25 @@ export interface GhostSimulationResult {
   action: string;
   generatedAt: string;
   horizonSeconds: number;
+  engine: string;
+  topologyHash: string;
+  confidence: number;
+  limitations: string[];
   verdict: GhostSimulationVerdict;
   frames: GhostTimelineFrame[];
+}
+
+export interface GhostSimulationRecord {
+  id: string;
+  createdAt: string;
+  request: GhostSimulationRequest;
+  topologyHash: string;
+  result: GhostSimulationResult;
+}
+
+export interface GhostSimulationListResponse {
+  total: number;
+  items: GhostSimulationRecord[];
 }
 
 export interface GhostSimulationVerdict {

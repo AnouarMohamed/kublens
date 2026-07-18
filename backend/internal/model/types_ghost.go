@@ -74,8 +74,25 @@ type GhostSimulationResult struct {
 	Action         string                 `json:"action"`
 	GeneratedAt    string                 `json:"generatedAt"`
 	HorizonSeconds int                    `json:"horizonSeconds"`
+	Engine         string                 `json:"engine"`
+	TopologyHash   string                 `json:"topologyHash"`
+	Confidence     int                    `json:"confidence"`
+	Limitations    []string               `json:"limitations"`
 	Verdict        GhostSimulationVerdict `json:"verdict"`
 	Frames         []GhostTimelineFrame   `json:"frames"`
+}
+
+type GhostSimulationRecord struct {
+	ID           string                 `json:"id"`
+	CreatedAt    string                 `json:"createdAt"`
+	Request      GhostSimulationRequest `json:"request"`
+	TopologyHash string                 `json:"topologyHash"`
+	Result       GhostSimulationResult  `json:"result"`
+}
+
+type GhostSimulationListResponse struct {
+	Total int                     `json:"total"`
+	Items []GhostSimulationRecord `json:"items"`
 }
 
 type GhostSimulationVerdict struct {

@@ -118,9 +118,15 @@ Notes:
 - `GET /diagnostics`
 - `GET /predictions`
 - `GET /predictive-incidents` (backward-compatible alias)
+- `GET /ghost/topology`
+- `GET /ghost/simulations`
+- `POST /ghost/simulations`
+- `GET /ghost/simulations/{id}`
 - `POST /assistant`
 - `POST /assistant/references/feedback`
 - `GET /rag/telemetry`
+
+Ghost simulation responses include engine, topology hash, confidence, and limitations so operators can distinguish narrow node-drain previews from full digital-twin claims.
 
 ## Incident, remediation, memory, postmortem
 
