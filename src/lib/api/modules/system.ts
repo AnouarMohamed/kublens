@@ -4,8 +4,13 @@ import type {
   ClusterInfo,
   ClusterStats,
   DiagnosticsResult,
+  AutonomousRemediationReport,
+  ExperimentalStatus,
+  FleetDriftReport,
   HealthStatus,
+  NodeTelemetryReport,
   PredictionsResult,
+  PredictorModelHealth,
   RightsizingOverview,
   RuntimeStatus,
   SLOOverview,
@@ -47,4 +52,16 @@ export const systemApi = {
   getStats: (signal?: AbortSignal) => requestJson<ClusterStats>(apiRoute("/stats"), { signal }),
   getDiagnostics: (signal?: AbortSignal) => requestJson<DiagnosticsResult>(apiRoute("/diagnostics"), { signal }),
   getPredictions: (force = false): Promise<PredictionsResult> => requestPredictions(force),
+  getPredictorModelHealth: (signal?: AbortSignal) =>
+    requestJson<PredictorModelHealth>(apiRoute("/predictor/model"), { signal }),
+  getExperimentalStatus: (signal?: AbortSignal) =>
+    requestJson<ExperimentalStatus>(apiRoute("/experimental"), { signal }),
+  getNodeTelemetryReport: (signal?: AbortSignal) =>
+    requestJson<NodeTelemetryReport>(apiRoute("/experimental/ebpf/nodes"), { signal }),
+  getFleetDriftReport: (signal?: AbortSignal) =>
+    requestJson<FleetDriftReport>(apiRoute("/experimental/fleet-drift"), { signal }),
+  proposeAutonomousRemediation: () =>
+    requestJson<AutonomousRemediationReport>(apiRoute("/experimental/autonomous-remediation/propose"), {
+      method: "POST",
+    }),
 };

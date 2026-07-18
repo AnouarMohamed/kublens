@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -22,12 +23,13 @@ var (
 
 type Store struct {
 	db       *sql.DB
+	dialect  storesql.Dialect
 	maxItems int
 	now      func() time.Time
 	seq      atomic.Uint64
 }
 
-func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
+func NewStore(db *sql.DB, maxItems int, now func() time.Time, dialects ...storesql.Dialect) *Store {
 	if db == nil {
 		return nil
 	}
@@ -41,6 +43,7 @@ func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
 
 	store := &Store{
 		db:       db,
+		dialect:  firstDialect(dialects),
 		maxItems: maxItems,
 		now:      clock,
 	}
@@ -142,10 +145,10 @@ func (s *Store) GetContext(ctx context.Context, id string) (model.Postmortem, bo
 
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, incident_id, incident_title, severity, opened_at, resolved_at, duration, generated_at,
+		s.bind(`SELECT id, incident_id, incident_title, severity, opened_at, resolved_at, duration, generated_at,
 		        method, root_cause, impact, prevention, timeline_markdown, runbook_markdown, timeline_json, runbook_json
 		   FROM postmortems
-		  WHERE id = ?`,
+		  WHERE id = ?`),
 		needle,
 	)
 
@@ -181,10 +184,10 @@ func (s *Store) GetByIncidentIDContext(
 
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, incident_id, incident_title, severity, opened_at, resolved_at, duration, generated_at,
+		s.bind(`SELECT id, incident_id, incident_title, severity, opened_at, resolved_at, duration, generated_at,
 		        method, root_cause, impact, prevention, timeline_markdown, runbook_markdown, timeline_json, runbook_json
 		   FROM postmortems
-		  WHERE incident_id = ?`,
+		  WHERE incident_id = ?`),
 		needle,
 	)
 
@@ -213,11 +216,11 @@ func (s *Store) insert(ctx context.Context, postmortem model.Postmortem) error {
 
 	_, err = s.db.ExecContext(
 		ctx,
-		`INSERT INTO postmortems (
+		s.bind(`INSERT INTO postmortems (
 			id, incident_id, incident_title, severity, opened_at, resolved_at, duration, generated_at,
 			method, root_cause, impact, prevention, timeline_markdown, runbook_markdown, timeline_json,
 			runbook_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		postmortem.ID,
 		postmortem.IncidentID,
 		postmortem.IncidentTitle,
@@ -247,16 +250,27 @@ func (s *Store) trim(ctx context.Context) error {
 
 	_, err := s.db.ExecContext(
 		ctx,
-		`DELETE FROM postmortems
-		  WHERE id IN (
+		s.bind(`DELETE FROM postmortems
+		  WHERE id NOT IN (
 				SELECT id
 				  FROM postmortems
 				 ORDER BY generated_at DESC, created_at DESC, id DESC
-				 LIMIT -1 OFFSET ?
-		  )`,
+				 LIMIT ?
+		  )`),
 		s.maxItems,
 	)
 	return err
+}
+
+func (s *Store) bind(query string) string {
+	return s.dialect.Bind(query)
+}
+
+func firstDialect(dialects []storesql.Dialect) storesql.Dialect {
+	if len(dialects) > 0 && dialects[0] != "" {
+		return dialects[0]
+	}
+	return storesql.DialectSQLite
 }
 
 func (s *Store) nextID(prefix string) string {
@@ -343,5 +357,6 @@ func isPostmortemExistsError(err error) bool {
 		return false
 	}
 	message := strings.ToLower(err.Error())
-	return strings.Contains(message, "unique constraint failed: postmortems.incident_id")
+	return strings.Contains(message, "unique constraint failed: postmortems.incident_id") ||
+		strings.Contains(message, "duplicate key value violates unique constraint")
 }

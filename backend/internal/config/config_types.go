@@ -30,18 +30,19 @@ type Config struct {
 
 	Cluster ClusterConfig
 
-	Assistant AssistantConfig
-	Predictor PredictorConfig
-	Ghost     GhostConfig
-	Database  DatabaseConfig
-	DBPath    string
-	Memory    MemoryConfig
-	ChatOps   ChatOpsConfig
-	Auth      AuthConfig
-	RateLimit RateLimitConfig
-	Audit     AuditConfig
-	Alerts    AlertsConfig
-	Tracing   TracingConfig
+	Assistant    AssistantConfig
+	Predictor    PredictorConfig
+	Ghost        GhostConfig
+	Database     DatabaseConfig
+	DBPath       string
+	Memory       MemoryConfig
+	ChatOps      ChatOpsConfig
+	Auth         AuthConfig
+	RateLimit    RateLimitConfig
+	Audit        AuditConfig
+	Alerts       AlertsConfig
+	Tracing      TracingConfig
+	Experimental ExperimentalConfig
 
 	WriteActionsEnabled  bool
 	AnonymousPermissions []string
@@ -91,6 +92,7 @@ type DatabaseConfig struct {
 }
 
 type MemoryConfig struct {
+	Store    string
 	FilePath string
 }
 
@@ -131,6 +133,7 @@ type AuditConfig struct {
 	MaxItems   int
 	FilePath   string
 	SigningKey string
+	Store      string
 }
 
 type AlertsConfig struct {
@@ -147,6 +150,14 @@ type TracingConfig struct {
 	Insecure    bool
 	ServiceName string
 	SampleRatio float64
+}
+
+type ExperimentalConfig struct {
+	EBPFTelemetryEnabled          bool
+	FleetDriftEnabled             bool
+	AutonomousRemediationEnabled  bool
+	AutonomousRemediationMinScore int
+	AutonomousRemediationMaxItems int
 }
 
 type profile struct {

@@ -115,6 +115,8 @@ func RequiresWriteGate(method, path string) bool {
 		return true
 	case cleanMethod == http.MethodPost && strings.HasPrefix(cleanPath, "/api/remediation/") && strings.HasSuffix(cleanPath, "/execute"):
 		return true
+	case cleanMethod == http.MethodPost && cleanPath == "/api/experimental/autonomous-remediation/propose":
+		return true
 	default:
 		return false
 	}

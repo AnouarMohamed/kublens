@@ -1,4 +1,13 @@
-import { ExternalLink, FileText, Network, RefreshCw, ShieldCheck, TrendingUp, Wrench } from "lucide-react";
+import {
+  ExternalLink,
+  FileText,
+  FlaskConical,
+  Network,
+  RefreshCw,
+  ShieldCheck,
+  TrendingUp,
+  Wrench,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { navigateToView } from "../../app/viewNavigation";
 import { useAuthSession } from "../../context/AuthSessionContext";
@@ -6,10 +15,12 @@ import { api } from "../../lib/api";
 import type {
   AuditEntry,
   DiagnosticsResult,
+  ExperimentalStatus,
   GhostSimulationListResponse,
   HealthStatus,
   IncidentPrediction,
   PredictionsResult,
+  PredictorModelHealth,
   RemediationProposal,
   RuntimeStatus,
 } from "../../types";
@@ -24,6 +35,8 @@ interface WorkbenchSnapshot {
   enterprise: LoadResult<HealthStatus>;
   diagnostics: LoadResult<DiagnosticsResult>;
   predictions: LoadResult<PredictionsResult>;
+  predictorModel: LoadResult<PredictorModelHealth>;
+  experimental: LoadResult<ExperimentalStatus>;
   remediations: LoadResult<RemediationProposal[]>;
   ghostRuns: LoadResult<GhostSimulationListResponse>;
   audit: LoadResult<AuditEntry[]>;
@@ -47,11 +60,23 @@ export default function IncidentWorkbench() {
     }
 
     setIsLoading(true);
-    const [runtime, enterprise, diagnostics, predictions, remediations, ghostRuns, audit] = await Promise.all([
+    const [
+      runtime,
+      enterprise,
+      diagnostics,
+      predictions,
+      predictorModel,
+      experimental,
+      remediations,
+      ghostRuns,
+      audit,
+    ] = await Promise.all([
       capture(api.getRuntimeStatus()),
       capture(api.getEnterpriseReadiness()),
       capture(api.getDiagnostics()),
       capture(api.getPredictions()),
+      capture(api.getPredictorModelHealth()),
+      capture(api.getExperimentalStatus()),
       capture(api.listRemediation()),
       capture(api.listGhostSimulations(5)),
       capture(api.getAuditLog(20).then((response) => response.items)),
@@ -62,6 +87,8 @@ export default function IncidentWorkbench() {
       enterprise,
       diagnostics,
       predictions,
+      predictorModel,
+      experimental,
       remediations,
       ghostRuns,
       audit,
@@ -90,6 +117,7 @@ export default function IncidentWorkbench() {
   const latestGhostRun = snapshot?.ghostRuns.data?.items[0] ?? null;
   const latestAudit = snapshot?.audit.data?.[0] ?? null;
   const blockedChecks = snapshot?.enterprise.data?.checks.filter((check) => !check.ok) ?? [];
+  const enabledExperimental = snapshot?.experimental.data?.features.filter((feature) => feature.enabled) ?? [];
   const loadErrors = useMemo(() => collectErrors(snapshot), [snapshot]);
 
   return (
@@ -134,9 +162,9 @@ export default function IncidentWorkbench() {
         />
         <KpiCell
           label="Predictor"
-          value={snapshot?.runtime.data?.predictorMode ?? "unknown"}
-          tone={snapshot?.runtime.data?.predictorHealthy ? "good" : "warn"}
-          note={snapshot?.runtime.data?.predictorEnabled ? "external scorer" : "fallback only"}
+          value={snapshot?.predictorModel.data?.mode ?? snapshot?.runtime.data?.predictorMode ?? "unknown"}
+          tone={predictorTone(snapshot?.predictorModel.data, snapshot?.runtime.data)}
+          note={predictorNote(snapshot?.predictorModel.data, snapshot?.runtime.data)}
         />
         <KpiCell
           label="Ghost"
@@ -155,6 +183,12 @@ export default function IncidentWorkbench() {
           value={latestAudit?.hash ? "hashed" : "pending"}
           tone={latestAudit?.hash ? "good" : "neutral"}
           note={latestAudit ? `${latestAudit.status} ${latestAudit.path}` : "no entries"}
+        />
+        <KpiCell
+          label="Experimental"
+          value={String(enabledExperimental.length)}
+          tone={enabledExperimental.length > 0 ? "warn" : "neutral"}
+          note={`${snapshot?.experimental.data?.features.length ?? 0} feature gates`}
         />
       </section>
 
@@ -206,7 +240,7 @@ export default function IncidentWorkbench() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-3">
+      <section className="grid gap-4 xl:grid-cols-4">
         <WorkbenchPanel
           eyebrow="Simulate"
           title="Latest Ghost Run"
@@ -280,6 +314,33 @@ export default function IncidentWorkbench() {
             <p className="text-xs text-zinc-500">Last loaded {lastLoadedAt ? formatTime(lastLoadedAt) : "not yet"}</p>
           </div>
         </WorkbenchPanel>
+
+        <WorkbenchPanel
+          eyebrow="Gates"
+          title="Experimental Controls"
+          actionLabel="Open readiness"
+          actionView="audit"
+          icon={<FlaskConical size={14} />}
+        >
+          <div className="divide-y divide-zinc-800 border border-zinc-800">
+            {(snapshot?.experimental.data?.features ?? []).map((feature) => (
+              <div key={feature.name} className="px-3 py-2">
+                <div className="flex items-start justify-between gap-3">
+                  <p className="min-w-0 truncate text-sm font-medium text-zinc-100">
+                    {compactFeatureName(feature.name)}
+                  </p>
+                  <span className={`border px-2 py-0.5 text-[11px] ${feature.enabled ? warnBadge : neutralBadge}`}>
+                    {feature.enabled ? "on" : "off"}
+                  </span>
+                </div>
+                <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{feature.message}</p>
+              </div>
+            ))}
+            {(snapshot?.experimental.data?.features.length ?? 0) === 0 && (
+              <EmptyRow text={isLoading ? "Loading feature gates..." : "No experimental status returned."} />
+            )}
+          </div>
+        </WorkbenchPanel>
       </section>
     </div>
   );
@@ -330,6 +391,32 @@ function readinessTone(status?: string): KpiTone {
   return "neutral";
 }
 
+function predictorTone(
+  model: PredictorModelHealth | null | undefined,
+  runtime: RuntimeStatus | null | undefined,
+): KpiTone {
+  if (model?.lastError || runtime?.predictorHealthy === false || model?.stale) {
+    return "warn";
+  }
+  if (model?.usableForBlending || model?.mode === "deterministic") {
+    return "good";
+  }
+  return "neutral";
+}
+
+function predictorNote(
+  model: PredictorModelHealth | null | undefined,
+  runtime: RuntimeStatus | null | undefined,
+): string {
+  if (model?.lastError) {
+    return model.lastError;
+  }
+  if (model?.modelVersion && model.modelVersion !== "deterministic") {
+    return model.modelVersion;
+  }
+  return runtime?.predictorEnabled ? "external scorer" : "fallback only";
+}
+
 function riskBadgeClass(risk: string): string {
   const normalized = risk.trim().toLowerCase();
   if (normalized === "critical" || normalized === "high") {
@@ -361,6 +448,14 @@ function formatTime(value: string): string {
 
 function shortHash(value: string): string {
   return value.length > 12 ? value.slice(0, 12) : value;
+}
+
+function compactFeatureName(value: string): string {
+  return value
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 type KpiTone = "good" | "warn" | "bad" | "neutral";

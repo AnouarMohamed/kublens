@@ -20,6 +20,7 @@ flowchart TD
       Router --> Alerts["Alert Dispatch + Lifecycle"]
       Router --> Stream["Event Bus + Stream Endpoints"]
       Router --> Obs["Request Metrics + OTEL"]
+      Router --> SQL["SQL Stores (SQLite/Postgres)"]
     end
 
     Cluster --> State["Cluster State Cache"]
@@ -28,27 +29,29 @@ flowchart TD
     Intel --> Plugins["Diagnostic Plugins"]
     Assistant --> RAG["RAG Retriever"]
     Assistant --> LLM["OpenAI-compatible Provider (optional)"]
-    Router --> PredictorClient["Predictor Client (optional)"] --> Predictor["FastAPI Predictor"]
+    Router --> PredictorClient["Predictor Client (optional)"] --> Predictor["FastAPI Predictor + Model Governance"]
     Alerts --> Webhooks["Alertmanager / Slack / PagerDuty"]
 ```
 
 ## Major runtime responsibilities
 
-| Layer                                  | Responsibility                                                |
-| -------------------------------------- | ------------------------------------------------------------- |
-| `src/`                                 | UI shell, view routing, feature views, typed API usage        |
-| `internal/httpapi`                     | Transport, middleware, route controllers, streaming endpoints |
-| `internal/auth`                        | Principal extraction, role checks, write-gate policy          |
-| `internal/cluster`                     | Kubernetes read/write integration and model mapping           |
-| `internal/state`                       | Snapshot cache and watcher-fed cluster state                  |
-| `internal/intelligence` + `plugins/*`  | Deterministic diagnostics                                     |
-| `internal/rag`                         | Documentation retrieval/ranking and telemetry                 |
-| `internal/incident`                    | Incident construction and runbook lifecycle                   |
-| `internal/remediation`                 | Proposal generation + controlled execution                    |
-| `internal/memory`                      | Persistent runbook and fix pattern storage                    |
-| `internal/postmortem`                  | Postmortem generation and storage                             |
-| `internal/alerts` + `internal/chatops` | Outbound notifications and alert channels                     |
-| `predictor/app`                        | External deterministic risk scoring service                   |
+| Layer                                  | Responsibility                                                    |
+| -------------------------------------- | ----------------------------------------------------------------- |
+| `src/`                                 | UI shell, view routing, feature views, typed API usage            |
+| `internal/httpapi`                     | Transport, middleware, route controllers, streaming endpoints     |
+| `internal/auth`                        | Principal extraction, role checks, write-gate policy              |
+| `internal/cluster`                     | Kubernetes read/write integration and model mapping               |
+| `internal/state`                       | Snapshot cache and watcher-fed cluster state                      |
+| `internal/intelligence` + `plugins/*`  | Deterministic diagnostics                                         |
+| `internal/rag`                         | Documentation retrieval/ranking and telemetry                     |
+| `internal/incident`                    | Incident construction and runbook lifecycle                       |
+| `internal/remediation`                 | Proposal generation + controlled execution                        |
+| `internal/memory`                      | Persistent runbook and fix pattern storage                        |
+| `internal/postmortem`                  | Postmortem generation and storage                                 |
+| `internal/db`                          | SQLite/Postgres opening, migrations, and SQL dialect binding      |
+| `internal/ghost`                       | Ghost topology, simulation, and durable simulation history        |
+| `internal/alerts` + `internal/chatops` | Outbound notifications and alert channels                         |
+| `predictor/app`                        | External deterministic risk scoring, ML governance, and telemetry |
 
 ## HTTP routing boundaries
 
@@ -67,6 +70,7 @@ Current controller-owned route groups include:
 - `/api/predictions` via `PredictionController`
 - `/api/ghost` via `GhostController`
 - `/api/alerts` via `AlertController`
+- `/api/experimental*` via server-level experimental handlers
 
 Controllers receive narrow dependencies such as `ClusterReader`, request metrics, clocks, JSON decoders, audit handles, or callback functions. They should not receive the full `Server` unless a route group still requires middleware-level runtime ownership.
 
@@ -84,7 +88,8 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 1. Current snapshot is collected from state/cluster service.
 2. Deterministic analyzers produce diagnostics.
 3. Prediction endpoint calls predictor service when configured.
-4. If predictor is unavailable, backend falls back to deterministic local scoring.
+4. Predictor model health is exposed through `/api/predictor/model`.
+5. If predictor is unavailable, backend falls back to deterministic local scoring.
 
 ### Assistant flow
 
@@ -106,6 +111,18 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 2. Clients subscribe over `/api/stream` (SSE) or `/api/stream/ws` (WebSocket).
 3. Request-level and action-level audit entries are persisted in bounded audit storage.
 
+### Durable workflow storage
+
+1. Backend startup opens `DATABASE_DRIVER=sqlite` or `DATABASE_DRIVER=postgres`.
+2. Automatic migrations create workflow tables when `DATABASE_MIGRATIONS_AUTO=true`.
+3. Incident, remediation, postmortem, alert lifecycle, and Ghost simulation history share the SQL handle.
+
+### Experimental flow
+
+1. `/api/experimental` reports eBPF telemetry, fleet drift, and autonomous remediation feature gates.
+2. eBPF telemetry and fleet drift reports are read-only and disabled by default.
+3. Autonomous remediation proposal generation is disabled by default, requires operator role and write gate, and only writes proposal records for later human approval.
+
 ## Policy boundaries
 
 - Route-level role requirements are enforced in auth middleware.
@@ -118,6 +135,8 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 - `GET /api/healthz` - liveness
 - `GET /api/readyz` - readiness/dependency checks
 - `GET /api/runtime` - runtime security posture summary
+- `GET /api/experimental` - experimental feature gate summary
+- `GET /api/predictor/model` - predictor model governance summary
 - `GET /api/metrics` - JSON API telemetry
 - `GET /api/metrics/prometheus` - Prometheus exposition
 - `GET /api/openapi.yaml` - API contract

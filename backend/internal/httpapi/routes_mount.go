@@ -16,6 +16,10 @@ func (s *Server) mountSystemRoutes(api chi.Router) {
 	api.Get("/openapi.yaml", s.handleOpenAPIYAML)
 	api.Get("/version", s.handleVersion)
 	api.Get("/runtime", s.handleRuntime)
+	api.Get("/experimental", s.handleExperimentalStatus)
+	api.Get("/experimental/ebpf/nodes", s.handleExperimentalNodeTelemetry)
+	api.Get("/experimental/fleet-drift", s.handleExperimentalFleetDrift)
+	api.Post("/experimental/autonomous-remediation/propose", s.handleAutonomousRemediationPropose)
 
 	api.Get("/auth/session", s.handleAuthSession)
 	api.Post("/auth/login", s.handleAuthLogin)
@@ -60,10 +64,11 @@ func (s *Server) mountObservabilityRoutes(api chi.Router) {
 		s.cluster,
 		s.ghostClient,
 		s.ghostRuns,
-		s.remediations,
 		s.logger,
 		s.now,
 		s.decodeJSONBody,
+		s.recordGhostSuccess,
+		s.recordGhostFailure,
 	).Routes())
 
 	predictions := NewPredictionController(
@@ -77,6 +82,7 @@ func (s *Server) mountObservabilityRoutes(api chi.Router) {
 		s.recordPredictorFailure,
 	)
 	api.Get("/predictions", predictions.handlePredictions)
+	api.Get("/predictor/model", s.handlePredictorModelHealth)
 	api.Get("/predictive-incidents", predictions.handlePredictions) // Backward-compatible alias for older frontend builds.
 
 	api.Mount("/alerts", NewAlertController(s.alerts, s.alertLifecycle, s.decodeJSONBody).Routes())

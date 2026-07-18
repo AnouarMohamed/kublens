@@ -157,6 +157,125 @@ func TestEnterpriseReadinessAcceptsDurableSQLiteInProd(t *testing.T) {
 	}
 }
 
+func TestPredictorModelHealthFallsBackWhenProviderUnavailable(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithRuntimeStatus(model.RuntimeStatus{
+			PredictorEnabled:   true,
+			PredictorHealthy:   false,
+			PredictorMode:      "shadow",
+			PredictorLastError: "predictor unavailable",
+		}),
+	)
+	server.predictorHealth.enabled = true
+	server.predictorHealth.lastFailure = time.Now()
+	server.predictorHealth.lastError = "predictor unavailable"
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/predictor/model", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("predictor model status = %d, want 200", rr.Code)
+	}
+
+	var payload model.PredictorModelHealth
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode predictor model health: %v", err)
+	}
+	if payload.Source != "backend" {
+		t.Fatalf("source = %q, want backend", payload.Source)
+	}
+	if payload.Mode != "shadow" {
+		t.Fatalf("mode = %q, want shadow", payload.Mode)
+	}
+	if payload.LastError != "predictor unavailable" {
+		t.Fatalf("lastError = %q", payload.LastError)
+	}
+}
+
+func TestExperimentalStatusDisabledByDefault(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(testClusterReader{}, nil, logger)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/experimental", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("experimental status = %d, want 200", rr.Code)
+	}
+
+	var payload model.ExperimentalStatus
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode experimental status: %v", err)
+	}
+	if len(payload.Features) != 3 {
+		t.Fatalf("features = %d, want 3", len(payload.Features))
+	}
+	for _, feature := range payload.Features {
+		if feature.Enabled {
+			t.Fatalf("feature %s should be disabled by default", feature.Name)
+		}
+		if !feature.Experimental {
+			t.Fatalf("feature %s should be marked experimental", feature.Name)
+		}
+	}
+}
+
+func TestExperimentalNodeTelemetryCompatibilityReport(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithExperimentalConfig(ExperimentalConfig{EBPFTelemetryEnabled: true}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/experimental/ebpf/nodes", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("node telemetry status = %d, want 200", rr.Code)
+	}
+
+	var payload model.NodeTelemetryReport
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode node telemetry: %v", err)
+	}
+	if !payload.Enabled || !payload.Experimental {
+		t.Fatalf("expected enabled experimental telemetry report: %+v", payload)
+	}
+	if payload.AgentConnected {
+		t.Fatal("compatibility report should not claim an eBPF agent is connected")
+	}
+	if len(payload.Nodes) == 0 {
+		t.Fatal("expected node telemetry items")
+	}
+}
+
+func TestAutonomousRemediationPolicyBlocksWhenWriteGateDisabled(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithExperimentalConfig(ExperimentalConfig{AutonomousRemediationEnabled: true}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/experimental/autonomous-remediation/propose", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("autonomous remediation status = %d, want 403", rr.Code)
+	}
+}
+
 func TestOpenAPISpecEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := newServer(testClusterReader{}, nil, logger)

@@ -34,11 +34,11 @@ func (s *Store) GetGitOpsArtifactContext(
 
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT proposal_id, support_level, strategy, summary, branch_name, pr_title, commit_message,
+		s.bind(`SELECT proposal_id, support_level, strategy, summary, branch_name, pr_title, commit_message,
 		        target_path, target_kind, target_namespace, target_name, format, artifact_body,
 		        instructions_json, generated_by, generated_at, updated_at
 		   FROM remediation_gitops_artifacts
-		  WHERE proposal_id = ?`,
+		  WHERE proposal_id = ?`),
 		needle,
 	)
 
@@ -93,14 +93,14 @@ func (s *Store) UpsertGitOpsArtifactContext(
 		return model.RemediationGitOpsArtifact{}, err
 	}
 
-	_, err = s.db.ExecContext(
+	result, err := s.db.ExecContext(
 		ctx,
-		`INSERT OR REPLACE INTO remediation_gitops_artifacts (
-			proposal_id, support_level, strategy, summary, branch_name, pr_title, commit_message,
-			target_path, target_kind, target_namespace, target_name, format, artifact_body,
-			instructions_json, generated_by, generated_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		item.ProposalID,
+		s.bind(`UPDATE remediation_gitops_artifacts
+		    SET support_level = ?, strategy = ?, summary = ?, branch_name = ?, pr_title = ?,
+		        commit_message = ?, target_path = ?, target_kind = ?, target_namespace = ?,
+		        target_name = ?, format = ?, artifact_body = ?, instructions_json = ?,
+		        generated_by = ?, generated_at = ?, updated_at = ?
+		  WHERE proposal_id = ?`),
 		string(item.Artifact.SupportLevel),
 		item.Artifact.Strategy,
 		item.Artifact.Summary,
@@ -117,7 +117,42 @@ func (s *Store) UpsertGitOpsArtifactContext(
 		item.GeneratedBy,
 		item.GeneratedAt,
 		item.UpdatedAt,
+		item.ProposalID,
 	)
+	if err != nil {
+		return model.RemediationGitOpsArtifact{}, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return model.RemediationGitOpsArtifact{}, err
+	}
+	if affected == 0 {
+		_, err = s.db.ExecContext(
+			ctx,
+			s.bind(`INSERT INTO remediation_gitops_artifacts (
+				proposal_id, support_level, strategy, summary, branch_name, pr_title, commit_message,
+				target_path, target_kind, target_namespace, target_name, format, artifact_body,
+				instructions_json, generated_by, generated_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+			item.ProposalID,
+			string(item.Artifact.SupportLevel),
+			item.Artifact.Strategy,
+			item.Artifact.Summary,
+			item.Artifact.BranchName,
+			item.Artifact.PRTitle,
+			item.Artifact.CommitMessage,
+			item.Artifact.TargetPath,
+			item.Artifact.TargetKind,
+			item.Artifact.TargetNamespace,
+			item.Artifact.TargetName,
+			item.Artifact.Format,
+			item.Artifact.ArtifactBody,
+			string(instructionsJSON),
+			item.GeneratedBy,
+			item.GeneratedAt,
+			item.UpdatedAt,
+		)
+	}
 	if err != nil {
 		return model.RemediationGitOpsArtifact{}, err
 	}

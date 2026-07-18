@@ -9,6 +9,8 @@ This document tracks the work required to move the optional predictor ML path fr
 - Runtime ML feature order is declared by model metadata. Without metadata, the default contract includes restarts, CPU, memory, pod status, age, warning counts, namespace pressure, node readiness, restart velocity, CPU/memory trend deltas, phase duration, image-pull/backoff events, and previous incident count.
 - ML scores can raise deterministic pod risk, but cannot lower deterministic risk.
 - `GET /model` reports mode, model load status, metadata load status, freshness, required features, blending readiness, evaluation metrics, promotion gates, calibration method, and calibrated threshold.
+- `GET /telemetry` reports prediction volume, latency, generated item count, ML inference attempts/failures, feature missing rate, score distribution, and ML/deterministic disagreement count.
+- The backend proxies model governance through `GET /api/predictor/model` for the workbench.
 - Shadow mode emits `mlShadowRisk` without changing final risk.
 - Blended mode raises pod risk only when the model is loaded, metadata is loaded, the metadata is not stale, and feature completeness meets `PREDICTOR_MIN_FEATURE_COMPLETENESS`.
 - Prediction signals include ML feature completeness, model version, mode, threshold, blocked reason, and shadow/blended score where applicable.
@@ -24,14 +26,14 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 
 | Area              | Required work                                                                                                                                                                                                          | Status      |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Partial     |
-| Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Partial     |
-| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Partial     |
-| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Partial     |
+| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Implemented |
+| Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Implemented |
+| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Implemented |
+| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Implemented |
 | Shadow mode       | Support emitting ML scores without blending them into final risk during rollout.                                                                                                                                       | Implemented |
-| Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial     |
-| Observability     | Export model version, inference latency, load failures, feature missing rates, score distribution, drift signals, and ML/deterministic disagreement.                                                                   | Partial     |
-| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Partial     |
+| Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Implemented |
+| Observability     | Export model version, inference latency/failures, feature missing rates, score distribution, drift/disagreement signals, and ML/deterministic disagreement.                                                            | Implemented |
+| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Implemented |
 
 ## Model metadata contract
 
@@ -75,6 +77,19 @@ PREDICTOR_MAX_MODEL_AGE_HOURS=168
 ```
 
 `shadow` is the required first rollout mode for promoted models. `blended` should be enabled only after offline evaluation and shadow disagreement review.
+
+## Runtime telemetry
+
+`GET /telemetry` returns process-local predictor counters:
+
+- total prediction requests
+- generated prediction count
+- average and last prediction latency
+- ML inference attempts and failures
+- latest feature missing rate
+- score distribution buckets
+- ML/deterministic disagreement count
+- last prediction timestamp
 
 ## Trainer metadata
 

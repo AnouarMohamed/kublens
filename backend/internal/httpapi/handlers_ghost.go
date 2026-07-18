@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -15,17 +14,17 @@ import (
 
 	ghostengine "kubelens-backend/internal/ghost"
 	"kubelens-backend/internal/model"
-	"kubelens-backend/internal/remediation"
 )
 
 type GhostController struct {
 	cluster        ClusterReader
 	ghostClient    ghostClient
 	runs           ghostSimulationStore
-	remediations   remediationStore
 	logger         *slog.Logger
 	now            func() time.Time
 	decodeJSONBody func(*http.Request, any) error
+	recordSuccess  func()
+	recordFailure  func(error)
 }
 
 const defaultGhostSimulationLimit = 200
@@ -56,10 +55,11 @@ func NewGhostController(
 	cluster ClusterReader,
 	ghostClient ghostClient,
 	runs ghostSimulationStore,
-	remediations remediationStore,
 	logger *slog.Logger,
 	now func() time.Time,
 	decode func(*http.Request, any) error,
+	recordSuccess func(),
+	recordFailure func(error),
 ) *GhostController {
 	if logger == nil {
 		logger = slog.Default()
@@ -70,14 +70,21 @@ func NewGhostController(
 	if decode == nil {
 		decode = decodeJSONBody
 	}
+	if recordSuccess == nil {
+		recordSuccess = func() {}
+	}
+	if recordFailure == nil {
+		recordFailure = func(error) {}
+	}
 	return &GhostController{
 		cluster:        cluster,
 		ghostClient:    ghostClient,
 		runs:           runs,
-		remediations:   remediations,
 		logger:         logger,
 		now:            now,
 		decodeJSONBody: decode,
+		recordSuccess:  recordSuccess,
+		recordFailure:  recordFailure,
 	}
 }
 
@@ -114,9 +121,11 @@ func (gc *GhostController) handleGhostSimulation(w http.ResponseWriter, r *http.
 		var simErr error
 		result, simErr = gc.ghostClient.Simulate(r.Context(), normalized, topology)
 		if simErr != nil {
+			gc.recordFailure(simErr)
 			gc.logger.Warn("ghost engine gRPC simulation failed, falling back to in-memory simulation", "error", simErr)
 		} else {
 			simulated = true
+			gc.recordSuccess()
 			result.Engine = "grpc"
 		}
 	}
@@ -135,28 +144,6 @@ func (gc *GhostController) handleGhostSimulation(w http.ResponseWriter, r *http.
 			Result:       result,
 		}
 		gc.runs.Save(record)
-	}
-
-	// Automated Remediation Proposal for favorable verdicts
-	if (result.Verdict.Severity == "warning" || result.Verdict.Severity == "info") && gc.remediations != nil {
-		proposal := model.RemediationProposal{
-			ID:        fmt.Sprintf("ghost-%d", gc.now().UnixNano()),
-			Kind:      model.RemediationKind(req.Action),
-			Status:    "proposed",
-			Resource:  req.NodeName,
-			Reason:    result.Verdict.Summary,
-			RiskLevel: "low", // Map simulation warning/info to low-risk proposal
-			CreatedAt: gc.now().Format(time.RFC3339),
-		}
-		gc.remediations.SaveProposals([]model.RemediationProposal{proposal})
-		gc.logger.Info("automated remediation proposal created from ghost simulation", "id", proposal.ID, "resource", proposal.Resource)
-
-		// Automatically generate GitOps artifact
-		artifact := remediation.BuildGitOpsArtifact(proposal, collectGitOpsWorkloadInventory(r.Context(), gc.cluster), gc.now())
-		_, err := upsertRemediationGitOpsArtifactWithContext(r.Context(), gc.remediations, proposal.ID, artifact, "system/ghost-engine")
-		if err != nil {
-			gc.logger.Error("failed to persist ghost simulation gitops artifact", "proposal_id", proposal.ID, "error", err)
-		}
 	}
 
 	writeJSON(w, http.StatusOK, result)

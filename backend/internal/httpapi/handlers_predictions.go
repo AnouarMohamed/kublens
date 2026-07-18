@@ -35,6 +35,10 @@ type predictionProvider interface {
 	Predict(ctx context.Context, input predictorRequest) (model.PredictionsResult, error)
 }
 
+type predictorModelHealthProvider interface {
+	ModelHealth(ctx context.Context) (model.PredictorModelHealth, error)
+}
+
 type PredictionController struct {
 	cluster              ClusterReader
 	predictor            predictionProvider
@@ -147,6 +151,80 @@ func (p *predictorClient) Predict(ctx context.Context, input predictorRequest) (
 	return out, nil
 }
 
+func (p *predictorClient) ModelHealth(ctx context.Context) (model.PredictorModelHealth, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.baseURL+"/model", nil)
+	if err != nil {
+		return model.PredictorModelHealth{}, err
+	}
+	if p.sharedSecret != "" {
+		req.Header.Set("X-Predictor-Secret", p.sharedSecret)
+	}
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
+
+	resp, err := p.client.Do(req)
+	if err != nil {
+		return model.PredictorModelHealth{}, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return model.PredictorModelHealth{}, fmt.Errorf("predictor model status %d", resp.StatusCode)
+	}
+
+	var out model.PredictorModelHealth
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return model.PredictorModelHealth{}, err
+	}
+	out.Source = fallbackHealthSource(out.Source, "python-service")
+	if out.RequiredFeatures == nil {
+		out.RequiredFeatures = []string{}
+	}
+	if out.EvaluationMetrics == nil {
+		out.EvaluationMetrics = map[string]float64{}
+	}
+	if out.PromotionGates == nil {
+		out.PromotionGates = map[string]float64{}
+	}
+	return out, nil
+}
+
+func (s *Server) handlePredictorModelHealth(w http.ResponseWriter, r *http.Request) {
+	runtime := s.runtimeSnapshot()
+	fallback := model.PredictorModelHealth{
+		Source:                 "backend",
+		Mode:                   fallbackHealthSource(runtime.PredictorMode, "deterministic"),
+		Enabled:                runtime.PredictorEnabled,
+		UsableForBlending:      false,
+		ModelLoaded:            false,
+		MetadataLoaded:         false,
+		ModelVersion:           "deterministic",
+		Stale:                  false,
+		MaxModelAgeHours:       0,
+		MinFeatureCompleteness: 0,
+		RequiredFeatures:       []string{},
+		CalibrationMethod:      "",
+		EvaluationMetrics:      map[string]float64{},
+		PromotionGates:         map[string]float64{},
+		LastError:              runtime.PredictorLastError,
+	}
+	provider, ok := s.predictor.(predictorModelHealthProvider)
+	if !ok || s.predictor == nil {
+		writeJSON(w, http.StatusOK, fallback)
+		return
+	}
+
+	health, err := provider.ModelHealth(r.Context())
+	if err != nil {
+		s.recordPredictorFailure(err)
+		fallback.Source = "backend-unavailable"
+		fallback.LastError = err.Error()
+		writeJSON(w, http.StatusOK, fallback)
+		return
+	}
+	s.recordPredictorSuccess()
+	writeJSON(w, http.StatusOK, health)
+}
+
 func (pc *PredictionController) handlePredictions(w http.ResponseWriter, r *http.Request) {
 	forceRefresh := queryBool(r, "force")
 	if !forceRefresh {
@@ -189,6 +267,14 @@ func queryBool(r *http.Request, key string) bool {
 	default:
 		return false
 	}
+}
+
+func fallbackHealthSource(value string, fallback string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return fallback
+	}
+	return trimmed
 }
 
 func (s *Server) invalidatePredictionsCache() {

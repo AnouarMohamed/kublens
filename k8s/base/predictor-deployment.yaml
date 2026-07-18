@@ -27,9 +27,14 @@ spec:
             - name: http
               containerPort: 8001
           envFrom:
+            - configMapRef:
+                name: k8s-ops-config
             - secretRef:
                 name: k8s-ops-secret
                 optional: true
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "kubelens-predictor"
           readinessProbe:
             httpGet:
               path: /healthz

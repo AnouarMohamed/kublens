@@ -53,23 +53,24 @@ flowchart TD
 
 ## What it does
 
-| Area                        | Detail                                                                                                                                                                                                                                  |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Incident Workbench**      | Primary detect, simulate, remediate, and audit queue for on-call operators                                                                                                                                                              |
-| **Ghost Engine**            | Proactive node-drain maintenance simulation with predictive timelines, confidence, node-selector checks, and taint/toleration-aware placement. Advanced scheduler parity, eBPF network modeling, and cascade scoring are roadmap items. |
-| **Inventory**               | Pods, nodes, deployments, services, ingresses, namespaces, RBAC, events, storage, config                                                                                                                                                |
-| **Safe operations**         | Controlled write actions (restart/scale/rollback/cordon/drain/apply) behind RBAC + global write gate                                                                                                                                    |
-| **Diagnostics**             | Deterministic intelligence engine with evidence + recommendations                                                                                                                                                                       |
-| **Predictions**             | Predictor-backed risk scoring with deterministic local fallback                                                                                                                                                                         |
-| **Assistant + RAG**         | Deterministic context with optional OpenAI-compatible LLM and documentation grounding                                                                                                                                                   |
-| **Incident workflow**       | Incident creation, runbook step progression, resolution, and remediation association                                                                                                                                                    |
-| **Remediation workflow**    | Proposal, approval, execution, rejection (with four-eyes enforcement in `prod`)                                                                                                                                                         |
-| **Cluster memory**          | Runbook and fix-pattern memory for operational learning                                                                                                                                                                                 |
-| **Postmortems**             | Generated postmortems from incident timeline + runbook state                                                                                                                                                                            |
-| **Metrics + observability** | API telemetry, Prometheus export, dashboard charts, tracing integration                                                                                                                                                                 |
-| **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, hash-chain verification, and optional HMAC audit signatures                                                                                                                     |
-| **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                                                                                                 |
-| **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                                                                                                      |
+| Area                        | Detail                                                                                                                                                            |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Incident Workbench**      | Primary detect, simulate, remediate, and audit queue for on-call operators                                                                                        |
+| **Ghost Engine**            | Proactive node-drain maintenance simulation with persisted history, predictive timelines, confidence, node-selector checks, and taint/toleration-aware placement. |
+| **Inventory**               | Pods, nodes, deployments, services, ingresses, namespaces, RBAC, events, storage, config                                                                          |
+| **Safe operations**         | Controlled write actions (restart/scale/rollback/cordon/drain/apply) behind RBAC + global write gate                                                              |
+| **Diagnostics**             | Deterministic intelligence engine with evidence + recommendations                                                                                                 |
+| **Predictions**             | Predictor-backed risk scoring with deterministic local fallback, model governance status, and predictor telemetry                                                 |
+| **Assistant + RAG**         | Deterministic context with optional OpenAI-compatible LLM and documentation grounding                                                                             |
+| **Incident workflow**       | Incident creation, runbook step progression, resolution, and remediation association                                                                              |
+| **Remediation workflow**    | Proposal, approval, execution, rejection (with four-eyes enforcement in `prod`)                                                                                   |
+| **Cluster memory**          | Runbook and fix-pattern memory for operational learning                                                                                                           |
+| **Postmortems**             | Generated postmortems from incident timeline + runbook state                                                                                                      |
+| **Metrics + observability** | API telemetry, Prometheus export, dashboard charts, tracing integration                                                                                           |
+| **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, hash-chain verification, and optional HMAC audit signatures                                               |
+| **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                           |
+| **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                                |
+| **Experimental controls**   | Disabled-by-default eBPF telemetry, fleet drift detection, and policy-gated autonomous remediation proposals                                                      |
 
 ---
 
@@ -391,7 +392,7 @@ RATE_LIMIT_ENABLED=true
 RATE_LIMIT_REQUESTS=300
 RATE_LIMIT_WINDOW_SECONDS=60
 
-# Supported in this release: file-backed sqlite. Postgres-backed stores remain a Phase 4 roadmap item.
+# Supported in this release: file-backed sqlite or Postgres-backed SQL stores.
 DATABASE_DRIVER=sqlite
 DATABASE_URL=
 DATABASE_MIGRATIONS_AUTO=true

@@ -93,4 +93,50 @@ var schemaStatements = []string{
 		updated_at TEXT NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_alert_lifecycle_updated_at ON alert_lifecycle(updated_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS ghost_simulations (
+		id TEXT PRIMARY KEY,
+		created_at TEXT NOT NULL,
+		action TEXT NOT NULL,
+		node_name TEXT NOT NULL,
+		topology_hash TEXT NOT NULL,
+		request_json TEXT NOT NULL,
+		result_json TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_ghost_simulations_created_at ON ghost_simulations(created_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS memory_runbooks (
+		id TEXT PRIMARY KEY,
+		title TEXT NOT NULL,
+		tags_json TEXT NOT NULL,
+		description TEXT NOT NULL,
+		steps_json TEXT NOT NULL,
+		embedding_json TEXT NOT NULL,
+		usage_count INTEGER NOT NULL,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_memory_runbooks_updated_at ON memory_runbooks(updated_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS memory_fix_patterns (
+		id TEXT PRIMARY KEY,
+		incident_id TEXT NOT NULL,
+		proposal_id TEXT NOT NULL,
+		title TEXT NOT NULL,
+		description TEXT NOT NULL,
+		resource TEXT NOT NULL,
+		kind TEXT NOT NULL,
+		recorded_by TEXT NOT NULL,
+		recorded_at TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_memory_fix_patterns_recorded_at ON memory_fix_patterns(recorded_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS audit_entries (
+		id TEXT PRIMARY KEY,
+		sequence_id INTEGER NOT NULL,
+		timestamp TEXT NOT NULL,
+		action TEXT NOT NULL,
+		status INTEGER NOT NULL,
+		success BOOLEAN NOT NULL,
+		hash TEXT NOT NULL,
+		signature TEXT NOT NULL,
+		entry_json TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_audit_entries_sequence_id ON audit_entries(sequence_id DESC)`,
 }

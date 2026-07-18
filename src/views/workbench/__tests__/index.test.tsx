@@ -8,6 +8,8 @@ const mockAPI = vi.hoisted(() => ({
   getEnterpriseReadiness: vi.fn(),
   getDiagnostics: vi.fn(),
   getPredictions: vi.fn(),
+  getPredictorModelHealth: vi.fn(),
+  getExperimentalStatus: vi.fn(),
   listRemediation: vi.fn(),
   listGhostSimulations: vi.fn(),
   getAuditLog: vi.fn(),
@@ -114,6 +116,44 @@ describe("IncidentWorkbench", () => {
         },
       ],
     });
+    mockAPI.getPredictorModelHealth.mockResolvedValue({
+      source: "python-service",
+      mode: "shadow",
+      enabled: true,
+      usableForBlending: false,
+      modelLoaded: true,
+      metadataLoaded: true,
+      modelVersion: "pod-risk-2026-07",
+      stale: false,
+      maxModelAgeHours: 168,
+      minFeatureCompleteness: 0.8,
+      requiredFeatures: ["restarts"],
+      calibrationMethod: "f1_threshold_tuning",
+      evaluationMetrics: { recall: 0.84 },
+      promotionGates: { recall: 0.8 },
+      lastError: "",
+    });
+    mockAPI.getExperimentalStatus.mockResolvedValue({
+      generatedAt: "2026-07-18T12:00:00Z",
+      features: [
+        {
+          name: "ebpf-node-telemetry",
+          enabled: false,
+          experimental: true,
+          maturity: "experimental",
+          message: "Deep node telemetry ingestion is disabled.",
+          limitations: [],
+        },
+        {
+          name: "autonomous-remediation-proposals",
+          enabled: true,
+          experimental: true,
+          maturity: "experimental",
+          message: "Autonomous remediation proposal generation is enabled behind policy gates.",
+          limitations: [],
+        },
+      ],
+    });
     mockAPI.listRemediation.mockResolvedValue([remediation()]);
     mockAPI.listGhostSimulations.mockResolvedValue({
       total: 1,
@@ -169,6 +209,8 @@ describe("IncidentWorkbench", () => {
     });
 
     expect(screen.getByText("shadow")).toBeInTheDocument();
+    expect(screen.getByText("pod-risk-2026-07")).toBeInTheDocument();
+    expect(screen.getByText("Autonomous Remediation Proposals")).toBeInTheDocument();
     expect(screen.getByText("mlShadowRisk: 97%")).toBeInTheDocument();
     expect(screen.getByText("Drain simulation can move 1 pod from node-a.")).toBeInTheDocument();
     expect(screen.getByText("abcdef123456")).toBeInTheDocument();

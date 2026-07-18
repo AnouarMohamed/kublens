@@ -78,6 +78,7 @@ type Server struct {
 	intel          *intelligence.Analyzer
 	ghostClient    ghostClient
 	ghostRuns      ghostSimulationStore
+	experimental   ExperimentalConfig
 
 	predictionsTTL   time.Duration
 	predictionsMu    sync.RWMutex
@@ -85,6 +86,8 @@ type Server struct {
 
 	predictorHealthMu sync.RWMutex
 	predictorHealth   predictorHealthState
+	ghostHealthMu     sync.RWMutex
+	ghostHealth       predictorHealthState
 }
 
 type predictionsCacheEntry struct {
@@ -164,6 +167,14 @@ type alertLifecycleStateStore interface {
 
 type Option func(*Server)
 
+type ExperimentalConfig struct {
+	EBPFTelemetryEnabled          bool
+	FleetDriftEnabled             bool
+	AutonomousRemediationEnabled  bool
+	AutonomousRemediationMinScore int
+	AutonomousRemediationMaxItems int
+}
+
 func WithAIProvider(provider ai.Provider) Option {
 	return func(s *Server) {
 		s.ai = provider
@@ -239,12 +250,27 @@ type ghostClient interface {
 func WithGhostClient(client ghostClient) Option {
 	return func(s *Server) {
 		s.ghostClient = client
+		s.ghostHealthMu.Lock()
+		s.ghostHealth.enabled = client != nil
+		s.ghostHealthMu.Unlock()
 	}
 }
 
 func WithGhostSimulationStore(store ghostSimulationStore) Option {
 	return func(s *Server) {
 		s.ghostRuns = store
+	}
+}
+
+func WithExperimentalConfig(config ExperimentalConfig) Option {
+	return func(s *Server) {
+		if config.AutonomousRemediationMinScore <= 0 {
+			config.AutonomousRemediationMinScore = 85
+		}
+		if config.AutonomousRemediationMaxItems <= 0 {
+			config.AutonomousRemediationMaxItems = 5
+		}
+		s.experimental = config
 	}
 }
 
@@ -298,6 +324,9 @@ func WithRuntimeStatus(status model.RuntimeStatus) Option {
 	return func(s *Server) {
 		s.runtime = status
 		s.databaseDriver = status.DatabaseDriver
+		s.ghostHealthMu.Lock()
+		s.ghostHealth.enabled = status.GhostEnabled
+		s.ghostHealthMu.Unlock()
 	}
 }
 
@@ -347,9 +376,20 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 			Insecure:            true,
 			WriteActionsEnabled: false,
 			DatabaseDriver:      "sqlite",
+			DatabaseMigrations:  true,
 			EnterpriseStorage:   true,
+			MemoryStore:         "file",
+			MemoryDurable:       false,
+			AuditStore:          "memory",
+			AuditDurable:        false,
+			AuditSigned:         false,
 			PredictorHealthy:    true,
 			PredictorMode:       "deterministic",
+			GhostHealthy:        true,
+		},
+		experimental: ExperimentalConfig{
+			AutonomousRemediationMinScore: 85,
+			AutonomousRemediationMaxItems: 5,
 		},
 	}
 	server.limiter.configure(RateLimitConfig{
@@ -385,7 +425,11 @@ func (s *Server) defaultAlertLifecycleStore() alertLifecycleStateStore {
 		s.sqliteDB = handle
 	}
 
-	return newAlertLifecycleStore(s.sqliteDB, defaultAlertLifecycleLimit, s.now)
+	dialect, err := storesql.NormalizeDialect(s.databaseDriver)
+	if err != nil {
+		dialect = storesql.DialectSQLite
+	}
+	return newAlertLifecycleStore(s.sqliteDB, defaultAlertLifecycleLimit, s.now, dialect)
 }
 
 func (s *Server) Router(distDir string) http.Handler {

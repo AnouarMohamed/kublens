@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -25,12 +26,13 @@ var (
 
 type Store struct {
 	db       *sql.DB
+	dialect  storesql.Dialect
 	maxItems int
 	now      func() time.Time
 	seq      atomic.Uint64
 }
 
-func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
+func NewStore(db *sql.DB, maxItems int, now func() time.Time, dialects ...storesql.Dialect) *Store {
 	if db == nil {
 		return nil
 	}
@@ -44,6 +46,7 @@ func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
 
 	store := &Store{
 		db:       db,
+		dialect:  firstDialect(dialects),
 		maxItems: maxItems,
 		now:      clock,
 	}
@@ -142,10 +145,10 @@ func (s *Store) GetContext(ctx context.Context, id string) (model.Incident, bool
 
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, title, severity, status, summary, opened_at, resolved_at, timeline_json, runbook_json,
+		s.bind(`SELECT id, title, severity, status, summary, opened_at, resolved_at, timeline_json, runbook_json,
 		        affected_resources_json, associated_remediation_ids_json
 		   FROM incidents
-		  WHERE id = ?`,
+		  WHERE id = ?`),
 		needle,
 	)
 
@@ -350,13 +353,13 @@ func (s *Store) save(ctx context.Context, incident model.Incident) error {
 		return err
 	}
 
-	if _, err := s.db.ExecContext(
+	result, err := s.db.ExecContext(
 		ctx,
-		`INSERT OR REPLACE INTO incidents (
-			id, title, severity, status, summary, opened_at, resolved_at, timeline_json, runbook_json,
-			affected_resources_json, associated_remediation_ids_json, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		incident.ID,
+		s.bind(`UPDATE incidents
+		    SET title = ?, severity = ?, status = ?, summary = ?, opened_at = ?, resolved_at = ?,
+		        timeline_json = ?, runbook_json = ?, affected_resources_json = ?,
+		        associated_remediation_ids_json = ?, created_at = ?, updated_at = ?
+		  WHERE id = ?`),
 		incident.Title,
 		incident.Severity,
 		string(incident.Status),
@@ -369,8 +372,38 @@ func (s *Store) save(ctx context.Context, incident model.Incident) error {
 		associatedJSON,
 		createdAt,
 		nowAt,
-	); err != nil {
+		incident.ID,
+	)
+	if err != nil {
 		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		if _, err := s.db.ExecContext(
+			ctx,
+			s.bind(`INSERT INTO incidents (
+				id, title, severity, status, summary, opened_at, resolved_at, timeline_json, runbook_json,
+				affected_resources_json, associated_remediation_ids_json, created_at, updated_at
+			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+			incident.ID,
+			incident.Title,
+			incident.Severity,
+			string(incident.Status),
+			incident.Summary,
+			incident.OpenedAt,
+			incident.ResolvedAt,
+			timelineJSON,
+			runbookJSON,
+			affectedJSON,
+			associatedJSON,
+			createdAt,
+			nowAt,
+		); err != nil {
+			return err
+		}
 	}
 
 	return s.trim(ctx)
@@ -383,13 +416,13 @@ func (s *Store) trim(ctx context.Context) error {
 
 	_, err := s.db.ExecContext(
 		ctx,
-		`DELETE FROM incidents
-		  WHERE id IN (
+		s.bind(`DELETE FROM incidents
+		  WHERE id NOT IN (
 				SELECT id
 				  FROM incidents
 				 ORDER BY opened_at DESC, created_at DESC, id DESC
-				 LIMIT -1 OFFSET ?
-		  )`,
+				 LIMIT ?
+		  )`),
 		s.maxItems,
 	)
 	return err
@@ -401,11 +434,24 @@ func (s *Store) lookupCreatedAt(ctx context.Context, id string) (string, error) 
 	}
 
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT created_at FROM incidents WHERE id = ?`, id).Scan(&createdAt)
+	err := s.db.QueryRowContext(ctx, s.bind(`SELECT created_at FROM incidents WHERE id = ?`), id).Scan(&createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return createdAt, err
+}
+
+func (s *Store) bind(query string) string {
+	return s.dialect.Bind(query)
+}
+
+func firstDialect(dialects []storesql.Dialect) storesql.Dialect {
+	if len(dialects) > 0 {
+		if dialects[0] != "" {
+			return dialects[0]
+		}
+	}
+	return storesql.DialectSQLite
 }
 
 func (s *Store) nextID(prefix string) string {

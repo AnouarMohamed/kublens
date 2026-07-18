@@ -45,12 +45,20 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /openapi.yaml`
 - `GET /version`
 - `GET /runtime`
+- `GET /experimental`
+- `GET /experimental/ebpf/nodes`
+- `GET /experimental/fleet-drift`
+- `POST /experimental/autonomous-remediation/propose`
 - `GET /metrics`
 - `GET /metrics/prometheus`
 - `GET /slo`
 - `GET /rightsizing`
 
 Enterprise readiness checks add production posture signals for auth, write gating, durable storage, audit availability, predictor state, and cluster reachability. A failed enterprise check returns `503` with the same `HealthStatus` shape as `/readyz`.
+
+Durable storage uses `DATABASE_DRIVER=sqlite` with `DB_PATH` or `DATABASE_DRIVER=postgres` with `DATABASE_URL`. Automatic migrations run when `DATABASE_MIGRATIONS_AUTO=true`.
+
+Experimental endpoints always return payloads labeled `experimental`. The eBPF telemetry, fleet drift, and autonomous remediation proposal paths are disabled by default through feature flags.
 
 ## Auth and cluster context
 
@@ -117,6 +125,7 @@ Notes:
 
 - `GET /diagnostics`
 - `GET /predictions`
+- `GET /predictor/model`
 - `GET /predictive-incidents` (backward-compatible alias)
 - `GET /ghost/topology`
 - `GET /ghost/simulations`
@@ -127,6 +136,8 @@ Notes:
 - `GET /rag/telemetry`
 
 Ghost simulation responses include engine, topology hash, confidence, and limitations so operators can distinguish narrow node-drain previews from full digital-twin claims.
+
+Predictor model health reports deterministic/shadow/blended mode, model and metadata load state, feature completeness gates, model version, calibration data, evaluation metrics, and promotion gates.
 
 ## Incident, remediation, memory, postmortem
 
@@ -153,6 +164,7 @@ Ghost simulation responses include engine, topology hash, confidence, and limita
 - `GET /memory/fixes`
 - `POST /memory/fixes`
 - `POST /risk-guard/analyze`
+- `POST /experimental/autonomous-remediation/propose`
 
 ## Example requests
 

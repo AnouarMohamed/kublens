@@ -91,6 +91,10 @@ func Load() (Config, error) {
 	}
 
 	cfg.Memory = MemoryConfig{
+		Store: memoryStoreDefault(
+			os.Getenv("MEMORY_STORE"),
+			mode,
+		),
 		FilePath: strings.TrimSpace(firstNonEmpty(
 			os.Getenv("MEMORY_FILE_PATH"),
 			"data/memory-runbooks.json",
@@ -164,6 +168,11 @@ func Load() (Config, error) {
 		MaxItems:   parseIntDefault(os.Getenv("AUDIT_MAX_ITEMS"), 500),
 		FilePath:   strings.TrimSpace(os.Getenv("AUDIT_LOG_FILE")),
 		SigningKey: strings.TrimSpace(os.Getenv("AUDIT_SIGNING_KEY")),
+		Store: auditStoreDefault(
+			os.Getenv("AUDIT_STORE"),
+			os.Getenv("AUDIT_LOG_FILE"),
+			mode,
+		),
 	}
 
 	cfg.Alerts = AlertsConfig{
@@ -202,6 +211,22 @@ func Load() (Config, error) {
 		Insecure:    tracingInsecure,
 		ServiceName: tracingService,
 		SampleRatio: tracingSample,
+	}
+
+	cfg.Experimental = ExperimentalConfig{
+		EBPFTelemetryEnabled:          parseBoolDefault(os.Getenv("EXPERIMENTAL_EBPF_TELEMETRY_ENABLED"), false),
+		FleetDriftEnabled:             parseBoolDefault(os.Getenv("EXPERIMENTAL_FLEET_DRIFT_ENABLED"), false),
+		AutonomousRemediationEnabled:  parseBoolDefault(os.Getenv("EXPERIMENTAL_AUTONOMOUS_REMEDIATION_ENABLED"), false),
+		AutonomousRemediationMinScore: parseIntDefault(os.Getenv("AUTONOMOUS_REMEDIATION_MIN_RISK_SCORE"), 85),
+		AutonomousRemediationMaxItems: parseIntDefault(os.Getenv("AUTONOMOUS_REMEDIATION_MAX_PROPOSALS"), 5),
+	}
+	if cfg.Experimental.AutonomousRemediationMinScore < 0 {
+		cfg.Experimental.AutonomousRemediationMinScore = 0
+	} else if cfg.Experimental.AutonomousRemediationMinScore > 100 {
+		cfg.Experimental.AutonomousRemediationMinScore = 100
+	}
+	if cfg.Experimental.AutonomousRemediationMaxItems <= 0 {
+		cfg.Experimental.AutonomousRemediationMaxItems = 5
 	}
 
 	cfg.WriteActionsEnabled = parseBoolDefault(os.Getenv("WRITE_ACTIONS_ENABLED"), p.writeActions)
@@ -251,11 +276,20 @@ func validate(cfg Config) error {
 	if cfg.Database.Driver != "sqlite" && cfg.Database.Driver != "postgres" {
 		return fmt.Errorf("unsupported DATABASE_DRIVER: %s", cfg.Database.Driver)
 	}
-	if cfg.Database.Driver == "postgres" {
-		return errors.New("DATABASE_DRIVER=postgres is planned but not implemented; use sqlite for this release")
+	if cfg.Database.Driver == "postgres" && strings.TrimSpace(cfg.Database.URL) == "" {
+		return errors.New("DATABASE_URL is required when DATABASE_DRIVER=postgres")
 	}
 	if cfg.Mode == ModeProd && cfg.Database.Driver == "sqlite" && !sqliteStorageDurable(cfg.Database.SQLitePath) {
 		return errors.New("APP_MODE=prod requires a durable DB_PATH when DATABASE_DRIVER=sqlite")
+	}
+	if cfg.Memory.Store != "file" && cfg.Memory.Store != "sql" {
+		return fmt.Errorf("unsupported MEMORY_STORE: %s", cfg.Memory.Store)
+	}
+	if cfg.Audit.Store != "memory" && cfg.Audit.Store != "file" && cfg.Audit.Store != "sql" {
+		return fmt.Errorf("unsupported AUDIT_STORE: %s", cfg.Audit.Store)
+	}
+	if cfg.Audit.Store == "file" && strings.TrimSpace(cfg.Audit.FilePath) == "" {
+		return errors.New("AUDIT_LOG_FILE is required when AUDIT_STORE=file")
 	}
 	if cfg.Predictor.Mode != "deterministic" && cfg.Predictor.Mode != "shadow" && cfg.Predictor.Mode != "blended" {
 		return fmt.Errorf("unsupported PREDICTOR_MODE: %s", cfg.Predictor.Mode)
@@ -270,4 +304,29 @@ func sqliteStorageDurable(path string) bool {
 		return false
 	}
 	return !strings.Contains(strings.ToLower(value), "mode=memory")
+}
+
+func memoryStoreDefault(raw string, mode Mode) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value != "" {
+		return value
+	}
+	if mode == ModeProd {
+		return "sql"
+	}
+	return "file"
+}
+
+func auditStoreDefault(raw string, filePath string, mode Mode) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	if value != "" {
+		return value
+	}
+	if mode == ModeProd {
+		return "sql"
+	}
+	if strings.TrimSpace(filePath) != "" {
+		return "file"
+	}
+	return "memory"
 }

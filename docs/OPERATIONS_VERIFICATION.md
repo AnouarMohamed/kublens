@@ -13,7 +13,11 @@ Verify:
 - `mode` is expected (`dev`/`demo`/`prod`)
 - `authEnabled=true` in production
 - `writeActionsEnabled` matches intended policy
+- `databaseDriver` is `sqlite` or `postgres`
+- `enterpriseStorage=true` in production
 - `alertsEnabled` and `ragEnabled` match configuration intent
+
+For Postgres deployments, verify `DATABASE_DRIVER=postgres`, `DATABASE_URL` is set, and startup logs do not report migration failures.
 
 ## 2) Auth and role gating
 
@@ -95,7 +99,43 @@ Verify:
 - Channel dispatch result contains per-channel outcome
 - Lifecycle status transitions are persisted and returned correctly
 
-## 9) API contract and backend quality checks
+## 9) Predictor governance checks
+
+```bash
+curl -s http://localhost:3000/api/predictor/model | jq
+curl -s http://localhost:8001/model | jq
+curl -s http://localhost:8001/telemetry | jq
+```
+
+Verify:
+
+- Deterministic mode is the default when no model is configured
+- Shadow/blended modes report model version, metadata load state, feature requirements, evaluation metrics, and promotion gates
+- Predictor telemetry updates after `GET /api/predictions?force=1`
+
+## 10) Ghost persistence checks
+
+1. Run `POST /api/ghost/simulations`.
+2. Restart the backend using the same SQL store.
+3. Call `GET /api/ghost/simulations`.
+
+Verify the prior simulation record remains available with `topologyHash`, `confidence`, and `limitations`.
+
+## 11) Experimental feature gates
+
+```bash
+curl -s http://localhost:3000/api/experimental | jq
+curl -s http://localhost:3000/api/experimental/ebpf/nodes | jq
+curl -s http://localhost:3000/api/experimental/fleet-drift | jq
+```
+
+Verify:
+
+- All experimental features are disabled by default
+- Responses include `experimental=true`
+- `POST /api/experimental/autonomous-remediation/propose` requires operator role and `WRITE_ACTIONS_ENABLED=true`
+
+## 12) API contract and backend quality checks
 
 ```bash
 npm run test:go
@@ -110,7 +150,7 @@ Critical suites include:
 - Auth/audit/security tests
 - Handler policy tests (including remediation operations)
 
-## 10) Frontend and e2e checks
+## 13) Frontend and e2e checks
 
 ```bash
 npm run lint
@@ -124,7 +164,7 @@ Verify:
 - Node/pod maintenance flows succeed
 - Audit stream and assistant view load without regressions
 
-## 11) Tracing verification (optional)
+## 14) Tracing verification (optional)
 
 If OTEL export is enabled:
 
@@ -132,14 +172,14 @@ If OTEL export is enabled:
 2. Trigger a prediction request and an assistant request.
 3. Verify end-to-end span continuity: browser -> API -> cluster/predictor/assistant paths.
 
-## 12) Observability overlay verification (optional)
+## 15) Observability overlay verification (optional)
 
 If `k8s/overlays/observability` is installed:
 
 1. Port-forward Grafana and Prometheus services.
 2. Confirm API request rate, latency, and status panels update during active usage.
 
-## 13) Security headers and WebSocket origin checks
+## 16) Security headers and WebSocket origin checks
 
 - Call `GET /api/healthz` and verify response headers include:
   - `Content-Security-Policy`
@@ -148,7 +188,7 @@ If `k8s/overlays/observability` is installed:
 - For HTTPS traffic, verify `Strict-Transport-Security` is present.
 - Attempt `/api/stream/ws` with cross-origin `Origin` and verify `403`.
 
-## 14) Supply chain and secret-rotation controls
+## 17) Supply chain and secret-rotation controls
 
 Before production release:
 
@@ -158,7 +198,7 @@ Before production release:
 4. Validate no expired security exceptions exist for signing/SBOM/rotation controls.
 5. Confirm automated CD deploy jobs succeeded for `dev` and `staging` before approving production promotion.
 
-## 15) Documentation governance controls
+## 18) Documentation governance controls
 
 Before merge/release:
 

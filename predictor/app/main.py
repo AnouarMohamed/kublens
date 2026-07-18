@@ -28,9 +28,11 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from opentelemetry import trace
@@ -49,6 +51,19 @@ _ml_model_cache_path: str | None = None
 _ml_model_cache: object | None = None
 _ml_metadata_cache_path: str | None = None
 _ml_metadata_cache: ModelMetadata | None = None
+_telemetry_lock = Lock()
+_telemetry_state = {
+    "totalRequests": 0,
+    "generatedPredictions": 0,
+    "mlInferenceAttempts": 0,
+    "mlInferenceFailures": 0,
+    "mlDisagreements": 0,
+    "featureMissingRate": 0.0,
+    "averageLatencyMs": 0.0,
+    "lastLatencyMs": 0.0,
+    "scoreBuckets": {"low": 0, "medium": 0, "high": 0, "critical": 0},
+    "lastPredictionAt": "",
+}
 
 
 def configure_telemetry(app: FastAPI) -> None:
@@ -205,6 +220,21 @@ class ModelHealth(BaseModel):
     lastError: str = ""
 
 
+class PredictorTelemetry(BaseModel):
+    """Operational telemetry for predictor scoring and optional ML governance."""
+
+    totalRequests: int
+    generatedPredictions: int
+    mlInferenceAttempts: int
+    mlInferenceFailures: int
+    mlDisagreements: int
+    featureMissingRate: float
+    averageLatencyMs: float
+    lastLatencyMs: float
+    scoreBuckets: dict[str, int] = Field(default_factory=dict)
+    lastPredictionAt: str = ""
+
+
 class IncidentPrediction(BaseModel):
     """Predictive incident item returned to the KubeLens backend."""
 
@@ -281,6 +311,14 @@ def model_health_endpoint() -> ModelHealth:
     """Return optional ML model governance state."""
 
     return model_health()
+
+
+@api.get("/telemetry", response_model=PredictorTelemetry)
+def telemetry_endpoint() -> PredictorTelemetry:
+    """Return predictor scoring telemetry."""
+
+    with _telemetry_lock:
+        return PredictorTelemetry(**_telemetry_state)
 
 
 def require_predictor_secret(
@@ -681,6 +719,53 @@ def ml_feature_set_completeness(feature_set: MLFeatureSet, feature_names: list[s
     return known / len(feature_names)
 
 
+def record_prediction_telemetry(
+    items: list[IncidentPrediction],
+    *,
+    feature_missing_rates: list[float],
+    ml_inference_attempts: int,
+    ml_inference_failures: int,
+    ml_disagreements: int,
+    latency_ms: float,
+) -> None:
+    """Update process-local predictor telemetry counters."""
+
+    score_buckets = {"low": 0, "medium": 0, "high": 0, "critical": 0}
+    for item in items:
+        if item.riskScore >= 90:
+            score_buckets["critical"] += 1
+        elif item.riskScore >= 75:
+            score_buckets["high"] += 1
+        elif item.riskScore >= 55:
+            score_buckets["medium"] += 1
+        else:
+            score_buckets["low"] += 1
+
+    missing_rate = 0.0
+    if feature_missing_rates:
+        missing_rate = round(sum(feature_missing_rates) / len(feature_missing_rates), 4)
+
+    with _telemetry_lock:
+        previous_requests = int(_telemetry_state["totalRequests"])
+        _telemetry_state["totalRequests"] = previous_requests + 1
+        _telemetry_state["generatedPredictions"] += len(items)
+        _telemetry_state["mlInferenceAttempts"] += ml_inference_attempts
+        _telemetry_state["mlInferenceFailures"] += ml_inference_failures
+        _telemetry_state["mlDisagreements"] += ml_disagreements
+        _telemetry_state["featureMissingRate"] = missing_rate
+        previous_average = float(_telemetry_state["averageLatencyMs"])
+        _telemetry_state["lastLatencyMs"] = round(latency_ms, 4)
+        _telemetry_state["averageLatencyMs"] = round(
+            ((previous_average * previous_requests) + latency_ms) / (previous_requests + 1),
+            4,
+        )
+        current_buckets = dict(_telemetry_state["scoreBuckets"])
+        for key, value in score_buckets.items():
+            current_buckets[key] = int(current_buckets.get(key, 0)) + value
+        _telemetry_state["scoreBuckets"] = current_buckets
+        _telemetry_state["lastPredictionAt"] = datetime.now(timezone.utc).isoformat()
+
+
 @api.post("/predict", response_model=PredictionResponse)
 # Intentionally sync: prediction is CPU-bound in-memory scoring with no blocking I/O.
 def predict(request: PredictionRequest, _: None = Depends(require_predictor_secret)) -> PredictionResponse:
@@ -698,9 +783,14 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         PredictionResponse: Ranked prediction items with evidence signals.
     """
 
+    started_at = time.perf_counter()
     items: list[IncidentPrediction] = []
     ml_health = model_health()
     ml_feature_names = ml_health.requiredFeatures
+    feature_missing_rates: list[float] = []
+    ml_inference_attempts = 0
+    ml_inference_failures = 0
+    ml_disagreements = 0
 
     for pod in request.pods:
         score = 0
@@ -746,6 +836,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
 
         feature_completeness = ml_feature_set_completeness(ml_feature_set, ml_feature_names)
         if ml_health.enabled:
+            feature_missing_rates.append(1.0 - feature_completeness)
             signals.append(PredictionSignal(key="mlFeatureCompleteness", value=f"{feature_completeness:.0%}"))
             if not ml_health.modelLoaded:
                 signals.append(PredictionSignal(key="mlRiskBlocked", value="model-unavailable"))
@@ -754,9 +845,19 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             elif ml_health.stale:
                 signals.append(PredictionSignal(key="mlRiskBlocked", value="model-stale"))
             else:
+                deterministic_score = score
+                ml_inference_attempts += 1
                 ml_score = score_pod_with_ml(ml_feature_set, ml_feature_names)
                 if ml_score is None:
+                    ml_inference_failures += 1
                     signals.append(PredictionSignal(key="mlRiskBlocked", value="inference-unavailable"))
+                else:
+                    disagreement = abs(ml_score - deterministic_score)
+                    if disagreement >= 25:
+                        ml_disagreements += 1
+                        signals.append(PredictionSignal(key="mlDisagreement", value=f"{disagreement}%"))
+                if ml_score is None:
+                    pass
                 elif ml_health.mode == "shadow":
                     signals.append(PredictionSignal(key="mlShadowRisk", value=f"{ml_score}%"))
                     signals.append(PredictionSignal(key="mlMode", value="shadow"))
@@ -866,6 +967,14 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
 
     items.sort(key=lambda x: (x.riskScore, x.confidence), reverse=True)
     items = items[:10]
+    record_prediction_telemetry(
+        items,
+        feature_missing_rates=feature_missing_rates,
+        ml_inference_attempts=ml_inference_attempts,
+        ml_inference_failures=ml_inference_failures,
+        ml_disagreements=ml_disagreements,
+        latency_ms=(time.perf_counter() - started_at) * 1000,
+    )
 
     return PredictionResponse(
         source="python-fastapi",

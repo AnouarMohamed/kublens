@@ -27,7 +27,13 @@ type RuntimeStatus struct {
 	AuthEnabled         bool     `json:"authEnabled"`
 	WriteActionsEnabled bool     `json:"writeActionsEnabled"`
 	DatabaseDriver      string   `json:"databaseDriver"`
+	DatabaseMigrations  bool     `json:"databaseMigrations"`
 	EnterpriseStorage   bool     `json:"enterpriseStorage"`
+	MemoryStore         string   `json:"memoryStore"`
+	MemoryDurable       bool     `json:"memoryDurable"`
+	AuditStore          string   `json:"auditStore"`
+	AuditDurable        bool     `json:"auditDurable"`
+	AuditSigned         bool     `json:"auditSigned"`
 	PredictorEnabled    bool     `json:"predictorEnabled"`
 	PredictorHealthy    bool     `json:"predictorHealthy"`
 	PredictorLastError  string   `json:"predictorLastError,omitempty"`

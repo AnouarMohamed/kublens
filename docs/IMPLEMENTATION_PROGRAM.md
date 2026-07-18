@@ -74,7 +74,7 @@ Exit criteria:
 
 Exit criteria:
 
-- Production deployments use durable SQL-backed stores. This release supports file-backed SQLite with automatic migrations; Postgres-backed stores remain future Phase 4 work.
+- Production deployments use durable SQL-backed stores. This release supports file-backed SQLite and Postgres with automatic migrations.
 - Critical audit records can be verified for hash-chain integrity.
 - Operators can complete the risk workflow from one workbench without losing access to drilldown views.
 - Ghost and predictor outputs expose confidence, model/version metadata, and known limitations.
@@ -88,7 +88,7 @@ Exit criteria:
 
 Exit criteria:
 
-- Experimental features are disabled by default and labeled as such until production trust, rollback, and operational runbooks are complete.
+- Experimental features are disabled by default, labeled as experimental in API responses, and proposal-only until production trust, rollback, and operational runbooks are complete.
 
 ## Cross-cutting quality contract
 
@@ -127,11 +127,11 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | GitOps remediation mode                    | shipped | TBD   | Phase 2      |
 | Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |
-| Durable enterprise storage                 | partial | TBD   | Phase 4      |
+| Durable enterprise storage                 | shipped | TBD   | Phase 4      |
 | Tamper-evident audit verification          | shipped | TBD   | Phase 4      |
-| Incident Risk Workbench                    | partial | TBD   | Phase 4      |
-| Ghost confidence and scheduler fidelity    | partial | TBD   | Phase 4      |
-| Predictor ML governance                    | partial | TBD   | Phase 4      |
-| eBPF deep telemetry                        | planned | TBD   | Phase 5      |
-| Fleet drift correction                     | planned | TBD   | Phase 5      |
-| Autonomous remediation                     | planned | TBD   | Phase 5      |
+| Incident Risk Workbench                    | shipped | TBD   | Phase 4      |
+| Ghost confidence and scheduler fidelity    | shipped | TBD   | Phase 4      |
+| Predictor ML governance                    | shipped | TBD   | Phase 4      |
+| eBPF deep telemetry                        | shipped | TBD   | Phase 5      |
+| Fleet drift correction                     | shipped | TBD   | Phase 5      |
+| Autonomous remediation                     | shipped | TBD   | Phase 5      |

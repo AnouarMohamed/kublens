@@ -88,16 +88,32 @@ func TestProdDisallowsHeaderTokenAuth(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsPlannedPostgresDriver(t *testing.T) {
+func TestLoadAcceptsPostgresDriver(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DATABASE_DRIVER", "postgres")
 	t.Setenv("DATABASE_URL", "postgres://kubelens@example/kubelens")
 
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Database.Driver != "postgres" {
+		t.Fatalf("database driver = %q, want postgres", cfg.Database.Driver)
+	}
+	if cfg.Database.URL != "postgres://kubelens@example/kubelens" {
+		t.Fatalf("database URL = %q", cfg.Database.URL)
+	}
+}
+
+func TestLoadPostgresRequiresDatabaseURL(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DATABASE_DRIVER", "postgres")
+
 	_, err := Load()
 	if err == nil {
-		t.Fatal("expected error for planned postgres driver")
+		t.Fatal("expected error for postgres without DATABASE_URL")
 	}
-	if err.Error() != "DATABASE_DRIVER=postgres is planned but not implemented; use sqlite for this release" {
+	if err.Error() != "DATABASE_URL is required when DATABASE_DRIVER=postgres" {
 		t.Fatalf("error = %q", err.Error())
 	}
 }
@@ -137,6 +153,25 @@ func TestRuntimeStatusMarksFileSQLiteAsEnterpriseStorage(t *testing.T) {
 	}
 }
 
+func TestRuntimeStatusMarksPostgresAsEnterpriseStorage(t *testing.T) {
+	cfg := Config{
+		Mode: ModeProd,
+		Database: DatabaseConfig{
+			Driver: "postgres",
+			URL:    "postgres://kubelens@example/kubelens",
+		},
+		Auth: AuthConfig{Enabled: true},
+		Predictor: PredictorConfig{
+			Mode: "deterministic",
+		},
+	}
+
+	runtime := RuntimeStatus(cfg, true, false)
+	if !runtime.EnterpriseStorage {
+		t.Fatal("expected postgres to count as durable storage")
+	}
+}
+
 func TestLoadAuditSigningKey(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
@@ -156,6 +191,51 @@ func TestLoadPredictorModeValidation(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error for unsupported predictor mode")
+	}
+}
+
+func TestLoadExperimentalDefaultsDisabled(t *testing.T) {
+	clearConfigEnv(t)
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Experimental.EBPFTelemetryEnabled {
+		t.Fatal("eBPF telemetry should be disabled by default")
+	}
+	if cfg.Experimental.FleetDriftEnabled {
+		t.Fatal("fleet drift should be disabled by default")
+	}
+	if cfg.Experimental.AutonomousRemediationEnabled {
+		t.Fatal("autonomous remediation should be disabled by default")
+	}
+	if cfg.Experimental.AutonomousRemediationMinScore != 85 {
+		t.Fatalf("min score = %d, want 85", cfg.Experimental.AutonomousRemediationMinScore)
+	}
+}
+
+func TestLoadExperimentalOverrides(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("EXPERIMENTAL_EBPF_TELEMETRY_ENABLED", "true")
+	t.Setenv("EXPERIMENTAL_FLEET_DRIFT_ENABLED", "true")
+	t.Setenv("EXPERIMENTAL_AUTONOMOUS_REMEDIATION_ENABLED", "true")
+	t.Setenv("AUTONOMOUS_REMEDIATION_MIN_RISK_SCORE", "140")
+	t.Setenv("AUTONOMOUS_REMEDIATION_MAX_PROPOSALS", "0")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Experimental.EBPFTelemetryEnabled || !cfg.Experimental.FleetDriftEnabled ||
+		!cfg.Experimental.AutonomousRemediationEnabled {
+		t.Fatalf("experimental toggles not enabled: %+v", cfg.Experimental)
+	}
+	if cfg.Experimental.AutonomousRemediationMinScore != 100 {
+		t.Fatalf("min score = %d, want clamp to 100", cfg.Experimental.AutonomousRemediationMinScore)
+	}
+	if cfg.Experimental.AutonomousRemediationMaxItems != 5 {
+		t.Fatalf("max proposals = %d, want fallback 5", cfg.Experimental.AutonomousRemediationMaxItems)
 	}
 }
 
@@ -299,6 +379,11 @@ func clearConfigEnv(t *testing.T) {
 		"SLACK_WEBHOOK_URL",
 		"PAGERDUTY_EVENTS_URL",
 		"PAGERDUTY_ROUTING_KEY",
+		"EXPERIMENTAL_EBPF_TELEMETRY_ENABLED",
+		"EXPERIMENTAL_FLEET_DRIFT_ENABLED",
+		"EXPERIMENTAL_AUTONOMOUS_REMEDIATION_ENABLED",
+		"AUTONOMOUS_REMEDIATION_MIN_RISK_SCORE",
+		"AUTONOMOUS_REMEDIATION_MAX_PROPOSALS",
 		"WRITE_ACTIONS_ENABLED",
 		"AUDIT_SIGNING_KEY",
 	}

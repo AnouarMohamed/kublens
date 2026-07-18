@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"bufio"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"log/slog"
@@ -21,6 +23,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"kubelens-backend/internal/auth"
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/events"
 	"kubelens-backend/internal/model"
 )
@@ -34,15 +37,22 @@ type AuditConfig struct {
 	MaxItems   int
 	FilePath   string
 	SigningKey string
+	Store      string
+	SQLDB      *sql.DB
+	Dialect    storesql.Dialect
 }
 
 type auditLog struct {
 	maxItems   int
 	counter    atomic.Uint64
 	sink       auditSink
+	store      string
+	durable    bool
 	signingKey []byte
+	failures   atomic.Uint64
 	mu         sync.RWMutex
 	items      []model.AuditEntry
+	lastError  string
 }
 
 type auditSink interface {
@@ -54,50 +64,106 @@ type fileAuditSink struct {
 	file *os.File
 }
 
+type sqlAuditSink struct {
+	db      *sql.DB
+	dialect storesql.Dialect
+}
+
+type auditPosture struct {
+	Store       string
+	Durable     bool
+	Signed      bool
+	Failures    uint64
+	LastError   string
+	EntryCount  int
+	HasSink     bool
+	MemoryLimit int
+}
+
 func WithAuditConfig(config AuditConfig) Option {
 	return func(s *Server) {
 		maxItems := config.MaxItems
 		if maxItems <= 0 {
 			maxItems = maxAuditLimit
 		}
-		s.audit = newAuditLog(maxItems, config.FilePath, config.SigningKey, s.logger)
+		config.MaxItems = maxItems
+		s.audit = newAuditLogWithConfig(config, s.logger)
 	}
 }
 
 func newAuditLog(maxItems int, filePath string, signingKey string, logger *slog.Logger) *auditLog {
+	return newAuditLogWithConfig(AuditConfig{
+		MaxItems:   maxItems,
+		FilePath:   filePath,
+		SigningKey: signingKey,
+	}, logger)
+}
+
+func newAuditLogWithConfig(config AuditConfig, logger *slog.Logger) *auditLog {
+	maxItems := config.MaxItems
 	if maxItems <= 0 {
 		maxItems = maxAuditLimit
 	}
+	store := normalizeAuditStore(config.Store, config.FilePath)
 	log := &auditLog{
 		maxItems:   maxItems,
-		signingKey: []byte(strings.TrimSpace(signingKey)),
+		store:      store,
+		signingKey: []byte(strings.TrimSpace(config.SigningKey)),
 		items:      make([]model.AuditEntry, 0, maxItems),
 	}
 
-	trimmedPath := strings.TrimSpace(filePath)
-	if trimmedPath == "" {
+	switch store {
+	case "memory":
 		return log
-	}
-
-	sink, err := newFileAuditSink(trimmedPath)
-	if err != nil {
-		if logger != nil {
-			logger.Warn("audit file sink disabled", "path", trimmedPath, "error", err.Error())
+	case "file":
+		trimmedPath := strings.TrimSpace(config.FilePath)
+		sink, err := newFileAuditSink(trimmedPath)
+		if err != nil {
+			log.lastError = err.Error()
+			if logger != nil {
+				logger.Warn("audit file sink disabled", "path", trimmedPath, "error", err.Error())
+			}
+			return log
 		}
-		return log
-	}
-
-	log.sink = sink
-	items, maxID, err := loadAuditEntries(trimmedPath, maxItems)
-	if err != nil {
-		if logger != nil {
-			logger.Warn("audit history load failed", "path", trimmedPath, "error", err.Error())
+		log.sink = sink
+		log.durable = true
+		items, maxID, err := loadAuditEntries(trimmedPath, maxItems)
+		if err != nil {
+			log.lastError = err.Error()
+			if logger != nil {
+				logger.Warn("audit history load failed", "path", trimmedPath, "error", err.Error())
+			}
+			return log
 		}
+		log.items = items
+		log.counter.Store(maxID)
+		return log
+	case "sql":
+		if config.SQLDB == nil {
+			log.lastError = "sql audit store unavailable"
+			return log
+		}
+		dialect := config.Dialect
+		if dialect == "" {
+			dialect = storesql.DialectSQLite
+		}
+		log.sink = &sqlAuditSink{db: config.SQLDB, dialect: dialect}
+		log.durable = true
+		items, maxID, err := loadAuditEntriesFromSQL(config.SQLDB, dialect, maxItems)
+		if err != nil {
+			log.lastError = err.Error()
+			if logger != nil {
+				logger.Warn("audit sql history load failed", "error", err.Error())
+			}
+			return log
+		}
+		log.items = items
+		log.counter.Store(maxID)
+		return log
+	default:
+		log.store = "memory"
 		return log
 	}
-	log.items = items
-	log.counter.Store(maxID)
-	return log
 }
 
 func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
@@ -120,7 +186,13 @@ func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
 	l.mu.Unlock()
 
 	if sink != nil {
-		_ = sink.write(entry)
+		if err := sink.write(entry); err != nil {
+			l.failures.Add(1)
+			l.mu.Lock()
+			l.lastError = err.Error()
+			l.durable = false
+			l.mu.Unlock()
+		}
 	}
 
 	return entry
@@ -197,6 +269,24 @@ func (l *auditLog) total() int {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 	return len(l.items)
+}
+
+func (l *auditLog) posture() auditPosture {
+	if l == nil {
+		return auditPosture{Store: "unavailable"}
+	}
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+	return auditPosture{
+		Store:       l.store,
+		Durable:     l.durable,
+		Signed:      len(l.signingKey) > 0,
+		Failures:    l.failures.Load(),
+		LastError:   l.lastError,
+		EntryCount:  len(l.items),
+		HasSink:     l.sink != nil,
+		MemoryLimit: l.maxItems,
+	}
 }
 
 func (s *Server) auditMiddleware(next http.Handler) http.Handler {
@@ -349,6 +439,33 @@ func (s *fileAuditSink) write(entry model.AuditEntry) error {
 	return s.file.Sync()
 }
 
+func (s *sqlAuditSink) write(entry model.AuditEntry) error {
+	if s == nil || s.db == nil {
+		return os.ErrInvalid
+	}
+	sequenceID, _ := strconv.ParseInt(strings.TrimSpace(entry.ID), 10, 64)
+	payload, err := json.Marshal(entry)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(
+		context.Background(),
+		s.dialect.Bind(`INSERT INTO audit_entries (
+			id, sequence_id, timestamp, action, status, success, hash, signature, entry_json
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`),
+		entry.ID,
+		sequenceID,
+		entry.Timestamp,
+		entry.Action,
+		entry.Status,
+		entry.Success,
+		entry.Hash,
+		entry.Signature,
+		string(payload),
+	)
+	return err
+}
+
 func loadAuditEntries(path string, maxItems int) ([]model.AuditEntry, uint64, error) {
 	file, err := os.Open(filepath.Clean(path))
 	if err != nil {
@@ -386,6 +503,65 @@ func loadAuditEntries(path string, maxItems int) ([]model.AuditEntry, uint64, er
 	}
 
 	return entries, maxID, nil
+}
+
+func loadAuditEntriesFromSQL(db *sql.DB, dialect storesql.Dialect, maxItems int) ([]model.AuditEntry, uint64, error) {
+	if db == nil {
+		return nil, 0, os.ErrInvalid
+	}
+	if dialect == "" {
+		dialect = storesql.DialectSQLite
+	}
+
+	rows, err := db.QueryContext(
+		context.Background(),
+		dialect.Bind(`SELECT id, entry_json
+		   FROM audit_entries
+		  ORDER BY sequence_id DESC
+		  LIMIT ?`),
+		maxItems,
+	)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	reversed := make([]model.AuditEntry, 0, maxItems)
+	var maxID uint64
+	for rows.Next() {
+		var id, payload string
+		if err := rows.Scan(&id, &payload); err != nil {
+			continue
+		}
+		var entry model.AuditEntry
+		if err := json.Unmarshal([]byte(payload), &entry); err != nil {
+			continue
+		}
+		if parsed, err := strconv.ParseUint(strings.TrimSpace(id), 10, 64); err == nil && parsed > maxID {
+			maxID = parsed
+		}
+		reversed = append(reversed, entry)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+
+	entries := make([]model.AuditEntry, 0, len(reversed))
+	for i := len(reversed) - 1; i >= 0; i-- {
+		entries = append(entries, reversed[i])
+	}
+	return entries, maxID, nil
+}
+
+func normalizeAuditStore(store string, filePath string) string {
+	value := strings.ToLower(strings.TrimSpace(store))
+	if value != "" {
+		return value
+	}
+	if strings.TrimSpace(filePath) != "" {
+		return "file"
+	}
+	return "memory"
 }
 
 type auditHashMaterial struct {

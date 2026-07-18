@@ -46,9 +46,14 @@ func Build(cfg config.Config) (Result, error) {
 	warnings := make([]string, 0, 8)
 	eventBus := events.NewBus(64)
 
-	sqliteDB, err := storesql.Open(context.Background(), cfg.DBPath)
+	sqlDB, dialect, err := storesql.OpenDatabase(context.Background(), storesql.Config{
+		Driver:         cfg.Database.Driver,
+		URL:            cfg.Database.URL,
+		SQLitePath:     cfg.Database.SQLitePath,
+		MigrationsAuto: cfg.Database.MigrationsAuto,
+	})
 	if err != nil {
-		return Result{}, fmt.Errorf("initialize sqlite store: %w", err)
+		return Result{}, fmt.Errorf("initialize %s store: %w", cfg.Database.Driver, err)
 	}
 
 	shutdownTracing := func(context.Context) error { return nil }
@@ -119,9 +124,10 @@ func Build(cfg config.Config) (Result, error) {
 		EmbeddingClient: embeddingClient,
 	})
 	memoryStore := memory.NewWithEmbeddings(cfg.Memory.FilePath, nil, embeddingClient)
-	incidentStore := incident.NewStore(sqliteDB, incident.DefaultStoreLimit, nil)
-	remediationStore := remediation.NewStore(sqliteDB, remediation.DefaultStoreLimit, nil)
-	postmortemStore := postmortem.NewStore(sqliteDB, postmortem.DefaultStoreLimit, nil)
+	incidentStore := incident.NewStore(sqlDB, incident.DefaultStoreLimit, nil, dialect)
+	remediationStore := remediation.NewStore(sqlDB, remediation.DefaultStoreLimit, nil, dialect)
+	postmortemStore := postmortem.NewStore(sqlDB, postmortem.DefaultStoreLimit, nil, dialect)
+	ghostStore := ghost.NewSimulationStore(sqlDB, ghost.DefaultSimulationStoreLimit, dialect)
 	riskAnalyzer := riskguard.NewAnalyzer()
 	chatopsNotifier := chatops.NewSlackNotifier(chatops.Config{
 		SlackWebhookURL:      cfg.ChatOps.SlackWebhookURL,
@@ -173,7 +179,8 @@ func Build(cfg config.Config) (Result, error) {
 			SigningKey: cfg.Audit.SigningKey,
 		}),
 		httpapi.WithAlertDispatcher(alertDispatcher),
-		httpapi.WithSQLiteDB(sqliteDB),
+		httpapi.WithSQLiteDB(sqlDB),
+		httpapi.WithGhostSimulationStore(ghostStore),
 		httpapi.WithEventBus(eventBus),
 		httpapi.WithIntelligence(diagnosticAnalyzer),
 		httpapi.WithClusterContexts(httpapi.ClusterContextsConfig{
@@ -184,6 +191,13 @@ func Build(cfg config.Config) (Result, error) {
 		httpapi.WithRuntimeStatus(runtime),
 		httpapi.WithWriteActionsEnabled(cfg.WriteActionsEnabled),
 		httpapi.WithAnonymousPermissions(cfg.AnonymousPermissions),
+		httpapi.WithExperimentalConfig(httpapi.ExperimentalConfig{
+			EBPFTelemetryEnabled:          cfg.Experimental.EBPFTelemetryEnabled,
+			FleetDriftEnabled:             cfg.Experimental.FleetDriftEnabled,
+			AutonomousRemediationEnabled:  cfg.Experimental.AutonomousRemediationEnabled,
+			AutonomousRemediationMinScore: cfg.Experimental.AutonomousRemediationMinScore,
+			AutonomousRemediationMaxItems: cfg.Experimental.AutonomousRemediationMaxItems,
+		}),
 	)
 
 	server := &http.Server{
@@ -202,7 +216,7 @@ func Build(cfg config.Config) (Result, error) {
 			stateCancel()
 			return errors.Join(
 				shutdownTracing(ctx),
-				sqliteDB.Close(),
+				sqlDB.Close(),
 			)
 		},
 	}, nil

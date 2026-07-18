@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -23,12 +24,13 @@ var (
 
 type Store struct {
 	db       *sql.DB
+	dialect  storesql.Dialect
 	maxItems int
 	now      func() time.Time
 	seq      atomic.Uint64
 }
 
-func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
+func NewStore(db *sql.DB, maxItems int, now func() time.Time, dialects ...storesql.Dialect) *Store {
 	if db == nil {
 		return nil
 	}
@@ -42,6 +44,7 @@ func NewStore(db *sql.DB, maxItems int, now func() time.Time) *Store {
 
 	store := &Store{
 		db:       db,
+		dialect:  firstDialect(dialects),
 		maxItems: maxItems,
 		now:      clock,
 	}
@@ -113,7 +116,7 @@ func (s *Store) SaveProposalsContext(
 func (s *Store) findActiveDuplicate(ctx context.Context, candidate model.RemediationProposal) (model.RemediationProposal, bool, error) {
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, kind, status, incident_id, resource, namespace, reason, risk_level, dry_run_result,
+		s.bind(`SELECT id, kind, status, incident_id, resource, namespace, reason, risk_level, dry_run_result,
 		        execution_result, created_at, updated_at, approved_by, approved_at, rejected_by, rejected_at,
 		        rejected_reason, executed_by, executed_at
 		   FROM remediation_proposals
@@ -122,7 +125,7 @@ func (s *Store) findActiveDuplicate(ctx context.Context, candidate model.Remedia
 		    AND LOWER(resource) = LOWER(?)
 		    AND status IN ('proposed', 'approved')
 		  ORDER BY created_at DESC, id DESC
-		  LIMIT 1`,
+		  LIMIT 1`),
 		string(candidate.Kind),
 		candidate.Namespace,
 		candidate.Resource,
@@ -198,11 +201,11 @@ func (s *Store) GetContext(ctx context.Context, id string) (model.RemediationPro
 
 	row := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, kind, status, incident_id, resource, namespace, reason, risk_level, dry_run_result,
+		s.bind(`SELECT id, kind, status, incident_id, resource, namespace, reason, risk_level, dry_run_result,
 		        execution_result, created_at, updated_at, approved_by, approved_at, rejected_by, rejected_at,
 		        rejected_reason, executed_by, executed_at
 		   FROM remediation_proposals
-		  WHERE id = ?`,
+		  WHERE id = ?`),
 		needle,
 	)
 
@@ -323,13 +326,51 @@ func (s *Store) upsert(ctx context.Context, proposal model.RemediationProposal) 
 	}
 	updatedAt := fallbackString(proposal.UpdatedAt, s.now().UTC().Format(time.RFC3339))
 
+	result, err := s.db.ExecContext(
+		ctx,
+		s.bind(`UPDATE remediation_proposals
+		    SET kind = ?, status = ?, incident_id = ?, resource = ?, namespace = ?, reason = ?,
+		        risk_level = ?, dry_run_result = ?, execution_result = ?, approved_by = ?,
+		        approved_at = ?, rejected_by = ?, rejected_at = ?, rejected_reason = ?,
+		        executed_by = ?, executed_at = ?, created_at = ?, updated_at = ?
+		  WHERE id = ?`),
+		string(proposal.Kind),
+		proposal.Status,
+		proposal.IncidentID,
+		proposal.Resource,
+		proposal.Namespace,
+		proposal.Reason,
+		proposal.RiskLevel,
+		proposal.DryRunResult,
+		proposal.ExecutionResult,
+		proposal.ApprovedBy,
+		proposal.ApprovedAt,
+		proposal.RejectedBy,
+		proposal.RejectedAt,
+		proposal.RejectedReason,
+		proposal.ExecutedBy,
+		proposal.ExecutedAt,
+		createdAt,
+		updatedAt,
+		proposal.ID,
+	)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected > 0 {
+		return nil
+	}
 	_, err = s.db.ExecContext(
 		ctx,
-		`INSERT OR REPLACE INTO remediation_proposals (
+		s.bind(`INSERT INTO remediation_proposals (
 			id, kind, status, incident_id, resource, namespace, reason, risk_level, dry_run_result,
 			execution_result, approved_by, approved_at, rejected_by, rejected_at, rejected_reason,
 			executed_by, executed_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`),
 		proposal.ID,
 		string(proposal.Kind),
 		proposal.Status,
@@ -360,13 +401,13 @@ func (s *Store) trim(ctx context.Context) error {
 
 	_, err := s.db.ExecContext(
 		ctx,
-		`DELETE FROM remediation_proposals
-		  WHERE id IN (
+		s.bind(`DELETE FROM remediation_proposals
+		  WHERE id NOT IN (
 				SELECT id
 				  FROM remediation_proposals
 				 ORDER BY created_at DESC, id DESC
-				 LIMIT -1 OFFSET ?
-		  )`,
+				 LIMIT ?
+		  )`),
 		s.maxItems,
 	)
 	return err
@@ -378,11 +419,26 @@ func (s *Store) lookupCreatedAt(ctx context.Context, id string) (string, error) 
 	}
 
 	var createdAt string
-	err := s.db.QueryRowContext(ctx, `SELECT created_at FROM remediation_proposals WHERE id = ?`, id).Scan(&createdAt)
+	err := s.db.QueryRowContext(
+		ctx,
+		s.bind(`SELECT created_at FROM remediation_proposals WHERE id = ?`),
+		id,
+	).Scan(&createdAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil
 	}
 	return createdAt, err
+}
+
+func (s *Store) bind(query string) string {
+	return s.dialect.Bind(query)
+}
+
+func firstDialect(dialects []storesql.Dialect) storesql.Dialect {
+	if len(dialects) > 0 && dialects[0] != "" {
+		return dialects[0]
+	}
+	return storesql.DialectSQLite
 }
 
 func (s *Store) nextID(prefix string) string {

@@ -84,6 +84,56 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/RuntimeStatus"
+  /experimental:
+    get:
+      operationId: getExperimentalStatus
+      summary: Experimental feature gate status
+      responses:
+        "200":
+          description: Experimental feature gate status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ExperimentalStatus"
+  /experimental/ebpf/nodes:
+    get:
+      operationId: getExperimentalNodeTelemetry
+      summary: Experimental node telemetry report
+      responses:
+        "200":
+          description: Experimental node telemetry report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeTelemetryReport"
+  /experimental/fleet-drift:
+    get:
+      operationId: getExperimentalFleetDrift
+      summary: Experimental fleet drift report
+      responses:
+        "200":
+          description: Experimental fleet drift report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FleetDriftReport"
+  /experimental/autonomous-remediation/propose:
+    post:
+      operationId: postExperimentalAutonomousRemediationPropose
+      summary: Generate policy-gated experimental remediation proposals
+      responses:
+        "200":
+          description: Autonomous remediation proposal report
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AutonomousRemediationReport"
+        "403":
+          description: Operator role or write gate required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /metrics:
     get:
       operationId: getApiMetrics
@@ -845,6 +895,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/PredictionsResult"
+  /predictor/model:
+    get:
+      operationId: getPredictorModelHealth
+      summary: Predictor model governance status
+      responses:
+        "200":
+          description: Predictor model health and governance metadata
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictorModelHealth"
   /predictive-incidents:
     get:
       operationId: getPredictiveIncidents
@@ -2043,6 +2104,214 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/IncidentPrediction"
+    PredictorModelHealth:
+      type: object
+      required:
+        [
+          source,
+          mode,
+          enabled,
+          usableForBlending,
+          modelLoaded,
+          metadataLoaded,
+          modelVersion,
+          stale,
+          maxModelAgeHours,
+          minFeatureCompleteness,
+          requiredFeatures,
+          calibrationMethod,
+          evaluationMetrics,
+          promotionGates,
+          lastError,
+        ]
+      properties:
+        source:
+          type: string
+        mode:
+          type: string
+        enabled:
+          type: boolean
+        usableForBlending:
+          type: boolean
+        modelLoaded:
+          type: boolean
+        metadataLoaded:
+          type: boolean
+        modelVersion:
+          type: string
+        stale:
+          type: boolean
+        maxModelAgeHours:
+          type: integer
+        minFeatureCompleteness:
+          type: number
+        requiredFeatures:
+          type: array
+          items:
+            type: string
+        calibratedThreshold:
+          type: number
+        calibrationMethod:
+          type: string
+        evaluationMetrics:
+          type: object
+          additionalProperties:
+            type: number
+        promotionGates:
+          type: object
+          additionalProperties:
+            type: number
+        lastError:
+          type: string
+    ExperimentalFeatureStatus:
+      type: object
+      required: [name, enabled, experimental, maturity, message, limitations]
+      properties:
+        name:
+          type: string
+        enabled:
+          type: boolean
+        experimental:
+          type: boolean
+        maturity:
+          type: string
+        message:
+          type: string
+        limitations:
+          type: array
+          items:
+            type: string
+    ExperimentalStatus:
+      type: object
+      required: [generatedAt, features]
+      properties:
+        generatedAt:
+          type: string
+        features:
+          type: array
+          items:
+            $ref: "#/components/schemas/ExperimentalFeatureStatus"
+    NodeTelemetryItem:
+      type: object
+      required: [node, status, cpuUsage, memoryUsage, warningEvents, pressureSignals, observedWorkload]
+      properties:
+        node:
+          type: string
+        status:
+          type: string
+        cpuUsage:
+          type: string
+        memoryUsage:
+          type: string
+        warningEvents:
+          type: integer
+        pressureSignals:
+          type: array
+          items:
+            type: string
+        observedWorkload:
+          type: integer
+    NodeTelemetryReport:
+      type: object
+      required: [generatedAt, enabled, experimental, source, agentConnected, summary, nodes, limitations]
+      properties:
+        generatedAt:
+          type: string
+        enabled:
+          type: boolean
+        experimental:
+          type: boolean
+        source:
+          type: string
+        agentConnected:
+          type: boolean
+        summary:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeTelemetryItem"
+        limitations:
+          type: array
+          items:
+            type: string
+    FleetDriftItem:
+      type: object
+      required: [cluster, severity, summary, signals]
+      properties:
+        cluster:
+          type: string
+        severity:
+          type: string
+        summary:
+          type: string
+        signals:
+          type: array
+          items:
+            type: string
+    FleetDriftReport:
+      type: object
+      required: [generatedAt, enabled, experimental, baseline, compared, items, limitations]
+      properties:
+        generatedAt:
+          type: string
+        enabled:
+          type: boolean
+        experimental:
+          type: boolean
+        baseline:
+          type: string
+        compared:
+          type: integer
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/FleetDriftItem"
+        limitations:
+          type: array
+          items:
+            type: string
+    AutonomousRemediationPolicy:
+      type: object
+      required:
+        [enabled, experimental, minRiskScore, maxProposals, requiresWriteGate, requiresHumanReview, blockedReasons]
+      properties:
+        enabled:
+          type: boolean
+        experimental:
+          type: boolean
+        minRiskScore:
+          type: integer
+        maxProposals:
+          type: integer
+        requiresWriteGate:
+          type: boolean
+        requiresHumanReview:
+          type: boolean
+        blockedReasons:
+          type: array
+          items:
+            type: string
+    AutonomousRemediationReport:
+      type: object
+      required: [generatedAt, enabled, experimental, policy, proposals, limitations]
+      properties:
+        generatedAt:
+          type: string
+        enabled:
+          type: boolean
+        experimental:
+          type: boolean
+        policy:
+          $ref: "#/components/schemas/AutonomousRemediationPolicy"
+        proposals:
+          type: array
+          items:
+            $ref: "#/components/schemas/RemediationProposal"
+        limitations:
+          type: array
+          items:
+            type: string
     GhostResources:
       type: object
       required: [cpuMilli, memoryBytes]

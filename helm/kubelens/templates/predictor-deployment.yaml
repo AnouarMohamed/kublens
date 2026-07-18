@@ -32,7 +32,7 @@ spec:
             - name: OTEL_SERVICE_NAME
               value: "kubelens-predictor"
             {{- range $key, $value := .Values.env }}
-            {{- if or (eq $key "OTEL_EXPORTER_OTLP_ENDPOINT") (eq $key "OTEL_EXPORTER_OTLP_PROTOCOL") (eq $key "OTEL_EXPORTER_OTLP_INSECURE") (eq $key "OTEL_TRACES_SAMPLE_RATIO") }}
+            {{- if or (eq $key "PREDICTOR_SHARED_SECRET") (eq $key "PREDICTOR_MODE") (eq $key "PREDICTOR_MODEL_PATH") (eq $key "PREDICTOR_MODEL_METADATA_PATH") (eq $key "PREDICTOR_MIN_FEATURE_COMPLETENESS") (eq $key "PREDICTOR_MAX_MODEL_AGE_HOURS") (eq $key "OTEL_EXPORTER_OTLP_ENDPOINT") (eq $key "OTEL_EXPORTER_OTLP_PROTOCOL") (eq $key "OTEL_EXPORTER_OTLP_INSECURE") (eq $key "OTEL_TRACES_SAMPLE_RATIO") }}
             - name: {{ $key }}
               value: {{ $value | quote }}
             {{- end }}

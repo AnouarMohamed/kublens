@@ -26,6 +26,7 @@ from predictor.app.main import (
     parse_memory_mi,
     predict,
     require_predictor_secret,
+    telemetry_endpoint,
 )
 from pydantic import ValidationError
 
@@ -46,6 +47,21 @@ def clear_predictor_ml_env(monkeypatch: pytest.MonkeyPatch) -> None:
     predictor_main._ml_model_cache = None
     predictor_main._ml_metadata_cache_path = None
     predictor_main._ml_metadata_cache = None
+    with predictor_main._telemetry_lock:
+        predictor_main._telemetry_state.update(
+            {
+                "totalRequests": 0,
+                "generatedPredictions": 0,
+                "mlInferenceAttempts": 0,
+                "mlInferenceFailures": 0,
+                "mlDisagreements": 0,
+                "featureMissingRate": 0.0,
+                "averageLatencyMs": 0.0,
+                "lastLatencyMs": 0.0,
+                "scoreBuckets": {"low": 0, "medium": 0, "high": 0, "critical": 0},
+                "lastPredictionAt": "",
+            }
+        )
 
 
 def predict_payload(payload: dict) -> PredictionResponse:
@@ -151,6 +167,12 @@ def test_predict_returns_risk_items() -> None:
     assert data.source == "python-fastapi"
     assert len(data.items) == 1
     assert data.items[0].riskScore >= 35
+    telemetry = telemetry_endpoint()
+    assert telemetry.totalRequests == 1
+    assert telemetry.generatedPredictions == 1
+    assert telemetry.lastLatencyMs >= 0
+    assert telemetry.averageLatencyMs >= 0
+    assert telemetry.lastPredictionAt != ""
 
 
 def test_predict_handles_invalid_usage_values() -> None:
@@ -300,9 +322,13 @@ def test_predict_shadow_mode_emits_ml_without_blending(monkeypatch: pytest.Monke
 
     item = predict_payload(payload).items[0]
     assert item.riskScore == 42
+    assert {"key": "mlDisagreement", "value": "53%"} in signal_payloads(item)
     assert {"key": "mlShadowRisk", "value": "95%"} in signal_payloads(item)
     assert {"key": "mlMode", "value": "shadow"} in signal_payloads(item)
     assert {"key": "mlRisk", "value": "95%"} not in signal_payloads(item)
+    telemetry = telemetry_endpoint()
+    assert telemetry.mlInferenceAttempts == 1
+    assert telemetry.mlDisagreements == 1
 
 
 def test_pod_ml_features_include_snapshot_context() -> None:

@@ -38,6 +38,7 @@
 - Action-specific audit labels for critical operations
 - Audit entries include hash-chain verification and optional HMAC signatures through `AUDIT_SIGNING_KEY`
 - Persisted remediation GitOps artifacts with actor/timestamp linkage for governed change review
+- SQL-backed incident, remediation, postmortem, alert lifecycle, and Ghost simulation records through SQLite or Postgres
 - Optional OpenTelemetry traces for backend and predictor paths
 
 ## Continuous assurance
@@ -66,10 +67,17 @@
 - RBAC manifests per overlay
 - PDB/HPA for availability posture
 
+## Experimental feature controls
+
+- eBPF telemetry, fleet drift detection, and autonomous remediation proposal generation are disabled by default.
+- Experimental API responses include explicit maturity/limitation fields.
+- Autonomous remediation proposal generation requires operator authorization and the global write gate; generated items remain proposals and still require human approval before execution.
+
 ## Operational recommendations
 
 - Use `APP_MODE=prod` with `AUTH_ENABLED=true` in shared environments.
 - Keep write actions disabled unless operationally required.
+- Keep experimental feature flags disabled unless the environment has rollback, privacy, and review runbooks for that feature.
 - Rotate static tokens and prefer OIDC/JWT where possible.
 - Restrict egress to approved integrations only.
 - Review audit logs regularly and alert on suspicious write attempts.
