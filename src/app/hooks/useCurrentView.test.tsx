@@ -7,9 +7,9 @@ describe("useCurrentView", () => {
     window.localStorage.clear();
   });
 
-  it("defaults to overview", () => {
+  it("defaults to the incident workbench", () => {
     const { result } = renderHook(() => useCurrentView());
-    expect(result.current.currentView).toBe("overview");
+    expect(result.current.currentView).toBe("workbench");
   });
 
   it("persists selected view", async () => {

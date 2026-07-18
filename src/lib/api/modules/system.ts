@@ -10,12 +10,34 @@ import type {
   RuntimeStatus,
   SLOOverview,
 } from "../../../types";
-import { apiRoute, requestJson, requestPredictions } from "../core";
+import { ApiError, apiRoute, requestJson, requestPredictions } from "../core";
+
+async function requestHealthStatus(url: string): Promise<HealthStatus> {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const payload = (await response.json()) as unknown;
+  if (isHealthStatus(payload)) {
+    return payload;
+  }
+  if (!response.ok) {
+    throw new ApiError(`Request failed with status ${response.status}`, response.status);
+  }
+  throw new ApiError(`Unexpected response shape from ${url}`, 502);
+}
+
+function isHealthStatus(value: unknown): value is HealthStatus {
+  return typeof value === "object" && value !== null && "status" in value && "checks" in value && "timestamp" in value;
+}
 
 export const systemApi = {
   getVersion: () => requestJson<BuildInfo>(apiRoute("/version")),
   getHealth: () => requestJson<HealthStatus>(apiRoute("/healthz")),
   getReadiness: () => requestJson<HealthStatus>(apiRoute("/readyz")),
+  getEnterpriseReadiness: () => requestHealthStatus(apiRoute("/readiness/enterprise")),
   getRuntimeStatus: () => requestJson<RuntimeStatus>(apiRoute("/runtime")),
   getClusterInfo: () => requestJson<ClusterInfo>(apiRoute("/cluster-info")),
   getApiMetrics: (signal?: AbortSignal) => requestJson<ApiMetricsSnapshot>(apiRoute("/metrics"), { signal }),

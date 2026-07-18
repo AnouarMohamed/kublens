@@ -10,6 +10,7 @@ import type { View } from "../../types";
 const VIEW_KEY = "k8s-ops.current-view.v1";
 
 const VALID_VIEWS = new Set<View>([
+  "workbench",
   "overview",
   "pods",
   "deployments",
@@ -49,7 +50,8 @@ const VALID_VIEWS = new Set<View>([
 ]);
 
 const CANONICAL_VIEW_PATHS: Partial<Record<View, string>> = {
-  overview: "/",
+  workbench: "/",
+  overview: "/overview",
   shiftbrief: "/shift-brief",
   riskguard: "/risk-guard",
 };
@@ -129,7 +131,7 @@ export function useCurrentView() {
 function mapPathToView(pathname: string): View | null {
   const cleanPath = pathname.replace(/^\/+/, "").split("/")[0];
   if (cleanPath === "") {
-    return "overview";
+    return "workbench";
   }
   if (cleanPath === "shift-brief") {
     return "shiftbrief";

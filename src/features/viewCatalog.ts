@@ -38,6 +38,12 @@ export const VIEW_SECTIONS: ViewSection[] = [
     label: "Overview",
     items: [
       {
+        id: "workbench",
+        label: "Incident Workbench",
+        description: "Detect, simulate, remediate, and audit from one queue.",
+        kubectlCommand: "kubectl get events -A --sort-by=.metadata.creationTimestamp",
+      },
+      {
         id: "overview",
         label: "Cluster Overview",
         description: "Health, capacity, and workload summary in one view.",

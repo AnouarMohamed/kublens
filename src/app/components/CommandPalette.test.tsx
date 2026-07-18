@@ -27,8 +27,8 @@ describe("CommandPalette", () => {
       />,
     );
 
-    await user.click(screen.getByPlaceholderText("Search views, pods, nodes, or ask the assistant…"));
-    await user.keyboard("{ArrowDown}{Enter}");
+    await user.type(screen.getByPlaceholderText("Search views, pods, nodes, or ask the assistant…"), "pods");
+    await user.keyboard("{Enter}");
 
     expect(mockNavigation.navigateToView).toHaveBeenCalledWith("pods");
     expect(setPaletteOpen).toHaveBeenCalledWith(false);

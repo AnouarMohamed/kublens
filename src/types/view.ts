@@ -1,4 +1,5 @@
 export type View =
+  | "workbench"
   | "overview"
   | "pods"
   | "deployments"

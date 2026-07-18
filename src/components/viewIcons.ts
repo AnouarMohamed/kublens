@@ -1,6 +1,7 @@
 import {
   AlarmClock,
   Archive,
+  Activity,
   BookOpen,
   Bot,
   BrainCircuit,
@@ -39,6 +40,7 @@ import {
 import type { View } from "../types";
 
 export const VIEW_ICON: Record<View, LucideIcon> = {
+  workbench: Activity,
   overview: LayoutDashboard,
   pods: Boxes,
   deployments: Rocket,

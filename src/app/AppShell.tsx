@@ -22,6 +22,7 @@ import type { View } from "../types";
 import Dashboard from "../views/dashboard";
 import { ErrorBoundary } from "../components/ErrorBoundary";
 
+const IncidentWorkbench = lazy(() => import("../views/workbench"));
 const Metrics = lazy(() => import("../views/metrics"));
 const SLOCenter = lazy(() => import("../views/slo"));
 const Rightsizing = lazy(() => import("../views/rightsizing"));
@@ -330,6 +331,12 @@ export function AppShell() {
 
 function renderView(view: View): ReactElement {
   switch (view) {
+    case "workbench":
+      return (
+        <Suspense fallback={<ViewLoadingState label="Loading incident workbench..." />}>
+          <IncidentWorkbench />
+        </Suspense>
+      );
     case "overview":
       return <Dashboard />;
     case "pods":
