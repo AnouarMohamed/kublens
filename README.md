@@ -67,7 +67,7 @@ flowchart TD
 | **Cluster memory**          | Runbook and fix-pattern memory for operational learning                                                                                                         |
 | **Postmortems**             | Generated postmortems from incident timeline + runbook state                                                                                                    |
 | **Metrics + observability** | API telemetry, Prometheus export, dashboard charts, tracing integration                                                                                         |
-| **Streaming + audit**       | Live stream (SSE/WebSocket) and request-level audit trail                                                                                                       |
+| **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, and hash-chain verification                                                                             |
 | **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                         |
 | **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                              |
 

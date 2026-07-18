@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ShieldCheck } from "lucide-react";
 import { api } from "../../lib/api";
-import type { AuditEntry, StreamEvent } from "../../types";
+import type { AuditEntry, AuditVerification, StreamEvent } from "../../types";
 
 const MAX_ROWS = 3000;
-const ROW_HEIGHT = 44;
+const ROW_HEIGHT = 54;
 const ROW_OVERSCAN = 8;
 const DEFAULT_VIEWPORT_HEIGHT = 520;
 const BASE_RECONNECT_MS = 1000;
@@ -20,6 +21,9 @@ export default function AuditView() {
   const [connected, setConnected] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [verificationError, setVerificationError] = useState<string | null>(null);
+  const [verifyingID, setVerifyingID] = useState<string | null>(null);
+  const [verificationByID, setVerificationByID] = useState<Record<string, AuditVerification>>({});
   const [filter, setFilter] = useState("");
   const [livePaused, setLivePaused] = useState(false);
   const [bufferedCount, setBufferedCount] = useState(0);
@@ -86,6 +90,22 @@ export default function AuditView() {
       setError(err instanceof Error ? err.message : "Failed to load audit log");
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  const verifyEntry = useCallback(async (entry: AuditEntry) => {
+    setVerifyingID(entry.id);
+    setVerificationError(null);
+    try {
+      const verification = await api.verifyAuditEntry(entry.id);
+      setVerificationByID((current) => ({
+        ...current,
+        [entry.id]: verification,
+      }));
+    } catch (err) {
+      setVerificationError(err instanceof Error ? err.message : "Failed to verify audit entry");
+    } finally {
+      setVerifyingID(null);
     }
   }, []);
 
@@ -272,6 +292,11 @@ export default function AuditView() {
         {error && (
           <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">{error}</p>
         )}
+        {verificationError && (
+          <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+            {verificationError}
+          </p>
+        )}
 
         <div
           ref={tableScrollRef}
@@ -287,20 +312,21 @@ export default function AuditView() {
                 <th className="px-3 py-2">Action</th>
                 <th className="px-3 py-2">Path</th>
                 <th className="px-3 py-2">Status</th>
+                <th className="px-3 py-2">Integrity</th>
                 <th className="px-3 py-2">Duration</th>
               </tr>
             </thead>
             <tbody>
               {loading && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-6 text-center text-zinc-500">
+                  <td colSpan={8} className="px-3 py-6 text-center text-zinc-500">
                     Loading audit entries...
                   </td>
                 </tr>
               )}
               {!loading && virtualRows.topPadding > 0 && (
                 <tr aria-hidden>
-                  <td colSpan={7} style={{ height: virtualRows.topPadding, padding: 0 }} />
+                  <td colSpan={8} style={{ height: virtualRows.topPadding, padding: 0 }} />
                 </tr>
               )}
               {!loading &&
@@ -321,17 +347,25 @@ export default function AuditView() {
                         {row.status}
                       </span>
                     </td>
+                    <td className="px-3 py-2">
+                      <AuditIntegrityCell
+                        row={row}
+                        verification={verificationByID[row.id]}
+                        verifying={verifyingID === row.id}
+                        onVerify={() => void verifyEntry(row)}
+                      />
+                    </td>
                     <td className="px-3 py-2 text-xs text-zinc-400">{row.durationMs}ms</td>
                   </tr>
                 ))}
               {!loading && virtualRows.bottomPadding > 0 && (
                 <tr aria-hidden>
-                  <td colSpan={7} style={{ height: virtualRows.bottomPadding, padding: 0 }} />
+                  <td colSpan={8} style={{ height: virtualRows.bottomPadding, padding: 0 }} />
                 </tr>
               )}
               {!loading && filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-3 py-8 text-center text-zinc-500">
+                  <td colSpan={8} className="px-3 py-8 text-center text-zinc-500">
                     No matching audit entries.
                   </td>
                 </tr>
@@ -340,6 +374,43 @@ export default function AuditView() {
           </table>
         </div>
       </section>
+    </div>
+  );
+}
+
+function AuditIntegrityCell({
+  row,
+  verification,
+  verifying,
+  onVerify,
+}: {
+  row: AuditEntry;
+  verification?: AuditVerification;
+  verifying: boolean;
+  onVerify: () => void;
+}) {
+  if (!row.hash) {
+    return <span className="text-xs text-zinc-500">unhashed</span>;
+  }
+
+  return (
+    <div className="flex min-w-[130px] items-center gap-2">
+      <button
+        type="button"
+        onClick={onVerify}
+        disabled={verifying}
+        className="btn-sm inline-flex items-center gap-1.5 px-2 py-0.5"
+      >
+        <ShieldCheck size={12} />
+        {verifying ? "Checking" : "Verify"}
+      </button>
+      <div className="min-w-0">
+        <p
+          className={`text-[11px] ${verification ? (verification.ok ? "text-emerald-300" : "text-red-300") : "text-zinc-500"}`}
+        >
+          {verification ? (verification.ok ? "verified" : verification.message) : shortHash(row.hash)}
+        </p>
+      </div>
     </div>
   );
 }
@@ -361,4 +432,9 @@ function formatTime(value: string): string {
     return value;
   }
   return date.toLocaleString();
+}
+
+function shortHash(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.length > 12 ? trimmed.slice(0, 12) : trimmed;
 }
