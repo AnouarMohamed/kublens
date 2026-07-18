@@ -5,10 +5,10 @@ import json
 import pytest
 
 pytest.importorskip("joblib")
-pytest.importorskip("pandas")
+pd = pytest.importorskip("pandas")
 pytest.importorskip("sklearn")
 
-from predictor.app.ml_prototype import train_simple_model
+from predictor.app.ml_prototype import FEATURE_COLUMNS, build_feature_frame, train_simple_model  # noqa: E402
 
 
 def test_train_simple_model_writes_metadata_sidecar(tmp_path) -> None:
@@ -48,10 +48,42 @@ def test_train_simple_model_writes_metadata_sidecar(tmp_path) -> None:
     payload = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["modelVersion"] == "pod-risk-test"
     assert payload["gitCommit"] == "abc1234"
-    assert payload["featureList"] == ["restarts", "cpu_milli", "memory_mi"]
+    assert payload["featureList"] == list(FEATURE_COLUMNS)
     assert payload["labelDefinition"] == "label=incident within rollout horizon"
     assert payload["ownerReviewer"] == "sre-platform"
     assert payload["calibratedThreshold"] == 0.5
     assert "2026-07-01T00:00:00+00:00/2026-07-01T00:35:00+00:00" == payload["trainingDataWindow"]
     assert "precision" in payload["evaluationMetrics"]
     assert "recall" in payload["evaluationMetrics"]
+
+
+def test_build_feature_frame_normalizes_extended_features(tmp_path) -> None:
+    """Training data can provide the richer runtime feature contract."""
+
+    data_path = tmp_path / "training.csv"
+    data_path.write_text(
+        "\n".join(
+            [
+                "restarts,cpu,memory,status,age,phase_duration,node_status,warning_events,namespace_warning_events,namespace_pressure,cpu_trend,memory_trend,image_pull_backoffs,previous_incidents,label",
+                "3,600m,1Gi,Pending,30m,10m,NotReady,4,7,0.5,25,18,2,1,1",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    frame = build_feature_frame(pd.read_csv(data_path))
+
+    row = frame.iloc[0].to_dict()
+    assert row["restarts"] == 3
+    assert row["cpu_milli"] == 600
+    assert row["memory_mi"] == 1024
+    assert row["status_pending"] == 1
+    assert row["pod_age_minutes"] == 30
+    assert row["phase_duration_minutes"] == 10
+    assert row["node_not_ready"] == 1
+    assert row["warning_events"] == 4
+    assert row["namespace_warning_events"] == 7
+    assert row["namespace_non_running_ratio"] == 0.5
+    assert row["cpu_trend_delta"] == 25
+    assert row["memory_trend_delta"] == 18
+    assert row["image_pull_backoff_events"] == 2
+    assert row["previous_incidents"] == 1

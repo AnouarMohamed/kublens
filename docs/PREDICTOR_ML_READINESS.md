@@ -6,7 +6,7 @@ This document tracks the work required to move the optional predictor ML path fr
 
 - Deterministic scoring remains the default predictor behavior.
 - Optional ML scoring is enabled only when `PREDICTOR_MODE` is `shadow` or `blended` and `PREDICTOR_MODEL_PATH` points to a loadable joblib model.
-- Runtime feature contract is currently `restarts`, `cpu_milli`, and `memory_mi`.
+- Runtime ML feature order is declared by model metadata. Without metadata, the default contract includes restarts, CPU, memory, pod status, age, warning counts, namespace pressure, node readiness, restart velocity, CPU/memory trend deltas, phase duration, image-pull/backoff events, and previous incident count.
 - ML scores can raise deterministic pod risk, but cannot lower deterministic risk.
 - `GET /model` reports mode, model load status, metadata load status, freshness, required features, and blending readiness.
 - Shadow mode emits `mlShadowRisk` without changing final risk.
@@ -21,7 +21,7 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 
 | Area              | Required work                                                                                                                                                                                                          | Status      |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
-| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Planned     |
+| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Partial     |
 | Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Partial     |
 | Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Planned     |
 | Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Planned     |
@@ -76,3 +76,5 @@ PREDICTOR_MAX_MODEL_AGE_HOURS=168
 ## Trainer metadata
 
 The trainer writes `pod-risk.metadata.json` next to the model unless `--metadata-path` is supplied. Promotion metadata includes the model version, source commit, training data window, feature list, label definition, evaluation metrics, calibrated threshold, training timestamp, and owner/reviewer.
+
+The runtime honors the feature order declared in `featureList`, so older promoted three-column models can remain in shadow/blended testing while new training data adopts the expanded feature set. Feature completeness is calculated against the declared feature order before ML can influence final risk.

@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,7 +20,25 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 
-FEATURE_COLUMNS = ("restarts", "cpu_milli", "memory_mi")
+FEATURE_COLUMNS = (
+    "restarts",
+    "cpu_milli",
+    "memory_mi",
+    "status_failed",
+    "status_pending",
+    "status_unknown",
+    "pod_age_minutes",
+    "warning_events",
+    "namespace_warning_events",
+    "namespace_non_running_ratio",
+    "node_not_ready",
+    "restart_velocity_per_hour",
+    "cpu_trend_delta",
+    "memory_trend_delta",
+    "phase_duration_minutes",
+    "image_pull_backoff_events",
+    "previous_incidents",
+)
 LABEL_COLUMNS = ("failure_imminent", "label", "target")
 TIME_COLUMNS = ("timestamp", "observed_at", "created_at")
 DEFAULT_THRESHOLD = 0.5
@@ -62,18 +81,136 @@ def choose_column(frame: pd.DataFrame, candidates: tuple[str, ...]) -> str:
     raise ValueError(f"missing required column; expected one of: {', '.join(candidates)}")
 
 
+def optional_column(frame: pd.DataFrame, candidates: tuple[str, ...]) -> str | None:
+    """Return the first present optional column."""
+
+    for column in candidates:
+        if column in frame.columns:
+            return column
+    return None
+
+
+def optional_numeric_feature(
+    frame: pd.DataFrame,
+    candidates: tuple[str, ...],
+    *,
+    default: float = 0.0,
+) -> pd.Series:
+    """Return a numeric feature series, defaulting missing values."""
+
+    column = optional_column(frame, candidates)
+    if column is None:
+        return pd.Series(default, index=frame.index, dtype=float)
+    return pd.to_numeric(frame[column], errors="coerce").fillna(default)
+
+
+def parse_duration_minutes(value: object) -> float:
+    """Parse compact Kubernetes-style durations into minutes."""
+
+    raw = str(value).strip().lower().replace(" ", "")
+    if raw == "" or raw == "nan" or raw == "n/a":
+        return 0.0
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        pass
+
+    unit_minutes = {
+        "s": 1 / 60,
+        "m": 1,
+        "h": 60,
+        "d": 60 * 24,
+        "w": 60 * 24 * 7,
+        "y": 60 * 24 * 365,
+    }
+    matches = list(re.finditer(r"(\d+(?:\.\d+)?)([smhdwy])", raw))
+    if not matches or "".join(match.group(0) for match in matches) != raw:
+        return 0.0
+    return max(0.0, sum(float(match.group(1)) * unit_minutes[match.group(2)] for match in matches))
+
+
+def boolish_to_float(value: object) -> float:
+    """Convert common boolean-ish values to 0/1 floats."""
+
+    raw = str(value).strip().lower()
+    if raw in {"1", "true", "yes", "y", "ready", "notready", "not_ready"}:
+        return 1.0
+    return 0.0
+
+
 def build_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
     """Normalize historical pod rows into the service feature contract."""
 
     restarts_col = choose_column(frame, ("restarts", "restart_count"))
     cpu_col = choose_column(frame, ("cpu_milli", "cpu", "cpu_usage"))
     memory_col = choose_column(frame, ("memory_mi", "memory", "memory_usage"))
+    status_col = optional_column(frame, ("status", "phase", "pod_status"))
+    age_col = optional_column(frame, ("pod_age_minutes", "age_minutes", "age", "pod_age"))
+    phase_duration_col = optional_column(frame, ("phase_duration_minutes", "phase_duration", "phase_age"))
+    node_not_ready_col = optional_column(frame, ("node_not_ready", "node_unready"))
+    node_ready_col = optional_column(frame, ("node_ready", "node_is_ready"))
+    node_status_col = optional_column(frame, ("node_status", "node_phase"))
+
+    restarts = pd.to_numeric(frame[restarts_col], errors="coerce").fillna(0)
+    age_minutes = (
+        frame[age_col].map(parse_duration_minutes).fillna(0)
+        if age_col is not None
+        else pd.Series(0.0, index=frame.index, dtype=float)
+    )
+    phase_duration_minutes = (
+        frame[phase_duration_col].map(parse_duration_minutes).fillna(0)
+        if phase_duration_col is not None
+        else age_minutes.copy()
+    )
+    if status_col is not None:
+        status = frame[status_col].astype(str).str.strip().str.lower()
+    else:
+        status = pd.Series("", index=frame.index, dtype=str)
+
+    if node_not_ready_col is not None:
+        node_not_ready = frame[node_not_ready_col].map(boolish_to_float).fillna(0)
+    elif node_status_col is not None:
+        node_not_ready = (
+            frame[node_status_col].astype(str).str.strip().str.lower().isin({"notready", "not_ready", "unready"})
+        ).astype(float)
+    elif node_ready_col is not None:
+        node_not_ready = 1.0 - frame[node_ready_col].map(boolish_to_float).fillna(0)
+    else:
+        node_not_ready = pd.Series(0.0, index=frame.index, dtype=float)
+
+    restart_velocity = optional_numeric_feature(frame, ("restart_velocity_per_hour", "restart_velocity"))
+    missing_velocity = restart_velocity.eq(0) & age_minutes.gt(0)
+    computed_restart_velocity = restarts / (age_minutes / 60).replace(0, pd.NA)
+    restart_velocity = restart_velocity.mask(missing_velocity, computed_restart_velocity).fillna(0)
 
     return pd.DataFrame(
         {
-            "restarts": pd.to_numeric(frame[restarts_col], errors="coerce").fillna(0),
+            "restarts": restarts,
             "cpu_milli": frame[cpu_col].map(parse_cpu_milli).fillna(0),
             "memory_mi": frame[memory_col].map(parse_memory_mi).fillna(0),
+            "status_failed": status.eq("failed").astype(float),
+            "status_pending": status.eq("pending").astype(float),
+            "status_unknown": status.eq("unknown").astype(float),
+            "pod_age_minutes": age_minutes,
+            "warning_events": optional_numeric_feature(frame, ("warning_events", "warning_event_count")),
+            "namespace_warning_events": optional_numeric_feature(
+                frame,
+                ("namespace_warning_events", "namespace_warning_event_count"),
+            ),
+            "namespace_non_running_ratio": optional_numeric_feature(
+                frame,
+                ("namespace_non_running_ratio", "namespace_pressure"),
+            ),
+            "node_not_ready": node_not_ready,
+            "restart_velocity_per_hour": restart_velocity,
+            "cpu_trend_delta": optional_numeric_feature(frame, ("cpu_trend_delta", "cpu_trend")),
+            "memory_trend_delta": optional_numeric_feature(frame, ("memory_trend_delta", "memory_trend")),
+            "phase_duration_minutes": phase_duration_minutes,
+            "image_pull_backoff_events": optional_numeric_feature(
+                frame,
+                ("image_pull_backoff_events", "image_pull_backoffs", "image_backoff_events"),
+            ),
+            "previous_incidents": optional_numeric_feature(frame, ("previous_incidents", "prior_incidents")),
         },
         columns=FEATURE_COLUMNS,
     )

@@ -8,16 +8,19 @@ import pytest
 from fastapi import HTTPException
 from predictor.app import main as predictor_main
 from predictor.app.main import (
+    DEFAULT_ML_FEATURES,
     IncidentPrediction,
     K8sEvent,
     ModelMetadata,
     PredictionRequest,
     PredictionResponse,
     blend_risk_score,
+    build_pod_ml_feature_set,
     confidence_from_evidence,
     count_resource_warning_events,
     healthz,
     metadata_is_stale,
+    ml_feature_set_completeness,
     model_health_endpoint,
     parse_cpu_milli,
     parse_memory_mi,
@@ -96,7 +99,7 @@ def test_model_health_reports_deterministic_default(monkeypatch: pytest.MonkeyPa
     assert data.enabled is False
     assert data.usableForBlending is False
     assert data.modelLoaded is False
-    assert data.requiredFeatures == ["restarts", "cpu_milli", "memory_mi"]
+    assert data.requiredFeatures == DEFAULT_ML_FEATURES
     assert data.lastError == ""
 
 
@@ -207,7 +210,7 @@ def test_predict_scores_not_ready_node_with_hot_metrics() -> None:
 
 
 def test_predict_blends_optional_ml_score(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    """Optional ML scoring can surface a high-risk running pod."""
+    """Optional ML scoring honors the metadata-declared legacy feature order."""
 
     class HighRiskModel:
         def predict_proba(self, features: list[list[float]]) -> list[list[float]]:
@@ -241,11 +244,31 @@ def test_predict_blends_optional_ml_score(monkeypatch: pytest.MonkeyPatch, tmp_p
 
 
 def test_predict_shadow_mode_emits_ml_without_blending(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Shadow ML is visible to operators but does not change deterministic risk."""
+    """Shadow ML can use the richer default feature contract without changing risk."""
 
     class HighRiskModel:
         def predict_proba(self, features: list[list[float]]) -> list[list[float]]:
-            assert features == [[1.0, 50.0, 128.0]]
+            assert features == [
+                [
+                    1.0,
+                    50.0,
+                    128.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    3.0,
+                    0.0,
+                    0.0,
+                    1.0,
+                    0.0,
+                    20.0,
+                    0.0,
+                    0.0,
+                    3.0,
+                    0.0,
+                    0.0,
+                ]
+            ]
             return [[0.05, 0.95]]
 
     monkeypatch.setenv("PREDICTOR_MODE", "shadow")
@@ -272,6 +295,95 @@ def test_predict_shadow_mode_emits_ml_without_blending(monkeypatch: pytest.Monke
     assert {"key": "mlShadowRisk", "value": "95%"} in signal_payloads(item)
     assert {"key": "mlMode", "value": "shadow"} in signal_payloads(item)
     assert {"key": "mlRisk", "value": "95%"} not in signal_payloads(item)
+
+
+def test_pod_ml_features_include_snapshot_context() -> None:
+    """The default ML contract derives richer pod, namespace, node, and event features."""
+
+    request = PredictionRequest.model_validate(
+        {
+            "pods": [
+                {
+                    "id": "p-rich",
+                    "name": "checkout",
+                    "namespace": "prod",
+                    "nodeName": "node-hot",
+                    "status": "Pending",
+                    "cpu": "600m",
+                    "memory": "1Gi",
+                    "age": "30m",
+                    "restarts": 3,
+                    "phaseDuration": "10m",
+                    "previousIncidents": 2,
+                    "cpuHistory": [{"time": "10:00", "value": 40}, {"time": "10:05", "value": 65}],
+                    "memoryHistory": [{"time": "10:00", "value": 70}, {"time": "10:05", "value": 88}],
+                },
+                {
+                    "id": "p-ok",
+                    "name": "worker",
+                    "namespace": "prod",
+                    "status": "Running",
+                    "cpu": "100m",
+                    "memory": "128Mi",
+                    "age": "1h",
+                    "restarts": 0,
+                },
+            ],
+            "nodes": [
+                {
+                    "name": "node-hot",
+                    "status": "NotReady",
+                    "roles": "worker",
+                    "age": "2d",
+                    "version": "1.31",
+                    "cpuUsage": "91%",
+                    "memUsage": "88%",
+                }
+            ],
+            "events": [
+                {
+                    "type": "Warning",
+                    "reason": "ErrImagePull",
+                    "namespace": "prod",
+                    "resource": "checkout",
+                    "message": "checkout image pull failed",
+                    "count": 2,
+                },
+                {
+                    "type": "Warning",
+                    "reason": "BackOff",
+                    "namespace": "prod",
+                    "message": "checkout backing off",
+                },
+            ],
+        }
+    )
+    pod = request.pods[0]
+    cpu_milli, cpu_known = parse_cpu_milli(pod.cpu)
+    mem_mi, mem_known = parse_memory_mi(pod.memory)
+    feature_set = build_pod_ml_feature_set(
+        pod,
+        request,
+        cpu_milli=cpu_milli,
+        cpu_known=cpu_known,
+        mem_mi=mem_mi,
+        mem_known=mem_known,
+        resource_warnings=count_resource_warning_events(request.events, pod.name, pod.namespace),
+    )
+
+    assert feature_set.values["status_pending"] == 1.0
+    assert feature_set.values["pod_age_minutes"] == 30.0
+    assert feature_set.values["warning_events"] == 3.0
+    assert feature_set.values["namespace_warning_events"] == 3.0
+    assert feature_set.values["namespace_non_running_ratio"] == 0.5
+    assert feature_set.values["node_not_ready"] == 1.0
+    assert feature_set.values["restart_velocity_per_hour"] == 6.0
+    assert feature_set.values["cpu_trend_delta"] == 25.0
+    assert feature_set.values["memory_trend_delta"] == 18.0
+    assert feature_set.values["phase_duration_minutes"] == 10.0
+    assert feature_set.values["image_pull_backoff_events"] == 2.0
+    assert feature_set.values["previous_incidents"] == 2.0
+    assert ml_feature_set_completeness(feature_set, DEFAULT_ML_FEATURES) > 0.90
 
 
 def test_blended_ml_requires_feature_completeness(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:

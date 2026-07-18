@@ -27,6 +27,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -108,24 +110,29 @@ def configure_telemetry(app: FastAPI) -> None:
 configure_telemetry(api)
 
 
+class CPUPoint(BaseModel):
+    """Single metric sample used to compute short trend signals."""
+
+    time: str
+    value: int
+
+
 class PodSummary(BaseModel):
     """Input model describing a pod snapshot used by the scorer."""
 
     id: str
     name: str
     namespace: str
+    nodeName: str = ""
     status: str
     cpu: str
     memory: str
     age: str
     restarts: int
-
-
-class CPUPoint(BaseModel):
-    """Single CPU usage sample used to compute short trend signals."""
-
-    time: str
-    value: int
+    phaseDuration: str | None = None
+    previousIncidents: int | None = None
+    cpuHistory: list[CPUPoint] = Field(default_factory=list)
+    memoryHistory: list[CPUPoint] = Field(default_factory=list)
 
 
 class NodeSummary(BaseModel):
@@ -149,6 +156,9 @@ class K8sEvent(BaseModel):
     age: str = ""
     from_: str = Field(default="", alias="from")
     message: str = ""
+    namespace: str = ""
+    resource: str = ""
+    resourceKind: str = ""
     count: int | None = None
 
 
@@ -220,7 +230,33 @@ class PredictionResponse(BaseModel):
     items: list[IncidentPrediction]
 
 
-REQUIRED_ML_FEATURES = ["restarts", "cpu_milli", "memory_mi"]
+DEFAULT_ML_FEATURES = [
+    "restarts",
+    "cpu_milli",
+    "memory_mi",
+    "status_failed",
+    "status_pending",
+    "status_unknown",
+    "pod_age_minutes",
+    "warning_events",
+    "namespace_warning_events",
+    "namespace_non_running_ratio",
+    "node_not_ready",
+    "restart_velocity_per_hour",
+    "cpu_trend_delta",
+    "memory_trend_delta",
+    "phase_duration_minutes",
+    "image_pull_backoff_events",
+    "previous_incidents",
+]
+
+
+@dataclass(frozen=True)
+class MLFeatureSet:
+    """Model feature values and per-feature completeness flags."""
+
+    values: dict[str, float]
+    known: dict[str, bool]
 
 
 @api.get("/healthz")
@@ -393,18 +429,190 @@ def model_health() -> ModelHealth:
         stale=stale,
         maxModelAgeHours=max_model_age_hours(),
         minFeatureCompleteness=min_feature_completeness(),
-        requiredFeatures=REQUIRED_ML_FEATURES,
+        requiredFeatures=declared_ml_features(metadata),
         lastError=last_error,
     )
 
 
-def pod_ml_features(pod: PodSummary, cpu_milli: int, mem_mi: int) -> list[float]:
-    """Build the stable pod feature vector consumed by optional ML models."""
+def declared_ml_features(metadata: ModelMetadata | None) -> list[str]:
+    """Return the runtime ML feature order declared by model metadata."""
 
-    return [float(pod.restarts), float(max(cpu_milli, 0)), float(max(mem_mi, 0))]
+    if metadata is None:
+        return list(DEFAULT_ML_FEATURES)
+    features = [feature.strip() for feature in metadata.featureList if feature.strip()]
+    return features or list(DEFAULT_ML_FEATURES)
 
 
-def score_pod_with_ml(pod: PodSummary, cpu_milli: int, mem_mi: int) -> int | None:
+def parse_duration_minutes(value: str | None) -> tuple[float, bool]:
+    """Parse compact Kubernetes-style durations into minutes."""
+
+    raw = (value or "").strip().lower().replace(" ", "")
+    if raw == "" or raw == "n/a":
+        return 0.0, False
+    try:
+        return max(0.0, float(raw)), True
+    except ValueError:
+        pass
+
+    unit_minutes = {
+        "s": 1 / 60,
+        "m": 1,
+        "h": 60,
+        "d": 60 * 24,
+        "w": 60 * 24 * 7,
+        "y": 60 * 24 * 365,
+    }
+    matches = list(re.finditer(r"(\d+(?:\.\d+)?)([smhdwy])", raw))
+    if not matches or "".join(match.group(0) for match in matches) != raw:
+        return 0.0, False
+    minutes = sum(float(match.group(1)) * unit_minutes[match.group(2)] for match in matches)
+    return max(0.0, minutes), True
+
+
+def namespace_warning_events(events: list[K8sEvent], namespace: str) -> int:
+    """Count warning events scoped to a namespace."""
+
+    namespace_name = namespace.strip().lower()
+    if namespace_name == "":
+        return 0
+    total = 0
+    for event in events:
+        if not is_warning_event(event):
+            continue
+        event_namespace = event.namespace.strip().lower()
+        haystack = f"{event.reason} {event.message} {event.from_}".lower()
+        if event_namespace == namespace_name or namespace_name in haystack:
+            total += max(1, event.count or 1)
+    return total
+
+
+def is_warning_event(event: K8sEvent) -> bool:
+    """Return whether an event should count as warning evidence."""
+
+    event_type = event.type.strip().lower()
+    reason = event.reason.strip().lower()
+    return event_type == "warning" or reason in {"backoff", "failed", "unhealthy", "oomkilled"}
+
+
+def namespace_non_running_ratio(pods: list[PodSummary], namespace: str) -> tuple[float, bool]:
+    """Return the ratio of non-running pods in the current namespace."""
+
+    namespace_name = namespace.strip().lower()
+    namespace_pods = [pod for pod in pods if pod.namespace.strip().lower() == namespace_name]
+    if not namespace_pods:
+        return 0.0, False
+    non_running = sum(1 for pod in namespace_pods if pod.status.strip().lower() != "running")
+    return non_running / len(namespace_pods), True
+
+
+def node_not_ready_value(pod: PodSummary, nodes: list[NodeSummary]) -> tuple[float, bool]:
+    """Return whether the pod's assigned node is currently NotReady."""
+
+    node_name = pod.nodeName.strip().lower()
+    if node_name == "":
+        return 0.0, False
+    for node in nodes:
+        if node.name.strip().lower() == node_name:
+            return (1.0 if node.status.strip().lower() == "notready" else 0.0), True
+    return 0.0, False
+
+
+def count_image_pull_backoff_events(events: list[K8sEvent], resource: str, namespace: str) -> int:
+    """Count image-pull/backoff events that reference a pod."""
+
+    resource_name = resource.strip().lower()
+    namespace_name = namespace.strip().lower()
+    total = 0
+    for event in events:
+        if not is_warning_event(event):
+            continue
+        reason = event.reason.strip().lower()
+        message = event.message.strip().lower()
+        if not any(token in f"{reason} {message}" for token in ("imagepull", "image pull", "errimagepull")):
+            continue
+        event_resource = event.resource.strip().lower()
+        event_namespace = event.namespace.strip().lower()
+        haystack = f"{event.reason} {event.message} {event.from_}".lower()
+        resource_match = resource_name != "" and (event_resource == resource_name or resource_name in haystack)
+        namespace_match = namespace_name != "" and (event_namespace == namespace_name or namespace_name in haystack)
+        if resource_match or namespace_match:
+            total += max(1, event.count or 1)
+    return total
+
+
+def build_pod_ml_feature_set(
+    pod: PodSummary,
+    request: PredictionRequest,
+    *,
+    cpu_milli: int,
+    cpu_known: bool,
+    mem_mi: int,
+    mem_known: bool,
+    resource_warnings: int,
+) -> MLFeatureSet:
+    """Build all supported pod ML features from the current snapshot."""
+
+    status = pod.status.lower().strip()
+    age_minutes, age_known = parse_duration_minutes(pod.age)
+    phase_raw = pod.phaseDuration if pod.phaseDuration is not None else pod.age
+    phase_minutes, phase_known = parse_duration_minutes(phase_raw)
+    ns_warnings = namespace_warning_events(request.events, pod.namespace)
+    ns_pressure, ns_pressure_known = namespace_non_running_ratio(request.pods, pod.namespace)
+    node_not_ready, node_known = node_not_ready_value(pod, request.nodes)
+    image_backoffs = count_image_pull_backoff_events(request.events, pod.name, pod.namespace)
+    cpu_trend = compute_trend(pod.cpuHistory)
+    memory_trend = compute_trend(pod.memoryHistory)
+    restart_velocity = 0.0 if not age_known or age_minutes <= 0 else float(pod.restarts) / (age_minutes / 60)
+    previous_incidents_known = pod.previousIncidents is not None
+
+    values = {
+        "restarts": float(max(pod.restarts, 0)),
+        "cpu_milli": float(max(cpu_milli, 0)),
+        "memory_mi": float(max(mem_mi, 0)),
+        "status_failed": 1.0 if status == "failed" else 0.0,
+        "status_pending": 1.0 if status == "pending" else 0.0,
+        "status_unknown": 1.0 if status == "unknown" else 0.0,
+        "pod_age_minutes": age_minutes,
+        "warning_events": float(resource_warnings),
+        "namespace_warning_events": float(ns_warnings),
+        "namespace_non_running_ratio": ns_pressure,
+        "node_not_ready": node_not_ready,
+        "restart_velocity_per_hour": restart_velocity,
+        "cpu_trend_delta": float(cpu_trend),
+        "memory_trend_delta": float(memory_trend),
+        "phase_duration_minutes": phase_minutes,
+        "image_pull_backoff_events": float(image_backoffs),
+        "previous_incidents": float(max(pod.previousIncidents or 0, 0)),
+    }
+    known = {
+        "restarts": True,
+        "cpu_milli": cpu_known,
+        "memory_mi": mem_known,
+        "status_failed": status != "",
+        "status_pending": status != "",
+        "status_unknown": status != "",
+        "pod_age_minutes": age_known,
+        "warning_events": True,
+        "namespace_warning_events": True,
+        "namespace_non_running_ratio": ns_pressure_known,
+        "node_not_ready": node_known,
+        "restart_velocity_per_hour": age_known,
+        "cpu_trend_delta": len(pod.cpuHistory) >= 2,
+        "memory_trend_delta": len(pod.memoryHistory) >= 2,
+        "phase_duration_minutes": phase_known,
+        "image_pull_backoff_events": True,
+        "previous_incidents": previous_incidents_known,
+    }
+    return MLFeatureSet(values=values, known=known)
+
+
+def pod_ml_features(feature_set: MLFeatureSet, feature_names: list[str]) -> list[float]:
+    """Build the feature vector consumed by the configured ML model."""
+
+    return [feature_set.values.get(feature, 0.0) for feature in feature_names]
+
+
+def score_pod_with_ml(feature_set: MLFeatureSet, feature_names: list[str]) -> int | None:
     """Return an optional ML risk score for a pod.
 
     Models may expose either ``predict_proba`` with a positive-class column or
@@ -418,7 +626,7 @@ def score_pod_with_ml(pod: PodSummary, cpu_milli: int, mem_mi: int) -> int | Non
     if model is None:
         return None
 
-    features = [pod_ml_features(pod, cpu_milli, mem_mi)]
+    features = [pod_ml_features(feature_set, feature_names)]
     try:
         if hasattr(model, "predict_proba"):
             probabilities = model.predict_proba(features)
@@ -447,11 +655,13 @@ def blend_risk_score(deterministic_score: int, ml_score: int) -> int:
     return clamp(max(deterministic_score, blended), 0, 100)
 
 
-def ml_feature_completeness(cpu_known: bool, mem_known: bool) -> float:
-    """Return completeness for the current stable ML feature contract."""
+def ml_feature_set_completeness(feature_set: MLFeatureSet, feature_names: list[str]) -> float:
+    """Return completeness for a concrete feature set and feature ordering."""
 
-    known = 1 + int(cpu_known) + int(mem_known)
-    return known / len(REQUIRED_ML_FEATURES)
+    if not feature_names:
+        return 0.0
+    known = sum(1 for feature in feature_names if feature_set.known.get(feature, False))
+    return known / len(feature_names)
 
 
 @api.post("/predict", response_model=PredictionResponse)
@@ -473,6 +683,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
 
     items: list[IncidentPrediction] = []
     ml_health = model_health()
+    ml_feature_names = ml_health.requiredFeatures
 
     for pod in request.pods:
         score = 0
@@ -481,6 +692,15 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         resource_warnings = count_resource_warning_events(request.events, pod.name, pod.namespace)
         cpu_milli, cpu_known = parse_cpu_milli(pod.cpu)
         mem_mi, mem_known = parse_memory_mi(pod.memory)
+        ml_feature_set = build_pod_ml_feature_set(
+            pod,
+            request,
+            cpu_milli=cpu_milli,
+            cpu_known=cpu_known,
+            mem_mi=mem_mi,
+            mem_known=mem_known,
+            resource_warnings=resource_warnings,
+        )
 
         if status == "failed":
             score += 62
@@ -507,7 +727,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         if resource_warnings > 0 and status != "running":
             score += min(12, resource_warnings * 2)
 
-        feature_completeness = ml_feature_completeness(cpu_known, mem_known)
+        feature_completeness = ml_feature_set_completeness(ml_feature_set, ml_feature_names)
         if ml_health.enabled:
             if not ml_health.modelLoaded:
                 signals.append(PredictionSignal(key="mlRiskBlocked", value="model-unavailable"))
@@ -516,7 +736,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             elif ml_health.stale:
                 signals.append(PredictionSignal(key="mlRiskBlocked", value="model-stale"))
             else:
-                ml_score = score_pod_with_ml(pod, cpu_milli, mem_mi)
+                ml_score = score_pod_with_ml(ml_feature_set, ml_feature_names)
                 if ml_score is None:
                     signals.append(PredictionSignal(key="mlRiskBlocked", value="inference-unavailable"))
                 elif ml_health.mode == "shadow":
@@ -650,9 +870,7 @@ def count_resource_warning_events(events: list[K8sEvent], resource: str, namespa
     total = 0
 
     for event in events:
-        event_type = event.type.strip().lower()
-        event_reason = event.reason.strip().lower()
-        if event_type != "warning" and event_reason not in {"backoff", "failed", "unhealthy", "oomkilled"}:
+        if not is_warning_event(event):
             continue
 
         haystack = f"{event.reason} {event.message} {event.from_}".lower()
