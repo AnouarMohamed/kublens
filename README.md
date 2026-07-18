@@ -254,7 +254,7 @@ helm install kubelens ./helm/kubelens
 
 ## Predictor service
 
-The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions. Deterministic scoring is the default. Optional ML can run in `shadow` mode to expose model disagreement without changing final risk, or `blended` mode to raise pod risk when the model is loaded, fresh, and feature completeness meets the configured floor. You can train a compatible joblib model with `predictor/app/ml_prototype.py`; install `predictor/requirements-ml.txt`, set `PREDICTOR_MODEL_PATH`, and provide metadata with `PREDICTOR_MODEL_METADATA_PATH`.
+The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions. Deterministic scoring is the default. Optional ML can run in `shadow` mode to expose model disagreement without changing final risk, or `blended` mode to raise pod risk when the model is loaded, fresh, and feature completeness meets the configured floor. You can train a compatible joblib model with `predictor/app/ml_prototype.py`; install `predictor/requirements-ml.txt`, set `PREDICTOR_MODEL_PATH`, and point `PREDICTOR_MODEL_METADATA_PATH` to the generated metadata sidecar.
 
 ```env
 PREDICTOR_BASE_URL=http://localhost:8001
