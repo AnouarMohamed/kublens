@@ -3,7 +3,7 @@
 [![CI](https://github.com/AnouarMohamed/kublens/actions/workflows/ci.yml/badge.svg)](https://github.com/AnouarMohamed/kublens/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/AnouarMohamed/kublens/actions/workflows/codeql.yml/badge.svg)](https://github.com/AnouarMohamed/kublens/actions/workflows/codeql.yml) [![Release Supply Chain](https://github.com/AnouarMohamed/kublens/actions/workflows/release-supply-chain.yml/badge.svg)](https://github.com/AnouarMohamed/kublens/actions/workflows/release-supply-chain.yml)
 
-AI-powered Kubernetes operations assistant for deterministic diagnostics and root-cause analysis.
+Kubernetes incident and change-risk copilot for deterministic diagnostics, simulation, governed remediation, and evidence export.
 
 **Stack:** React + Vite, Go API, FastAPI predictor, Kustomize overlays, Helm.
 
@@ -11,7 +11,9 @@ AI-powered Kubernetes operations assistant for deterministic diagnostics and roo
 
 ## Product vision
 
-KubeLens AI helps engineers diagnose cluster issues, understand failures, and optimize workloads. The differentiator is a deterministic cluster intelligence engine that produces structured diagnostics. The AI layer explains those diagnostics and suggests safe remediation steps.
+KubeLens AI helps engineers diagnose cluster issues, understand failures, preview risky changes, and produce governed remediation artifacts. The differentiator is an evidence-first workflow: deterministic analysis is the floor, Ghost simulation previews change impact, and AI/ML enrich the operator experience only when confidence and limitations are visible.
+
+The enterprise direction is focused on one loop: detect risk, simulate change, explain evidence, propose GitOps remediation, and export the incident record.
 
 ---
 
@@ -53,7 +55,7 @@ flowchart TD
 
 | Area                                                                                                            | Detail                                                                                               |
 | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| \| **Ghost Engine** \| Proactive cluster maintenance simulation (node drain, etc.) with predictive timelines \| |
+| **Ghost Engine**                                                                                                  | Proactive node-drain maintenance simulation with predictive timelines. Advanced scheduler parity, eBPF network modeling, and cascade scoring are roadmap items. |
 | \| **Inventory** \| Pods, nodes, deployments, services, ingresses, namespaces, RBAC, events, storage, config \| |
 | **Safe operations**                                                                                             | Controlled write actions (restart/scale/rollback/cordon/drain/apply) behind RBAC + global write gate |
 | **Diagnostics**                                                                                                 | Deterministic intelligence engine with evidence + recommendations                                    |

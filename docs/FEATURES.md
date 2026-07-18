@@ -2,6 +2,10 @@
 
 This document is the canonical feature map for KubeLens AI. It describes what exists today in the product, how it is used, and which API surfaces back each capability.
 
+## Product center
+
+KubeLens is moving toward one enterprise workflow: detect incident or change risk, simulate the likely impact, explain the evidence and confidence, produce governed GitOps remediation, and export the incident record. Existing inventory and analysis views remain available as drilldowns, but the enterprise product should make the incident/change-risk loop the primary surface.
+
 ## Core platform capabilities
 
 | Capability                      | What it does                                                                                                        | Primary APIs                                                                         |
@@ -22,6 +26,7 @@ This document is the canonical feature map for KubeLens AI. It describes what ex
 | Alert dispatch + lifecycle      | Sends alerts to external channels and tracks alert lifecycle state.                                                 | `/api/alerts/dispatch`, `/api/alerts/test`, `/api/alerts/lifecycle`                  |
 | Streaming + audit               | Streams operational events and preserves request/action audit history with reconnect-safe live feed behavior.       | `/api/stream`, `/api/stream/ws`, `/api/audit`                                        |
 | Multi-cluster runtime switching | Switches active cluster context without restarting the UI.                                                          | `/api/clusters`, `/api/clusters/select`                                              |
+| Ghost simulation                | Simulates node-drain maintenance with timeline frames and verdicts. Advanced scheduler parity, eBPF network modeling, and cascade scoring are roadmap items. | `/api/ghost/topology`, `/api/ghost/simulations` |
 
 ## User-facing views
 
@@ -65,6 +70,7 @@ This document is the canonical feature map for KubeLens AI. It describes what ex
 | Risk Guard             | Manifest risk analysis with cluster-aware policy preflight, runtime pressure checks, and force-override flow for high-risk applies.                                      | `/api/risk-guard/analyze`, `/api/resources/*/yaml`                                                              |
 | Postmortems            | Generated postmortem records and detail review.                                                                                                                          | `/api/postmortems*`                                                                                             |
 | Assistant              | Conversational troubleshooting with deterministic context + optional LLM.                                                                                                | `/api/assistant`, `/api/rag/telemetry`                                                                          |
+| Ghost Mode             | Node-drain simulation and topology visualization. Current implementation is a narrow change-risk slice, not a full digital twin.                                         | `/api/ghost/topology`, `/api/ghost/simulations`                                                                 |
 
 ## Write-safety model
 
@@ -80,6 +86,7 @@ In production mode, remediation execution enforces a four-eyes policy: the appro
 | Integration                          | Purpose                                                                          | Config keys                                                             |
 | ------------------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
 | Predictor service                    | External deterministic risk scoring service with optional joblib model blending. | `PREDICTOR_BASE_URL`, `PREDICTOR_SHARED_SECRET`, `PREDICTOR_MODEL_PATH` |
+| Ghost engine                         | Optional C++ gRPC service for node-drain simulation.                    | `GHOST_ENABLED`, `GHOST_ENGINE_ADDR`                                  |
 | OpenAI-compatible assistant provider | Natural-language enrichment for assistant output.                                | `ASSISTANT_PROVIDER`, `ASSISTANT_API_*`, `ASSISTANT_MODEL`              |
 | RAG embeddings                       | Semantic retrieval for assistant grounding.                                      | `OLLAMA_*` and/or `ASSISTANT_EMBEDDING_*`                               |
 | ChatOps webhook                      | Sends incident/remediation/postmortem notifications.                             | `CHATOPS_*`                                                             |
@@ -95,6 +102,12 @@ In production mode, remediation execution enforces a four-eyes policy: the appro
 - `ASSISTANT_RAG_ENABLED` toggles docs retrieval grounding.
 
 For exact settings, use `.env.example` and `README.md`. The optional ML production-readiness plan is tracked in `docs/PREDICTOR_ML_READINESS.md`.
+
+## Feature maturity
+
+- Enterprise-ready today: deterministic diagnostics, RBAC/write gate controls, incident workflow, GitOps artifact generation, SLO/rightsizing views, audit trail, and core deployment hardening.
+- Narrow production slice: Ghost node-drain simulation is implemented, but full scheduler parity and network/cascade modeling are still roadmap work.
+- Prototype or planned: production ML governance, eBPF telemetry, fleet drift correction, and autonomous remediation.
 
 ## Workspace auth and notification safeguards
 

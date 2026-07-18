@@ -1,19 +1,20 @@
 # Implementation Program
 
-This document is the execution contract for delivering all planned platform improvements while preserving code quality, architecture integrity, documentation freshness, and security posture.
+This document is the execution contract for making KubeLens enterprise-ready as an incident and change-risk copilot while preserving code quality, architecture integrity, documentation freshness, and security posture.
 
 ## Program goals
 
-1. Deliver all six strategic capabilities:
+1. Preserve the six shipped foundation capabilities:
    - SLO and error-budget control center
    - GitOps remediation mode
    - Cost and rightsizing advisor
    - Policy preflight in Risk Guard
    - Incident replay and evidence bundles
    - Assistant quality and evaluation dashboard
-2. Keep architecture clean and modular as scope grows.
-3. Keep security controls at least as strong as current baseline at every milestone.
-4. Keep docs continuously synced with behavior and configuration changes.
+2. Make the primary workflow explicit: detect risk, simulate change, explain evidence, produce governed GitOps remediation, and export an incident record.
+3. Keep architecture clean and modular as Ghost simulation, predictor governance, durable storage, and audit integrity mature.
+4. Keep security controls at least as strong as current baseline at every milestone.
+5. Keep docs continuously synced with behavior and configuration changes.
 
 ## Execution phases
 
@@ -30,7 +31,7 @@ Exit criteria:
 - `verify:doc-impact` passes in CI.
 - Security audit steps pass in CI.
 
-### Phase 1: Foundation epics
+### Phase 1: Shipped foundation epics
 
 1. SLO and error-budget control center
 2. Policy preflight in Risk Guard
@@ -42,7 +43,7 @@ Exit criteria:
 - Feature docs added/updated in `docs/FEATURES.md`, `docs/api.md`, and operational docs where needed.
 - Security review complete for new alerting and evidence export paths.
 
-### Phase 2: Automation and governance epics
+### Phase 2: Shipped automation and governance epics
 
 1. GitOps remediation mode
 2. Cost and rightsizing advisor
@@ -53,7 +54,7 @@ Exit criteria:
 - Rollback and failure-path tests for every automated action path.
 - Threat model updates for new trust boundaries and third-party integrations.
 
-### Phase 3: Intelligence quality epic
+### Phase 3: Shipped intelligence quality epic
 
 1. Assistant quality and evaluation dashboard
 
@@ -62,6 +63,32 @@ Exit criteria:
 - Retrieval quality metrics are persisted and queryable.
 - Feedback loop controls are documented and tested.
 - Safety checks and prompt/grounding controls have regression coverage.
+
+### Phase 4: Enterprise readiness
+
+1. Durable storage and migrations
+2. Tamper-evident critical audit records
+3. Incident Risk Workbench as the primary product surface
+4. Ghost simulation persistence, confidence, and scheduler-fidelity improvements
+5. Predictor ML governance, shadow mode, model metadata, and evaluation gates
+
+Exit criteria:
+
+- Production deployments use Postgres-backed durable stores by default while dev/demo can continue using SQLite.
+- Critical audit records can be verified for hash-chain integrity.
+- Operators can complete the risk workflow from one workbench without losing access to drilldown views.
+- Ghost and predictor outputs expose confidence, model/version metadata, and known limitations.
+- Enterprise readiness checks report actionable subsystem state.
+
+### Phase 5: Experimental deep visibility and autonomy
+
+1. eBPF node telemetry agent
+2. Fleet-wide drift detection
+3. Policy-gated autonomous remediation proposal loop
+
+Exit criteria:
+
+- Experimental features are disabled by default and labeled as such until production trust, rollback, and operational runbooks are complete.
 
 ## Cross-cutting quality contract
 
@@ -100,3 +127,11 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | GitOps remediation mode                    | shipped | TBD   | Phase 2      |
 | Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |
+| Durable enterprise storage                 | planned | TBD   | Phase 4      |
+| Tamper-evident audit verification          | planned | TBD   | Phase 4      |
+| Incident Risk Workbench                    | planned | TBD   | Phase 4      |
+| Ghost confidence and scheduler fidelity    | planned | TBD   | Phase 4      |
+| Predictor ML governance                    | planned | TBD   | Phase 4      |
+| eBPF deep telemetry                        | planned | TBD   | Phase 5      |
+| Fleet drift correction                     | planned | TBD   | Phase 5      |
+| Autonomous remediation                     | planned | TBD   | Phase 5      |
