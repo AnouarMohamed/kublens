@@ -1420,7 +1420,7 @@ paths:
   /audit/{id}/verify:
     get:
       operationId: getAuditVerification
-      summary: Verify audit hash-chain integrity up to one entry
+      summary: Verify audit hash-chain and signature integrity up to one entry
       parameters:
         - name: id
           in: path
@@ -1429,7 +1429,7 @@ paths:
             type: string
       responses:
         "200":
-          description: Audit entry hash-chain verified
+          description: Audit entry hash-chain and signature verified
           content:
             application/json:
               schema:
@@ -1441,7 +1441,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Audit entry hash-chain verification failed
+          description: Audit entry hash-chain or signature verification failed
           content:
             application/json:
               schema:
@@ -2270,7 +2270,8 @@ components:
             $ref: "#/components/schemas/GhostTimelineEvent"
     GhostSimulationResult:
       type: object
-      required: [id, action, generatedAt, horizonSeconds, engine, topologyHash, confidence, limitations, verdict, frames]
+      required:
+        [id, action, generatedAt, horizonSeconds, engine, topologyHash, confidence, limitations, verdict, frames]
       properties:
         id:
           type: string
@@ -3304,6 +3305,8 @@ components:
           type: string
         hash:
           type: string
+        signature:
+          type: string
     AuditLogResponse:
       type: object
       properties:
@@ -3330,6 +3333,8 @@ components:
         previousHash:
           type: string
         hash:
+          type: string
+        signature:
           type: string
         verifiedAt:
           type: string

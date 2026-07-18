@@ -36,6 +36,7 @@
 
 - Per-request audit records with actor, route, status, and latency
 - Action-specific audit labels for critical operations
+- Audit entries include hash-chain verification and optional HMAC signatures through `AUDIT_SIGNING_KEY`
 - Persisted remediation GitOps artifacts with actor/timestamp linkage for governed change review
 - Optional OpenTelemetry traces for backend and predictor paths
 

@@ -331,7 +331,7 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 		logger:         logger,
 		metrics:        newRequestMetrics(now),
 		authLogin:      newAuthLoginProtection(defaultAuthLoginProtectionConfig()),
-		audit:          newAuditLog(maxAuditLimit, "", logger),
+		audit:          newAuditLog(maxAuditLimit, "", "", logger),
 		eventBus:       events.NewBus(64),
 		aiTTL:          8 * time.Second,
 		predictionsTTL: 8 * time.Second,

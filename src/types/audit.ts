@@ -15,6 +15,7 @@ export interface AuditEntry {
   success: boolean;
   previousHash?: string;
   hash?: string;
+  signature?: string;
 }
 
 export interface AuditLogResponse {
@@ -28,6 +29,7 @@ export interface AuditVerification {
   message: string;
   previousHash?: string;
   hash?: string;
+  signature?: string;
   verifiedAt: string;
 }
 

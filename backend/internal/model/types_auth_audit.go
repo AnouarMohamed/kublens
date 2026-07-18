@@ -29,6 +29,7 @@ type AuditEntry struct {
 	Success      bool   `json:"success"`
 	PreviousHash string `json:"previousHash,omitempty"`
 	Hash         string `json:"hash,omitempty"`
+	Signature    string `json:"signature,omitempty"`
 }
 
 type AuditLogResponse struct {
@@ -42,6 +43,7 @@ type AuditVerification struct {
 	Message      string `json:"message"`
 	PreviousHash string `json:"previousHash,omitempty"`
 	Hash         string `json:"hash,omitempty"`
+	Signature    string `json:"signature,omitempty"`
 	VerifiedAt   string `json:"verifiedAt"`
 }
 

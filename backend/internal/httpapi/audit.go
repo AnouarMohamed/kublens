@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"bufio"
+	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -30,16 +31,18 @@ const (
 )
 
 type AuditConfig struct {
-	MaxItems int
-	FilePath string
+	MaxItems   int
+	FilePath   string
+	SigningKey string
 }
 
 type auditLog struct {
-	maxItems int
-	counter  atomic.Uint64
-	sink     auditSink
-	mu       sync.RWMutex
-	items    []model.AuditEntry
+	maxItems   int
+	counter    atomic.Uint64
+	sink       auditSink
+	signingKey []byte
+	mu         sync.RWMutex
+	items      []model.AuditEntry
 }
 
 type auditSink interface {
@@ -57,17 +60,18 @@ func WithAuditConfig(config AuditConfig) Option {
 		if maxItems <= 0 {
 			maxItems = maxAuditLimit
 		}
-		s.audit = newAuditLog(maxItems, config.FilePath, s.logger)
+		s.audit = newAuditLog(maxItems, config.FilePath, config.SigningKey, s.logger)
 	}
 }
 
-func newAuditLog(maxItems int, filePath string, logger *slog.Logger) *auditLog {
+func newAuditLog(maxItems int, filePath string, signingKey string, logger *slog.Logger) *auditLog {
 	if maxItems <= 0 {
 		maxItems = maxAuditLimit
 	}
 	log := &auditLog{
-		maxItems: maxItems,
-		items:    make([]model.AuditEntry, 0, maxItems),
+		maxItems:   maxItems,
+		signingKey: []byte(strings.TrimSpace(signingKey)),
+		items:      make([]model.AuditEntry, 0, maxItems),
 	}
 
 	trimmedPath := strings.TrimSpace(filePath)
@@ -107,6 +111,7 @@ func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
 		entry.PreviousHash = strings.TrimSpace(l.items[len(l.items)-1].Hash)
 	}
 	entry.Hash = hashAuditEntry(entry)
+	entry.Signature = signAuditEntry(entry, l.signingKey)
 	l.items = append(l.items, entry)
 	if overflow := len(l.items) - l.maxItems; overflow > 0 {
 		l.items = append([]model.AuditEntry(nil), l.items[overflow:]...)
@@ -134,10 +139,14 @@ func (l *auditLog) verify(id string, now time.Time) (model.AuditVerification, bo
 	for _, entry := range l.items {
 		expectedPrevious := previousHash
 		expectedHash := hashAuditEntryWithPrevious(entry, expectedPrevious)
+		expectedSignature := signAuditEntryWithHash(expectedHash, l.signingKey)
 		if entry.ID == target {
-			ok := strings.TrimSpace(entry.Hash) != "" &&
+			hashOK := strings.TrimSpace(entry.Hash) != "" &&
 				entry.PreviousHash == expectedPrevious &&
 				entry.Hash == expectedHash
+			signatureOK := len(l.signingKey) == 0 ||
+				(strings.TrimSpace(entry.Signature) != "" && hmac.Equal([]byte(entry.Signature), []byte(expectedSignature)))
+			ok := hashOK && signatureOK
 			message := "verified"
 			if strings.TrimSpace(entry.Hash) == "" {
 				message = "entry-missing-hash"
@@ -145,6 +154,10 @@ func (l *auditLog) verify(id string, now time.Time) (model.AuditVerification, bo
 				message = "previous-hash-mismatch"
 			} else if entry.Hash != expectedHash {
 				message = "hash-mismatch"
+			} else if len(l.signingKey) > 0 && strings.TrimSpace(entry.Signature) == "" {
+				message = "entry-missing-signature"
+			} else if len(l.signingKey) > 0 && !signatureOK {
+				message = "signature-mismatch"
 			}
 			return model.AuditVerification{
 				ID:           entry.ID,
@@ -152,6 +165,7 @@ func (l *auditLog) verify(id string, now time.Time) (model.AuditVerification, bo
 				Message:      message,
 				PreviousHash: entry.PreviousHash,
 				Hash:         entry.Hash,
+				Signature:    entry.Signature,
 				VerifiedAt:   now.UTC().Format(time.RFC3339),
 			}, true
 		}
@@ -417,6 +431,19 @@ func hashAuditEntryWithPrevious(entry model.AuditEntry, previousHash string) str
 	bytes, _ := json.Marshal(material)
 	sum := sha256.Sum256(bytes)
 	return hex.EncodeToString(sum[:])
+}
+
+func signAuditEntry(entry model.AuditEntry, signingKey []byte) string {
+	return signAuditEntryWithHash(entry.Hash, signingKey)
+}
+
+func signAuditEntryWithHash(hash string, signingKey []byte) string {
+	if len(signingKey) == 0 || strings.TrimSpace(hash) == "" {
+		return ""
+	}
+	mac := hmac.New(sha256.New, signingKey)
+	_, _ = mac.Write([]byte(hash))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 func actionForRequest(method, path string) string {

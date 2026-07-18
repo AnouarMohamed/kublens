@@ -161,8 +161,9 @@ func Load() (Config, error) {
 	}
 
 	cfg.Audit = AuditConfig{
-		MaxItems: parseIntDefault(os.Getenv("AUDIT_MAX_ITEMS"), 500),
-		FilePath: strings.TrimSpace(os.Getenv("AUDIT_LOG_FILE")),
+		MaxItems:   parseIntDefault(os.Getenv("AUDIT_MAX_ITEMS"), 500),
+		FilePath:   strings.TrimSpace(os.Getenv("AUDIT_LOG_FILE")),
+		SigningKey: strings.TrimSpace(os.Getenv("AUDIT_SIGNING_KEY")),
 	}
 
 	cfg.Alerts = AlertsConfig{

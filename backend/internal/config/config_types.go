@@ -128,8 +128,9 @@ type RateLimitConfig struct {
 }
 
 type AuditConfig struct {
-	MaxItems int
-	FilePath string
+	MaxItems   int
+	FilePath   string
+	SigningKey string
 }
 
 type AlertsConfig struct {

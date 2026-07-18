@@ -168,8 +168,9 @@ func Build(cfg config.Config) (Result, error) {
 			Window:   cfg.RateLimit.Window,
 		}),
 		httpapi.WithAuditConfig(httpapi.AuditConfig{
-			MaxItems: cfg.Audit.MaxItems,
-			FilePath: cfg.Audit.FilePath,
+			MaxItems:   cfg.Audit.MaxItems,
+			FilePath:   cfg.Audit.FilePath,
+			SigningKey: cfg.Audit.SigningKey,
 		}),
 		httpapi.WithAlertDispatcher(alertDispatcher),
 		httpapi.WithSQLiteDB(sqliteDB),

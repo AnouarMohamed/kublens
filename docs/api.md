@@ -71,7 +71,7 @@ Notes:
 
 - WebSocket upgrades enforce same-origin/trusted-origin checks.
 - Cross-origin upgrade attempts are rejected with `403`.
-- Audit entries include `previousHash` and `hash` for tamper-evident verification of newly recorded events.
+- Audit entries include `previousHash` and `hash` for tamper-evident verification of newly recorded events. When `AUDIT_SIGNING_KEY` is configured, entries also include an HMAC `signature`, and `/audit/{id}/verify` validates both the hash chain and signature.
 
 ## Alerts
 

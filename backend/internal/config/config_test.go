@@ -137,6 +137,19 @@ func TestRuntimeStatusMarksFileSQLiteAsEnterpriseStorage(t *testing.T) {
 	}
 }
 
+func TestLoadAuditSigningKey(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Audit.SigningKey != "audit-secret" {
+		t.Fatalf("audit signing key = %q, want audit-secret", cfg.Audit.SigningKey)
+	}
+}
+
 func TestLoadPredictorModeValidation(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("PREDICTOR_MODE", "autopilot")
@@ -287,6 +300,7 @@ func clearConfigEnv(t *testing.T) {
 		"PAGERDUTY_EVENTS_URL",
 		"PAGERDUTY_ROUTING_KEY",
 		"WRITE_ACTIONS_ENABLED",
+		"AUDIT_SIGNING_KEY",
 	}
 	for _, key := range keys {
 		t.Setenv(key, "")
