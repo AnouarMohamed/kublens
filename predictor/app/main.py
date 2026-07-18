@@ -178,6 +178,7 @@ class ModelMetadata(BaseModel):
     featureList: list[str] = Field(default_factory=list)
     labelDefinition: str = ""
     evaluationMetrics: dict[str, float] = Field(default_factory=dict)
+    promotionGates: dict[str, float] = Field(default_factory=dict)
     calibratedThreshold: float | None = None
     trainingTimestamp: str = ""
     ownerReviewer: str = ""

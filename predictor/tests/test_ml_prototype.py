@@ -8,7 +8,13 @@ pytest.importorskip("joblib")
 pd = pytest.importorskip("pandas")
 pytest.importorskip("sklearn")
 
-from predictor.app.ml_prototype import FEATURE_COLUMNS, build_feature_frame, train_simple_model  # noqa: E402
+from predictor.app.ml_prototype import (  # noqa: E402
+    FEATURE_COLUMNS,
+    build_feature_frame,
+    promotion_gate_thresholds,
+    train_simple_model,
+    validate_evaluation_gates,
+)
 
 
 def test_train_simple_model_writes_metadata_sidecar(tmp_path) -> None:
@@ -52,6 +58,7 @@ def test_train_simple_model_writes_metadata_sidecar(tmp_path) -> None:
     assert payload["labelDefinition"] == "label=incident within rollout horizon"
     assert payload["ownerReviewer"] == "sre-platform"
     assert payload["calibratedThreshold"] == 0.5
+    assert payload["promotionGates"] == {"precision": 0.0, "recall": 0.0, "rocAuc": 0.0}
     assert "2026-07-01T00:00:00+00:00/2026-07-01T00:35:00+00:00" == payload["trainingDataWindow"]
     assert "precision" in payload["evaluationMetrics"]
     assert "recall" in payload["evaluationMetrics"]
@@ -87,3 +94,12 @@ def test_build_feature_frame_normalizes_extended_features(tmp_path) -> None:
     assert row["memory_trend_delta"] == 18
     assert row["image_pull_backoff_events"] == 2
     assert row["previous_incidents"] == 1
+
+
+def test_validate_evaluation_gates_blocks_promotion() -> None:
+    """Promotion gates fail model builds when a required metric is too low."""
+
+    gates = promotion_gate_thresholds(min_precision=0.7, min_recall=0.8, min_roc_auc=0.9)
+
+    with pytest.raises(ValueError, match="evaluation gates failed"):
+        validate_evaluation_gates({"precision": 0.65, "recall": 0.85}, gates)

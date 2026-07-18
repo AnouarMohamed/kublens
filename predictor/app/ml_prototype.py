@@ -42,6 +42,7 @@ FEATURE_COLUMNS = (
 LABEL_COLUMNS = ("failure_imminent", "label", "target")
 TIME_COLUMNS = ("timestamp", "observed_at", "created_at")
 DEFAULT_THRESHOLD = 0.5
+DEFAULT_GATE_THRESHOLD = 0.0
 
 
 def parse_cpu_milli(value: object) -> float:
@@ -276,6 +277,37 @@ def evaluation_metrics(
     return metrics
 
 
+def promotion_gate_thresholds(
+    *,
+    min_precision: float,
+    min_recall: float,
+    min_roc_auc: float,
+) -> dict[str, float]:
+    """Normalize model promotion gate thresholds."""
+
+    return {
+        "precision": min(1.0, max(0.0, float(min_precision))),
+        "recall": min(1.0, max(0.0, float(min_recall))),
+        "rocAuc": min(1.0, max(0.0, float(min_roc_auc))),
+    }
+
+
+def validate_evaluation_gates(metrics: dict[str, float], gates: dict[str, float]) -> None:
+    """Raise when model metrics do not satisfy configured promotion gates."""
+
+    failures: list[str] = []
+    for metric, threshold in gates.items():
+        if threshold <= 0:
+            continue
+        value = metrics.get(metric)
+        if value is None:
+            failures.append(f"{metric}=unavailable < {threshold}")
+        elif value < threshold:
+            failures.append(f"{metric}={value} < {threshold}")
+    if failures:
+        raise ValueError("evaluation gates failed: " + "; ".join(failures))
+
+
 def write_model_metadata(
     *,
     metadata_path: Path,
@@ -285,6 +317,7 @@ def write_model_metadata(
     label_column: str,
     metrics: dict[str, float],
     threshold: float,
+    promotion_gates: dict[str, float],
     owner_reviewer: str,
 ) -> Path:
     """Write the runtime model metadata sidecar."""
@@ -297,6 +330,7 @@ def write_model_metadata(
         "featureList": list(FEATURE_COLUMNS),
         "labelDefinition": f"{label_column}=incident within rollout horizon",
         "evaluationMetrics": metrics,
+        "promotionGates": promotion_gates,
         "calibratedThreshold": threshold,
         "trainingTimestamp": datetime.now(timezone.utc).isoformat(),
         "ownerReviewer": owner_reviewer,
@@ -314,6 +348,9 @@ def train_simple_model(
     git_commit: str = "",
     owner_reviewer: str = "",
     calibrated_threshold: float = DEFAULT_THRESHOLD,
+    min_precision: float = DEFAULT_GATE_THRESHOLD,
+    min_recall: float = DEFAULT_GATE_THRESHOLD,
+    min_roc_auc: float = DEFAULT_GATE_THRESHOLD,
 ) -> Path:
     """Train and save a pod failure classifier from a CSV file.
 
@@ -331,6 +368,9 @@ def train_simple_model(
         git_commit: Source commit written to metadata.
         owner_reviewer: Owner/reviewer label written to metadata.
         calibrated_threshold: Probability threshold used for evaluation metrics.
+        min_precision: Minimum precision gate required before artifact write.
+        min_recall: Minimum recall gate required before artifact write.
+        min_roc_auc: Minimum ROC-AUC gate required before artifact write.
 
     Returns:
         Path: Saved model path.
@@ -364,6 +404,13 @@ def train_simple_model(
         random_state=42,
     )
     model.fit(train_features.to_numpy(), train_labels.to_numpy())
+    metrics = evaluation_metrics(model, eval_features, eval_labels, threshold)
+    gates = promotion_gate_thresholds(
+        min_precision=min_precision,
+        min_recall=min_recall,
+        min_roc_auc=min_roc_auc,
+    )
+    validate_evaluation_gates(metrics, gates)
 
     output = Path(model_save_path)
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -376,8 +423,9 @@ def train_simple_model(
         git_commit=git_commit.strip() or os.getenv("APP_COMMIT", "local"),
         window=training_data_window(frame),
         label_column=label_column,
-        metrics=evaluation_metrics(model, eval_features, eval_labels, threshold),
+        metrics=metrics,
         threshold=threshold,
+        promotion_gates=gates,
         owner_reviewer=owner_reviewer.strip(),
     )
     return output
@@ -394,6 +442,9 @@ def main() -> None:
     parser.add_argument("--git-commit", default="", help="Source commit for the training code/data contract")
     parser.add_argument("--owner-reviewer", default="", help="Owner or reviewer responsible for promotion")
     parser.add_argument("--calibrated-threshold", type=float, default=DEFAULT_THRESHOLD, help="Evaluation threshold")
+    parser.add_argument("--min-precision", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum precision gate")
+    parser.add_argument("--min-recall", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum recall gate")
+    parser.add_argument("--min-roc-auc", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum ROC-AUC gate")
     args = parser.parse_args()
 
     saved_path = train_simple_model(
@@ -404,6 +455,9 @@ def main() -> None:
         git_commit=args.git_commit,
         owner_reviewer=args.owner_reviewer,
         calibrated_threshold=args.calibrated_threshold,
+        min_precision=args.min_precision,
+        min_recall=args.min_recall,
+        min_roc_auc=args.min_roc_auc,
     )
     print(f"Model saved to {saved_path}")
     print(f"Metadata saved to {Path(args.metadata_path) if args.metadata_path else default_metadata_path(saved_path)}")

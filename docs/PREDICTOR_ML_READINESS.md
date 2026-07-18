@@ -12,6 +12,7 @@ This document tracks the work required to move the optional predictor ML path fr
 - Shadow mode emits `mlShadowRisk` without changing final risk.
 - Blended mode raises pod risk only when the model is loaded, metadata is loaded, the metadata is not stale, and feature completeness meets `PREDICTOR_MIN_FEATURE_COMPLETENESS`.
 - `predictor/app/ml_prototype.py` trains a CSV-backed random forest model compatible with the runtime feature contract and writes a runtime metadata sidecar by default.
+- Trainer promotion gates can fail artifact generation when configured minimum precision, recall, or ROC-AUC thresholds are missed.
 
 ## Production target
 
@@ -24,7 +25,7 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 | Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Partial     |
 | Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Partial     |
 | Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Planned     |
-| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Planned     |
+| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Partial     |
 | Shadow mode       | Support emitting ML scores without blending them into final risk during rollout.                                                                                                                                       | Implemented |
 | Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial     |
 | Observability     | Export model version, inference latency, load failures, feature missing rates, score distribution, drift signals, and ML/deterministic disagreement.                                                                   | Partial     |
@@ -75,6 +76,6 @@ PREDICTOR_MAX_MODEL_AGE_HOURS=168
 
 ## Trainer metadata
 
-The trainer writes `pod-risk.metadata.json` next to the model unless `--metadata-path` is supplied. Promotion metadata includes the model version, source commit, training data window, feature list, label definition, evaluation metrics, calibrated threshold, training timestamp, and owner/reviewer.
+The trainer writes `pod-risk.metadata.json` next to the model unless `--metadata-path` is supplied. Promotion metadata includes the model version, source commit, training data window, feature list, label definition, evaluation metrics, promotion gates, calibrated threshold, training timestamp, and owner/reviewer.
 
 The runtime honors the feature order declared in `featureList`, so older promoted three-column models can remain in shadow/blended testing while new training data adopts the expanded feature set. Feature completeness is calculated against the declared feature order before ML can influence final risk.
