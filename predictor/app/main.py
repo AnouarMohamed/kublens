@@ -16,13 +16,19 @@ Environment variables:
     OTEL_TRACES_SAMPLE_RATIO: Trace sampling ratio in [0.0, 1.0].
     PREDICTOR_SHARED_SECRET: Optional shared secret for /predict requests.
     PREDICTOR_MODEL_PATH: Optional joblib model used for pod score blending.
+    PREDICTOR_MODE: deterministic, shadow, or blended.
+    PREDICTOR_MODEL_METADATA_PATH: Optional JSON sidecar with promoted model metadata.
+    PREDICTOR_MIN_FEATURE_COMPLETENESS: Minimum completeness required for ML blending.
+    PREDICTOR_MAX_MODEL_AGE_HOURS: Maximum metadata age before ML is treated as stale.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
 from opentelemetry import trace
@@ -39,6 +45,8 @@ api = FastAPI(title="k8s-ops-predictor", version="1.0.0")
 logger = logging.getLogger("predictor.telemetry")
 _ml_model_cache_path: str | None = None
 _ml_model_cache: object | None = None
+_ml_metadata_cache_path: str | None = None
+_ml_metadata_cache: ModelMetadata | None = None
 
 
 def configure_telemetry(app: FastAPI) -> None:
@@ -151,6 +159,36 @@ class PredictionSignal(BaseModel):
     value: str
 
 
+class ModelMetadata(BaseModel):
+    """Promotion metadata attached to an optional ML model artifact."""
+
+    modelVersion: str = "unversioned"
+    gitCommit: str = ""
+    trainingDataWindow: str = ""
+    featureList: list[str] = Field(default_factory=list)
+    labelDefinition: str = ""
+    evaluationMetrics: dict[str, float] = Field(default_factory=dict)
+    calibratedThreshold: float | None = None
+    trainingTimestamp: str = ""
+    ownerReviewer: str = ""
+
+
+class ModelHealth(BaseModel):
+    """Runtime status for optional ML scoring governance."""
+
+    mode: str
+    enabled: bool
+    usableForBlending: bool
+    modelLoaded: bool
+    metadataLoaded: bool
+    modelVersion: str
+    stale: bool
+    maxModelAgeHours: int
+    minFeatureCompleteness: float
+    requiredFeatures: list[str]
+    lastError: str = ""
+
+
 class IncidentPrediction(BaseModel):
     """Predictive incident item returned to the KubeLens backend."""
 
@@ -182,6 +220,9 @@ class PredictionResponse(BaseModel):
     items: list[IncidentPrediction]
 
 
+REQUIRED_ML_FEATURES = ["restarts", "cpu_milli", "memory_mi"]
+
+
 @api.get("/healthz")
 def healthz() -> dict:
     """Return predictor liveness status.
@@ -191,6 +232,13 @@ def healthz() -> dict:
     """
 
     return {"status": "ok"}
+
+
+@api.get("/model", response_model=ModelHealth)
+def model_health_endpoint() -> ModelHealth:
+    """Return optional ML model governance state."""
+
+    return model_health()
 
 
 def require_predictor_secret(
@@ -213,6 +261,37 @@ def require_predictor_secret(
         return
     if (x_predictor_secret or "").strip() != expected:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized predictor request")
+
+
+def predictor_mode() -> str:
+    """Return the configured predictor ML mode."""
+
+    mode = os.getenv("PREDICTOR_MODE", "deterministic").strip().lower()
+    if mode not in {"deterministic", "shadow", "blended"}:
+        return "deterministic"
+    return mode
+
+
+def min_feature_completeness() -> float:
+    """Return the minimum feature completeness required for ML blending."""
+
+    raw = os.getenv("PREDICTOR_MIN_FEATURE_COMPLETENESS", "0.80").strip()
+    try:
+        parsed = float(raw)
+    except ValueError:
+        parsed = 0.80
+    return max(0.0, min(1.0, parsed))
+
+
+def max_model_age_hours() -> int:
+    """Return the configured maximum model age in hours."""
+
+    raw = os.getenv("PREDICTOR_MAX_MODEL_AGE_HOURS", "168").strip()
+    try:
+        parsed = int(raw)
+    except ValueError:
+        parsed = 168
+    return max(1, parsed)
 
 
 def get_optional_ml_model() -> object | None:
@@ -248,6 +327,77 @@ def get_optional_ml_model() -> object | None:
         return None
 
 
+def get_model_metadata() -> ModelMetadata | None:
+    """Load optional model metadata from the configured JSON sidecar."""
+
+    path = os.getenv("PREDICTOR_MODEL_METADATA_PATH", "").strip()
+    if path == "":
+        return None
+
+    global _ml_metadata_cache_path, _ml_metadata_cache
+    if _ml_metadata_cache_path == path:
+        return _ml_metadata_cache
+
+    try:
+        payload = json.loads(Path(path).read_text(encoding="utf-8"))
+        _ml_metadata_cache = ModelMetadata(**payload)
+        _ml_metadata_cache_path = path
+        return _ml_metadata_cache
+    except Exception as exc:  # pragma: no cover - depends on deployment filesystem
+        _ml_metadata_cache = None
+        _ml_metadata_cache_path = path
+        logger.warning("Optional predictor ML metadata disabled: %s", exc)
+        return None
+
+
+def metadata_is_stale(metadata: ModelMetadata | None, now: datetime | None = None) -> bool:
+    """Return whether model metadata is older than the configured maximum age."""
+
+    if metadata is None or metadata.trainingTimestamp.strip() == "":
+        return False
+    current = now or datetime.now(timezone.utc)
+    try:
+        trained_at = datetime.fromisoformat(metadata.trainingTimestamp.replace("Z", "+00:00"))
+    except ValueError:
+        return True
+    if trained_at.tzinfo is None:
+        trained_at = trained_at.replace(tzinfo=timezone.utc)
+    return current - trained_at > timedelta(hours=max_model_age_hours())
+
+
+def model_health() -> ModelHealth:
+    """Build runtime health for optional ML governance."""
+
+    mode = predictor_mode()
+    metadata = get_model_metadata()
+    model = None if mode == "deterministic" else get_optional_ml_model()
+    stale = metadata_is_stale(metadata)
+    model_loaded = model is not None
+    metadata_loaded = metadata is not None
+    usable = mode == "blended" and model_loaded and metadata_loaded and not stale
+    last_error = ""
+    if mode != "deterministic":
+        if not model_loaded:
+            last_error = "model-unavailable"
+        elif mode == "blended" and not metadata_loaded:
+            last_error = "metadata-unavailable"
+        elif stale:
+            last_error = "model-stale"
+    return ModelHealth(
+        mode=mode,
+        enabled=mode != "deterministic",
+        usableForBlending=usable,
+        modelLoaded=model_loaded,
+        metadataLoaded=metadata_loaded,
+        modelVersion=metadata.modelVersion if metadata else "unversioned",
+        stale=stale,
+        maxModelAgeHours=max_model_age_hours(),
+        minFeatureCompleteness=min_feature_completeness(),
+        requiredFeatures=REQUIRED_ML_FEATURES,
+        lastError=last_error,
+    )
+
+
 def pod_ml_features(pod: PodSummary, cpu_milli: int, mem_mi: int) -> list[float]:
     """Build the stable pod feature vector consumed by optional ML models."""
 
@@ -260,6 +410,9 @@ def score_pod_with_ml(pod: PodSummary, cpu_milli: int, mem_mi: int) -> int | Non
     Models may expose either ``predict_proba`` with a positive-class column or
     ``predict`` returning a value in ``[0, 1]`` or ``[0, 100]``.
     """
+
+    if predictor_mode() == "deterministic":
+        return None
 
     model = get_optional_ml_model()
     if model is None:
@@ -294,6 +447,13 @@ def blend_risk_score(deterministic_score: int, ml_score: int) -> int:
     return clamp(max(deterministic_score, blended), 0, 100)
 
 
+def ml_feature_completeness(cpu_known: bool, mem_known: bool) -> float:
+    """Return completeness for the current stable ML feature contract."""
+
+    known = 1 + int(cpu_known) + int(mem_known)
+    return known / len(REQUIRED_ML_FEATURES)
+
+
 @api.post("/predict", response_model=PredictionResponse)
 # Intentionally sync: prediction is CPU-bound in-memory scoring with no blocking I/O.
 def predict(request: PredictionRequest, _: None = Depends(require_predictor_secret)) -> PredictionResponse:
@@ -312,6 +472,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
     """
 
     items: list[IncidentPrediction] = []
+    ml_health = model_health()
 
     for pod in request.pods:
         score = 0
@@ -346,10 +507,33 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         if resource_warnings > 0 and status != "running":
             score += min(12, resource_warnings * 2)
 
-        ml_score = score_pod_with_ml(pod, cpu_milli, mem_mi)
-        if ml_score is not None:
-            score = blend_risk_score(score, ml_score)
-            signals.append(PredictionSignal(key="mlRisk", value=f"{ml_score}%"))
+        feature_completeness = ml_feature_completeness(cpu_known, mem_known)
+        if ml_health.enabled:
+            if not ml_health.modelLoaded:
+                signals.append(PredictionSignal(key="mlRiskBlocked", value="model-unavailable"))
+            elif ml_health.mode == "blended" and not ml_health.metadataLoaded:
+                signals.append(PredictionSignal(key="mlRiskBlocked", value="metadata-unavailable"))
+            elif ml_health.stale:
+                signals.append(PredictionSignal(key="mlRiskBlocked", value="model-stale"))
+            else:
+                ml_score = score_pod_with_ml(pod, cpu_milli, mem_mi)
+                if ml_score is None:
+                    signals.append(PredictionSignal(key="mlRiskBlocked", value="inference-unavailable"))
+                elif ml_health.mode == "shadow":
+                    signals.append(PredictionSignal(key="mlShadowRisk", value=f"{ml_score}%"))
+                    signals.append(PredictionSignal(key="mlMode", value="shadow"))
+                    signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
+                elif feature_completeness < ml_health.minFeatureCompleteness:
+                    signals.append(
+                        PredictionSignal(key="mlRiskBlocked", value=f"feature-completeness {feature_completeness:.0%}")
+                    )
+                    signals.append(PredictionSignal(key="mlShadowRisk", value=f"{ml_score}%"))
+                    signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
+                else:
+                    score = blend_risk_score(score, ml_score)
+                    signals.append(PredictionSignal(key="mlRisk", value=f"{ml_score}%"))
+                    signals.append(PredictionSignal(key="mlMode", value="blended"))
+                    signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
 
         score = clamp(score, 0, 100)
         if score < 35:

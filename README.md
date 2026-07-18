@@ -253,13 +253,19 @@ helm install kubelens ./helm/kubelens
 
 ## Predictor service
 
-The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions. You can optionally blend pod scores with a joblib model trained by `predictor/app/ml_prototype.py`; install `predictor/requirements-ml.txt` and set `PREDICTOR_MODEL_PATH`.
+The predictor service is optional. It scores incident risk using deterministic signals and CPU trend detection (from node history). If it is unavailable, the backend falls back to local predictions. Deterministic scoring is the default. Optional ML can run in `shadow` mode to expose model disagreement without changing final risk, or `blended` mode to raise pod risk when the model is loaded, fresh, and feature completeness meets the configured floor. You can train a compatible joblib model with `predictor/app/ml_prototype.py`; install `predictor/requirements-ml.txt`, set `PREDICTOR_MODEL_PATH`, and provide metadata with `PREDICTOR_MODEL_METADATA_PATH`.
 
 ```env
 PREDICTOR_BASE_URL=http://localhost:8001
 PREDICTOR_SHARED_SECRET=your-shared-secret
+PREDICTOR_MODE=deterministic   # deterministic | shadow | blended
 PREDICTOR_MODEL_PATH=./models/pod-risk.joblib
+PREDICTOR_MODEL_METADATA_PATH=./models/pod-risk.metadata.json
+PREDICTOR_MIN_FEATURE_COMPLETENESS=0.80
+PREDICTOR_MAX_MODEL_AGE_HOURS=168
 ```
+
+The predictor exposes `GET /model` for model mode, load status, metadata status, freshness, and blending readiness.
 
 ---
 
@@ -365,7 +371,11 @@ WRITE_ACTIONS_ENABLED=false
 
 PREDICTOR_BASE_URL=
 PREDICTOR_SHARED_SECRET=
+PREDICTOR_MODE=deterministic
 PREDICTOR_MODEL_PATH=
+PREDICTOR_MODEL_METADATA_PATH=
+PREDICTOR_MIN_FEATURE_COMPLETENESS=0.80
+PREDICTOR_MAX_MODEL_AGE_HOURS=168
 
 ASSISTANT_PROVIDER=none
 ASSISTANT_API_BASE_URL=

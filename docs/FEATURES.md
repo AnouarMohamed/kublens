@@ -85,7 +85,7 @@ In production mode, remediation execution enforces a four-eyes policy: the appro
 
 | Integration                          | Purpose                                                                          | Config keys                                                             |
 | ------------------------------------ | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Predictor service                    | External deterministic risk scoring service with optional joblib model blending. | `PREDICTOR_BASE_URL`, `PREDICTOR_SHARED_SECRET`, `PREDICTOR_MODEL_PATH` |
+| Predictor service                    | External deterministic risk scoring service with governed optional ML shadow/blended modes. | `PREDICTOR_BASE_URL`, `PREDICTOR_SHARED_SECRET`, `PREDICTOR_MODE`, `PREDICTOR_MODEL_*` |
 | Ghost engine                         | Optional C++ gRPC service for node-drain simulation.                    | `GHOST_ENABLED`, `GHOST_ENGINE_ADDR`                                  |
 | OpenAI-compatible assistant provider | Natural-language enrichment for assistant output.                                | `ASSISTANT_PROVIDER`, `ASSISTANT_API_*`, `ASSISTANT_MODEL`              |
 | RAG embeddings                       | Semantic retrieval for assistant grounding.                                      | `OLLAMA_*` and/or `ASSISTANT_EMBEDDING_*`                               |
@@ -107,7 +107,7 @@ For exact settings, use `.env.example` and `README.md`. The optional ML producti
 
 - Enterprise-ready today: deterministic diagnostics, RBAC/write gate controls, incident workflow, GitOps artifact generation, SLO/rightsizing views, audit trail, and core deployment hardening.
 - Narrow production slice: Ghost node-drain simulation is implemented, but full scheduler parity and network/cascade modeling are still roadmap work.
-- Prototype or planned: production ML governance, eBPF telemetry, fleet drift correction, and autonomous remediation.
+- Prototype or planned: expanded ML training/evaluation pipeline, eBPF telemetry, fleet drift correction, and autonomous remediation.
 
 ## Workspace auth and notification safeguards
 
