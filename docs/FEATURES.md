@@ -109,7 +109,7 @@ For exact settings, use `.env.example` and `README.md`. The optional ML producti
 
 - Enterprise-ready today: deterministic diagnostics, RBAC/write gate controls, incident workflow, GitOps artifact generation, SLO/rightsizing views, audit trail, and core deployment hardening.
 - Narrow production slice: Ghost node-drain simulation is implemented with node-selector and taint/toleration placement checks, but full scheduler parity and network/cascade modeling are still roadmap work.
-- Prototype or planned: Postgres-backed durable stores, expanded ML training/evaluation pipeline, eBPF telemetry, fleet drift correction, and autonomous remediation.
+- Partial or planned: file-backed SQLite durable stores are supported today; Postgres-backed stores, expanded ML training/evaluation pipeline, eBPF telemetry, fleet drift correction, and autonomous remediation remain roadmap work.
 
 ## Workspace auth and notification safeguards
 

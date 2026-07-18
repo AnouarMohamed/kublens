@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5/middleware"
@@ -95,8 +96,8 @@ func (s *Server) handleEnterpriseReadyz(w http.ResponseWriter, r *http.Request) 
 	})
 	appendCheck(model.HealthCheck{
 		Name:    "storage",
-		OK:      s.runtime.Mode != "prod" || s.runtime.DatabaseDriver == "postgres",
-		Message: enterpriseStorageMessage(s.runtime.Mode, s.runtime.DatabaseDriver),
+		OK:      s.runtime.EnterpriseStorage,
+		Message: enterpriseStorageMessage(s.runtime.Mode, s.runtime.DatabaseDriver, s.runtime.EnterpriseStorage),
 	})
 	appendCheck(model.HealthCheck{
 		Name:    "audit",
@@ -229,12 +230,18 @@ func boolMessage(ok bool, okMessage string, failMessage string) string {
 	return failMessage
 }
 
-func enterpriseStorageMessage(mode string, driver string) string {
-	if mode == "prod" && driver != "postgres" {
-		return "prod-requires-postgres"
+func enterpriseStorageMessage(mode string, driver string, durable bool) string {
+	if durable {
+		if strings.TrimSpace(driver) == "" {
+			return "sqlite-durable"
+		}
+		return strings.TrimSpace(driver) + "-durable"
+	}
+	if mode == "prod" {
+		return "prod-requires-durable-storage"
 	}
 	if driver == "" {
-		return "sqlite"
+		return "storage-not-durable"
 	}
-	return driver
+	return strings.TrimSpace(driver) + "-not-durable"
 }

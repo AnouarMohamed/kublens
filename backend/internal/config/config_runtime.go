@@ -14,8 +14,8 @@ func RuntimeStatus(cfg Config, isRealCluster bool, alertsEnabled bool) model.Run
 	if cfg.DevMode {
 		warnings = append(warnings, "DEV_MODE enabled: convenience shortcuts may reduce security guarantees.")
 	}
-	if cfg.Mode == ModeProd && cfg.Database.Driver != "postgres" {
-		warnings = append(warnings, "Production mode should use DATABASE_DRIVER=postgres for durable enterprise storage.")
+	if cfg.Mode == ModeProd && !sqliteStorageDurable(cfg.Database.SQLitePath) {
+		warnings = append(warnings, "Production mode requires a durable DB_PATH for SQLite storage.")
 	}
 	if cfg.Predictor.Mode == "shadow" {
 		warnings = append(warnings, "Predictor shadow mode emits ML scores without changing final risk.")
@@ -31,7 +31,7 @@ func RuntimeStatus(cfg Config, isRealCluster bool, alertsEnabled bool) model.Run
 		AuthEnabled:         cfg.Auth.Enabled,
 		WriteActionsEnabled: cfg.WriteActionsEnabled,
 		DatabaseDriver:      cfg.Database.Driver,
-		EnterpriseStorage:   cfg.Mode != ModeProd || cfg.Database.Driver == "postgres",
+		EnterpriseStorage:   cfg.Database.Driver == "sqlite" && sqliteStorageDurable(cfg.Database.SQLitePath),
 		PredictorEnabled:    strings.TrimSpace(cfg.Predictor.BaseURL) != "",
 		PredictorHealthy:    true,
 		PredictorMode:       cfg.Predictor.Mode,

@@ -253,9 +253,20 @@ func validate(cfg Config) error {
 	if cfg.Database.Driver == "postgres" {
 		return errors.New("DATABASE_DRIVER=postgres is planned but not implemented; use sqlite for this release")
 	}
+	if cfg.Mode == ModeProd && cfg.Database.Driver == "sqlite" && !sqliteStorageDurable(cfg.Database.SQLitePath) {
+		return errors.New("APP_MODE=prod requires a durable DB_PATH when DATABASE_DRIVER=sqlite")
+	}
 	if cfg.Predictor.Mode != "deterministic" && cfg.Predictor.Mode != "shadow" && cfg.Predictor.Mode != "blended" {
 		return fmt.Errorf("unsupported PREDICTOR_MODE: %s", cfg.Predictor.Mode)
 	}
 
 	return nil
+}
+
+func sqliteStorageDurable(path string) bool {
+	value := strings.TrimSpace(path)
+	if value == "" || value == ":memory:" {
+		return false
+	}
+	return !strings.Contains(strings.ToLower(value), "mode=memory")
 }

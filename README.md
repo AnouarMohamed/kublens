@@ -391,10 +391,11 @@ RATE_LIMIT_ENABLED=true
 RATE_LIMIT_REQUESTS=300
 RATE_LIMIT_WINDOW_SECONDS=60
 
-# Supported in this release: sqlite. Postgres-backed stores remain a Phase 4 roadmap item.
+# Supported in this release: file-backed sqlite. Postgres-backed stores remain a Phase 4 roadmap item.
 DATABASE_DRIVER=sqlite
 DATABASE_URL=
 DATABASE_MIGRATIONS_AUTO=true
+# Required for production readiness; do not use :memory: in prod.
 DB_PATH=data/kubelens.db
 
 ALERTMANAGER_WEBHOOK_URL=

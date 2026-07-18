@@ -102,6 +102,41 @@ func TestLoadRejectsPlannedPostgresDriver(t *testing.T) {
 	}
 }
 
+func TestLoadProdRejectsMemorySQLiteStorage(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("APP_MODE", "prod")
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_TOKENS", "admin:admin:secret-token")
+	t.Setenv("DB_PATH", ":memory:")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for memory-only prod sqlite storage")
+	}
+	if err.Error() != "APP_MODE=prod requires a durable DB_PATH when DATABASE_DRIVER=sqlite" {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestRuntimeStatusMarksFileSQLiteAsEnterpriseStorage(t *testing.T) {
+	cfg := Config{
+		Mode: ModeProd,
+		Database: DatabaseConfig{
+			Driver:     "sqlite",
+			SQLitePath: "data/kubelens.db",
+		},
+		Auth: AuthConfig{Enabled: true},
+		Predictor: PredictorConfig{
+			Mode: "deterministic",
+		},
+	}
+
+	runtime := RuntimeStatus(cfg, true, false)
+	if !runtime.EnterpriseStorage {
+		t.Fatal("expected file-backed sqlite to count as durable storage")
+	}
+}
+
 func TestLoadPredictorModeValidation(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("PREDICTOR_MODE", "autopilot")

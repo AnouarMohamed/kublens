@@ -74,7 +74,7 @@ Exit criteria:
 
 Exit criteria:
 
-- Production deployments use Postgres-backed durable stores by default while dev/demo can continue using SQLite.
+- Production deployments use durable SQL-backed stores. This release supports file-backed SQLite with automatic migrations; Postgres-backed stores remain future Phase 4 work.
 - Critical audit records can be verified for hash-chain integrity.
 - Operators can complete the risk workflow from one workbench without losing access to drilldown views.
 - Ghost and predictor outputs expose confidence, model/version metadata, and known limitations.
@@ -127,7 +127,7 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | GitOps remediation mode                    | shipped | TBD   | Phase 2      |
 | Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |
-| Durable enterprise storage                 | planned | TBD   | Phase 4      |
+| Durable enterprise storage                 | partial | TBD   | Phase 4      |
 | Tamper-evident audit verification          | shipped | TBD   | Phase 4      |
 | Incident Risk Workbench                    | partial | TBD   | Phase 4      |
 | Ghost confidence and scheduler fidelity    | partial | TBD   | Phase 4      |
