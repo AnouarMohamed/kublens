@@ -10,6 +10,7 @@ pytest.importorskip("sklearn")
 
 from predictor.app.ml_prototype import (  # noqa: E402
     FEATURE_COLUMNS,
+    best_f1_threshold,
     build_feature_frame,
     promotion_gate_thresholds,
     train_simple_model,
@@ -58,6 +59,7 @@ def test_train_simple_model_writes_metadata_sidecar(tmp_path) -> None:
     assert payload["labelDefinition"] == "label=incident within rollout horizon"
     assert payload["ownerReviewer"] == "sre-platform"
     assert payload["calibratedThreshold"] == 0.5
+    assert payload["calibrationMethod"] == "manual_threshold"
     assert payload["promotionGates"] == {"precision": 0.0, "recall": 0.0, "rocAuc": 0.0}
     assert "2026-07-01T00:00:00+00:00/2026-07-01T00:35:00+00:00" == payload["trainingDataWindow"]
     assert "precision" in payload["evaluationMetrics"]
@@ -103,3 +105,11 @@ def test_validate_evaluation_gates_blocks_promotion() -> None:
 
     with pytest.raises(ValueError, match="evaluation gates failed"):
         validate_evaluation_gates({"precision": 0.65, "recall": 0.85}, gates)
+
+
+def test_best_f1_threshold_prefers_evaluation_fit() -> None:
+    """Threshold tuning selects a stronger split point than the default when needed."""
+
+    threshold = best_f1_threshold([0.2, 0.35, 0.55, 0.9], pd.Series([0, 1, 1, 1]))
+
+    assert threshold == 0.35

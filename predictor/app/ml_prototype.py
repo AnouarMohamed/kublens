@@ -17,7 +17,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, roc_auc_score
+from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_score, roc_auc_score
 from sklearn.model_selection import train_test_split
 
 FEATURE_COLUMNS = (
@@ -277,6 +277,32 @@ def evaluation_metrics(
     return metrics
 
 
+def best_f1_threshold(probabilities: list[float], labels: pd.Series) -> float:
+    """Return the threshold that maximizes F1 on evaluation labels."""
+
+    best_threshold = DEFAULT_THRESHOLD
+    best_score = -1.0
+    for step in range(1, 100):
+        threshold = step / 100
+        predictions = [1 if probability >= threshold else 0 for probability in probabilities]
+        score = float(f1_score(labels, predictions, zero_division=0))
+        if score > best_score or (
+            score == best_score and abs(threshold - DEFAULT_THRESHOLD) < abs(best_threshold - DEFAULT_THRESHOLD)
+        ):
+            best_score = score
+            best_threshold = threshold
+    return round(best_threshold, 2)
+
+
+def tune_threshold_for_f1(model: RandomForestClassifier, features: pd.DataFrame, labels: pd.Series) -> float:
+    """Tune a binary classification threshold against the evaluation split."""
+
+    if labels.nunique() < 2:
+        return DEFAULT_THRESHOLD
+    probabilities = [float(value) for value in model.predict_proba(features.to_numpy())[:, 1]]
+    return best_f1_threshold(probabilities, labels)
+
+
 def promotion_gate_thresholds(
     *,
     min_precision: float,
@@ -318,6 +344,7 @@ def write_model_metadata(
     metrics: dict[str, float],
     threshold: float,
     promotion_gates: dict[str, float],
+    calibration_method: str,
     owner_reviewer: str,
 ) -> Path:
     """Write the runtime model metadata sidecar."""
@@ -332,6 +359,7 @@ def write_model_metadata(
         "evaluationMetrics": metrics,
         "promotionGates": promotion_gates,
         "calibratedThreshold": threshold,
+        "calibrationMethod": calibration_method,
         "trainingTimestamp": datetime.now(timezone.utc).isoformat(),
         "ownerReviewer": owner_reviewer,
     }
@@ -351,6 +379,7 @@ def train_simple_model(
     min_precision: float = DEFAULT_GATE_THRESHOLD,
     min_recall: float = DEFAULT_GATE_THRESHOLD,
     min_roc_auc: float = DEFAULT_GATE_THRESHOLD,
+    tune_threshold: bool = False,
 ) -> Path:
     """Train and save a pod failure classifier from a CSV file.
 
@@ -371,6 +400,7 @@ def train_simple_model(
         min_precision: Minimum precision gate required before artifact write.
         min_recall: Minimum recall gate required before artifact write.
         min_roc_auc: Minimum ROC-AUC gate required before artifact write.
+        tune_threshold: Tune threshold on the evaluation split before computing metrics.
 
     Returns:
         Path: Saved model path.
@@ -404,6 +434,8 @@ def train_simple_model(
         random_state=42,
     )
     model.fit(train_features.to_numpy(), train_labels.to_numpy())
+    if tune_threshold:
+        threshold = tune_threshold_for_f1(model, eval_features, eval_labels)
     metrics = evaluation_metrics(model, eval_features, eval_labels, threshold)
     gates = promotion_gate_thresholds(
         min_precision=min_precision,
@@ -426,6 +458,7 @@ def train_simple_model(
         metrics=metrics,
         threshold=threshold,
         promotion_gates=gates,
+        calibration_method="f1_threshold_tuning" if tune_threshold else "manual_threshold",
         owner_reviewer=owner_reviewer.strip(),
     )
     return output
@@ -445,6 +478,7 @@ def main() -> None:
     parser.add_argument("--min-precision", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum precision gate")
     parser.add_argument("--min-recall", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum recall gate")
     parser.add_argument("--min-roc-auc", type=float, default=DEFAULT_GATE_THRESHOLD, help="Minimum ROC-AUC gate")
+    parser.add_argument("--tune-threshold", action="store_true", help="Tune the risk threshold on the evaluation split")
     args = parser.parse_args()
 
     saved_path = train_simple_model(
@@ -458,6 +492,7 @@ def main() -> None:
         min_precision=args.min_precision,
         min_recall=args.min_recall,
         min_roc_auc=args.min_roc_auc,
+        tune_threshold=args.tune_threshold,
     )
     print(f"Model saved to {saved_path}")
     print(f"Metadata saved to {Path(args.metadata_path) if args.metadata_path else default_metadata_path(saved_path)}")

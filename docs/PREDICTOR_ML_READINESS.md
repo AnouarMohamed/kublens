@@ -13,6 +13,7 @@ This document tracks the work required to move the optional predictor ML path fr
 - Blended mode raises pod risk only when the model is loaded, metadata is loaded, the metadata is not stale, and feature completeness meets `PREDICTOR_MIN_FEATURE_COMPLETENESS`.
 - `python -m predictor.app.train_model` trains a CSV-backed random forest model compatible with the runtime feature contract and writes a runtime metadata sidecar by default.
 - Trainer promotion gates can fail artifact generation when configured minimum precision, recall, or ROC-AUC thresholds are missed.
+- Trainer threshold tuning can choose the calibrated risk threshold from the evaluation split before metrics and metadata are written.
 
 ## Production target
 
@@ -24,7 +25,7 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
 | Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Partial     |
 | Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Partial     |
-| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Planned     |
+| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Partial     |
 | Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Partial     |
 | Shadow mode       | Support emitting ML scores without blending them into final risk during rollout.                                                                                                                                       | Implemented |
 | Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial     |

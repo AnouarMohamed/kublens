@@ -180,6 +180,7 @@ class ModelMetadata(BaseModel):
     evaluationMetrics: dict[str, float] = Field(default_factory=dict)
     promotionGates: dict[str, float] = Field(default_factory=dict)
     calibratedThreshold: float | None = None
+    calibrationMethod: str = ""
     trainingTimestamp: str = ""
     ownerReviewer: str = ""
 
