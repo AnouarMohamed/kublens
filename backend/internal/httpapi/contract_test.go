@@ -36,6 +36,13 @@ func TestAPIContractCoreEndpoints(t *testing.T) {
 			},
 		},
 		{
+			name: "enterprise readiness",
+			path: "/api/readiness/enterprise",
+			requiredKeys: []string{
+				"status", "timestamp", "checks", "build",
+			},
+		},
+		{
 			name: "version",
 			path: "/api/version",
 			requiredKeys: []string{
@@ -47,7 +54,8 @@ func TestAPIContractCoreEndpoints(t *testing.T) {
 			path: "/api/runtime",
 			requiredKeys: []string{
 				"mode", "devMode", "insecure", "isRealCluster", "authEnabled",
-				"writeActionsEnabled", "predictorEnabled", "predictorHealthy",
+				"writeActionsEnabled", "databaseDriver", "enterpriseStorage",
+				"predictorEnabled", "predictorHealthy", "predictorMode",
 				"assistantEnabled", "ragEnabled", "alertsEnabled", "warnings",
 			},
 		},

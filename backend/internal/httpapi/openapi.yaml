@@ -34,6 +34,23 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /readiness/enterprise:
+    get:
+      operationId: getEnterpriseReadiness
+      summary: Enterprise readiness probe with production posture checks
+      responses:
+        "200":
+          description: Enterprise readiness checks passed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+        "503":
+          description: Enterprise readiness checks failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
   /openapi.yaml:
     get:
       operationId: getOpenAPISpec
@@ -1429,8 +1446,11 @@ components:
         - isRealCluster
         - authEnabled
         - writeActionsEnabled
+        - databaseDriver
+        - enterpriseStorage
         - predictorEnabled
         - predictorHealthy
+        - predictorMode
         - ghostEnabled
         - ghostHealthy
         - assistantEnabled
@@ -1450,11 +1470,17 @@ components:
           type: boolean
         writeActionsEnabled:
           type: boolean
+        databaseDriver:
+          type: string
+        enterpriseStorage:
+          type: boolean
         predictorEnabled:
           type: boolean
         predictorHealthy:
           type: boolean
         predictorLastError:
+          type: string
+        predictorMode:
           type: string
         ghostEnabled:
           type: boolean

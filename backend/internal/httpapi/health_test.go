@@ -86,6 +86,43 @@ func TestPredictorFailureIsVisibleInRuntimeAndReadyz(t *testing.T) {
 	}
 }
 
+func TestEnterpriseReadinessRequiresPostgresInProd(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithRuntimeStatus(model.RuntimeStatus{
+			Mode:                "prod",
+			AuthEnabled:         true,
+			WriteActionsEnabled: false,
+			DatabaseDriver:      "sqlite",
+			EnterpriseStorage:   false,
+			PredictorHealthy:    true,
+			PredictorMode:       "deterministic",
+		}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/readiness/enterprise", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("enterprise readiness status = %d, want 503", rr.Code)
+	}
+
+	var payload model.HealthStatus
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode enterprise readiness payload: %v", err)
+	}
+	if payload.Status != "not-ready" {
+		t.Fatalf("status = %q, want not-ready", payload.Status)
+	}
+	if !hasHealthCheck(payload.Checks, "storage", "prod-requires-postgres") {
+		t.Fatalf("expected storage check to require postgres: %+v", payload.Checks)
+	}
+}
+
 func TestOpenAPISpecEndpoint(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := newServer(testClusterReader{}, nil, logger)
@@ -101,6 +138,15 @@ func TestOpenAPISpecEndpoint(t *testing.T) {
 	if !strings.Contains(rr.Body.String(), "openapi: 3.0.3") {
 		t.Fatal("expected openapi version marker in spec payload")
 	}
+}
+
+func hasHealthCheck(checks []model.HealthCheck, name string, message string) bool {
+	for _, check := range checks {
+		if check.Name == name && check.Message == message {
+			return true
+		}
+	}
+	return false
 }
 
 func TestPrometheusMetricsEndpoint(t *testing.T) {

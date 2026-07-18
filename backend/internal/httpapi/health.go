@@ -71,6 +71,54 @@ func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (s *Server) handleEnterpriseReadyz(w http.ResponseWriter, r *http.Request) {
+	checks := make([]model.HealthCheck, 0, 6)
+	overallOK := true
+	appendCheck := func(check model.HealthCheck) {
+		checks = append(checks, check)
+		if !check.OK {
+			overallOK = false
+		}
+	}
+
+	appendCheck(s.clusterReadinessCheck(r.Context()))
+	appendCheck(s.predictorReadinessCheck())
+	appendCheck(model.HealthCheck{
+		Name:    "auth",
+		OK:      s.runtime.Mode != "prod" || s.runtime.AuthEnabled,
+		Message: boolMessage(s.runtime.Mode != "prod" || s.runtime.AuthEnabled, "configured", "prod-requires-auth"),
+	})
+	appendCheck(model.HealthCheck{
+		Name:    "write-gate",
+		OK:      !s.runtime.WriteActionsEnabled || s.runtime.AuthEnabled,
+		Message: boolMessage(!s.runtime.WriteActionsEnabled || s.runtime.AuthEnabled, "guarded", "writes-require-auth"),
+	})
+	appendCheck(model.HealthCheck{
+		Name:    "storage",
+		OK:      s.runtime.Mode != "prod" || s.runtime.DatabaseDriver == "postgres",
+		Message: enterpriseStorageMessage(s.runtime.Mode, s.runtime.DatabaseDriver),
+	})
+	appendCheck(model.HealthCheck{
+		Name:    "audit",
+		OK:      s.audit != nil,
+		Message: boolMessage(s.audit != nil, "available", "unavailable"),
+	})
+
+	status := "ok"
+	httpStatus := http.StatusOK
+	if !overallOK {
+		status = "not-ready"
+		httpStatus = http.StatusServiceUnavailable
+	}
+
+	writeJSON(w, httpStatus, model.HealthStatus{
+		Status:    status,
+		Timestamp: s.now().UTC().Format(time.RFC3339),
+		Checks:    checks,
+		Build:     s.buildInfo,
+	})
+}
+
 func (s *Server) clusterReadinessCheck(parent context.Context) model.HealthCheck {
 	if !s.cluster.IsRealCluster() {
 		return model.HealthCheck{
@@ -172,4 +220,21 @@ func (s *Server) predictorHealthSnapshot() predictorHealthState {
 	s.predictorHealthMu.RLock()
 	defer s.predictorHealthMu.RUnlock()
 	return s.predictorHealth
+}
+
+func boolMessage(ok bool, okMessage string, failMessage string) string {
+	if ok {
+		return okMessage
+	}
+	return failMessage
+}
+
+func enterpriseStorageMessage(mode string, driver string) string {
+	if mode == "prod" && driver != "postgres" {
+		return "prod-requires-postgres"
+	}
+	if driver == "" {
+		return "sqlite"
+	}
+	return driver
 }

@@ -14,9 +14,12 @@ export interface RuntimeStatus {
   isRealCluster: boolean;
   authEnabled: boolean;
   writeActionsEnabled: boolean;
+  databaseDriver: string;
+  enterpriseStorage: boolean;
   predictorEnabled: boolean;
   predictorHealthy: boolean;
   predictorLastError?: string;
+  predictorMode: "deterministic" | "shadow" | "blended" | string;
   ghostEnabled: boolean;
   ghostHealthy: boolean;
   ghostLastError?: string;

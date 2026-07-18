@@ -59,9 +59,18 @@ func Load() (Config, error) {
 	}
 
 	cfg.Predictor = PredictorConfig{
-		BaseURL:      strings.TrimSpace(os.Getenv("PREDICTOR_BASE_URL")),
-		Timeout:      parseSecondsAsDuration(os.Getenv("PREDICTOR_TIMEOUT_SECONDS"), 4*time.Second),
-		SharedSecret: strings.TrimSpace(os.Getenv("PREDICTOR_SHARED_SECRET")),
+		BaseURL:                strings.TrimSpace(os.Getenv("PREDICTOR_BASE_URL")),
+		Timeout:                parseSecondsAsDuration(os.Getenv("PREDICTOR_TIMEOUT_SECONDS"), 4*time.Second),
+		SharedSecret:           strings.TrimSpace(os.Getenv("PREDICTOR_SHARED_SECRET")),
+		Mode:                   strings.ToLower(strings.TrimSpace(defaultIfEmpty(os.Getenv("PREDICTOR_MODE"), "deterministic"))),
+		ModelMetadataPath:      strings.TrimSpace(os.Getenv("PREDICTOR_MODEL_METADATA_PATH")),
+		MinFeatureCompleteness: parseFloatDefault(os.Getenv("PREDICTOR_MIN_FEATURE_COMPLETENESS"), 0.80),
+		MaxModelAge:            parseHoursAsDuration(os.Getenv("PREDICTOR_MAX_MODEL_AGE_HOURS"), 168*time.Hour),
+	}
+	if cfg.Predictor.MinFeatureCompleteness < 0 {
+		cfg.Predictor.MinFeatureCompleteness = 0
+	} else if cfg.Predictor.MinFeatureCompleteness > 1 {
+		cfg.Predictor.MinFeatureCompleteness = 1
 	}
 	cfg.Ghost = GhostConfig{
 		Enabled:    parseBoolDefault(os.Getenv("GHOST_ENABLED"), true),
@@ -69,10 +78,17 @@ func Load() (Config, error) {
 		Timeout:    parseSecondsAsDuration(os.Getenv("GHOST_ENGINE_TIMEOUT_SECONDS"), 5*time.Second),
 	}
 
-	cfg.DBPath = strings.TrimSpace(firstNonEmpty(
+	dbPath := strings.TrimSpace(firstNonEmpty(
 		os.Getenv("DB_PATH"),
 		"data/kubelens.db",
 	))
+	cfg.DBPath = dbPath
+	cfg.Database = DatabaseConfig{
+		Driver:         strings.ToLower(strings.TrimSpace(defaultIfEmpty(os.Getenv("DATABASE_DRIVER"), "sqlite"))),
+		URL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		SQLitePath:     dbPath,
+		MigrationsAuto: parseBoolDefault(os.Getenv("DATABASE_MIGRATIONS_AUTO"), true),
+	}
 
 	cfg.Memory = MemoryConfig{
 		FilePath: strings.TrimSpace(firstNonEmpty(
@@ -230,6 +246,15 @@ func validate(cfg Config) error {
 
 	if cfg.Assistant.Provider != "" && cfg.Assistant.Provider != "none" && cfg.Assistant.Provider != "openai_compatible" {
 		return fmt.Errorf("unsupported ASSISTANT_PROVIDER: %s", cfg.Assistant.Provider)
+	}
+	if cfg.Database.Driver != "sqlite" && cfg.Database.Driver != "postgres" {
+		return fmt.Errorf("unsupported DATABASE_DRIVER: %s", cfg.Database.Driver)
+	}
+	if cfg.Database.Driver == "postgres" && strings.TrimSpace(cfg.Database.URL) == "" {
+		return errors.New("DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	}
+	if cfg.Predictor.Mode != "deterministic" && cfg.Predictor.Mode != "shadow" && cfg.Predictor.Mode != "blended" {
+		return fmt.Errorf("unsupported PREDICTOR_MODE: %s", cfg.Predictor.Mode)
 	}
 
 	return nil

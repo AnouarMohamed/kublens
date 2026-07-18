@@ -41,6 +41,7 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 
 - `GET /healthz`
 - `GET /readyz`
+- `GET /readiness/enterprise`
 - `GET /openapi.yaml`
 - `GET /version`
 - `GET /runtime`
@@ -48,6 +49,8 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /metrics/prometheus`
 - `GET /slo`
 - `GET /rightsizing`
+
+Enterprise readiness checks add production posture signals for auth, write gating, durable storage, audit availability, predictor state, and cluster reachability. A failed enterprise check returns `503` with the same `HealthStatus` shape as `/readyz`.
 
 ## Auth and cluster context
 

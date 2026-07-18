@@ -52,6 +52,7 @@ type Server struct {
 	logger         *slog.Logger
 	metrics        *requestMetrics
 	runtime        model.RuntimeStatus
+	databaseDriver string
 	auth           authRuntime
 	authLogin      *authLoginProtection
 	trustedProxies trustedProxyMatcher
@@ -289,6 +290,7 @@ func WithBuildInfo(info model.BuildInfo) Option {
 func WithRuntimeStatus(status model.RuntimeStatus) Option {
 	return func(s *Server) {
 		s.runtime = status
+		s.databaseDriver = status.DatabaseDriver
 	}
 }
 
@@ -337,7 +339,10 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 			Mode:                "demo",
 			Insecure:            true,
 			WriteActionsEnabled: false,
+			DatabaseDriver:      "sqlite",
+			EnterpriseStorage:   true,
 			PredictorHealthy:    true,
+			PredictorMode:       "deterministic",
 		},
 	}
 	server.limiter.configure(RateLimitConfig{

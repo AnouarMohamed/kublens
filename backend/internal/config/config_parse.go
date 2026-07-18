@@ -105,6 +105,18 @@ func parseSecondsAsDuration(raw string, fallback time.Duration) time.Duration {
 	return time.Duration(seconds) * time.Second
 }
 
+func parseHoursAsDuration(raw string, fallback time.Duration) time.Duration {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return fallback
+	}
+	hours, err := strconv.Atoi(value)
+	if err != nil || hours <= 0 {
+		return fallback
+	}
+	return time.Duration(hours) * time.Hour
+}
+
 func parseFloatDefault(raw string, fallback float64) float64 {
 	value := strings.TrimSpace(raw)
 	if value == "" {

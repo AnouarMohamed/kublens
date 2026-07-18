@@ -26,9 +26,12 @@ type RuntimeStatus struct {
 	IsRealCluster       bool     `json:"isRealCluster"`
 	AuthEnabled         bool     `json:"authEnabled"`
 	WriteActionsEnabled bool     `json:"writeActionsEnabled"`
+	DatabaseDriver      string   `json:"databaseDriver"`
+	EnterpriseStorage   bool     `json:"enterpriseStorage"`
 	PredictorEnabled    bool     `json:"predictorEnabled"`
 	PredictorHealthy    bool     `json:"predictorHealthy"`
 	PredictorLastError  string   `json:"predictorLastError,omitempty"`
+	PredictorMode       string   `json:"predictorMode"`
 	GhostEnabled        bool     `json:"ghostEnabled"`
 	GhostHealthy        bool     `json:"ghostHealthy"`
 	GhostLastError      string   `json:"ghostLastError,omitempty"`

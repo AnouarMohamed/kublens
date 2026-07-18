@@ -33,6 +33,7 @@ type Config struct {
 	Assistant AssistantConfig
 	Predictor PredictorConfig
 	Ghost     GhostConfig
+	Database  DatabaseConfig
 	DBPath    string
 	Memory    MemoryConfig
 	ChatOps   ChatOpsConfig
@@ -67,15 +68,26 @@ type AssistantConfig struct {
 }
 
 type PredictorConfig struct {
-	BaseURL      string
-	Timeout      time.Duration
-	SharedSecret string
+	BaseURL                string
+	Timeout                time.Duration
+	SharedSecret           string
+	Mode                   string
+	ModelMetadataPath      string
+	MinFeatureCompleteness float64
+	MaxModelAge            time.Duration
 }
 
 type GhostConfig struct {
 	Enabled    bool
 	EngineAddr string
 	Timeout    time.Duration
+}
+
+type DatabaseConfig struct {
+	Driver         string
+	URL            string
+	SQLitePath     string
+	MigrationsAuto bool
 }
 
 type MemoryConfig struct {

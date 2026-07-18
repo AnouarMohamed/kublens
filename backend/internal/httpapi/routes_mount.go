@@ -12,6 +12,7 @@ func (s *Server) mountAPIRoutes(api chi.Router) {
 func (s *Server) mountSystemRoutes(api chi.Router) {
 	api.Get("/healthz", s.handleHealthz)
 	api.Get("/readyz", s.handleReadyz)
+	api.Get("/readiness/enterprise", s.handleEnterpriseReadyz)
 	api.Get("/openapi.yaml", s.handleOpenAPIYAML)
 	api.Get("/version", s.handleVersion)
 	api.Get("/runtime", s.handleRuntime)

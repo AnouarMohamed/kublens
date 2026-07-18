@@ -21,6 +21,12 @@ func TestLoadDefaultsDemoMode(t *testing.T) {
 	if cfg.DBPath != "data/kubelens.db" {
 		t.Fatalf("db path = %q, want data/kubelens.db", cfg.DBPath)
 	}
+	if cfg.Database.Driver != "sqlite" {
+		t.Fatalf("database driver = %q, want sqlite", cfg.Database.Driver)
+	}
+	if cfg.Predictor.Mode != "deterministic" {
+		t.Fatalf("predictor mode = %q, want deterministic", cfg.Predictor.Mode)
+	}
 	if cfg.Assistant.AssistantMaxTokens != 2048 {
 		t.Fatalf("assistant max tokens = %d, want 2048", cfg.Assistant.AssistantMaxTokens)
 	}
@@ -79,6 +85,24 @@ func TestProdDisallowsHeaderTokenAuth(t *testing.T) {
 
 	if _, err := Load(); err == nil {
 		t.Fatal("expected error when prod mode enables AUTH_ALLOW_HEADER_TOKEN")
+	}
+}
+
+func TestLoadPostgresRequiresURL(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("DATABASE_DRIVER", "postgres")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when postgres driver has no DATABASE_URL")
+	}
+}
+
+func TestLoadPredictorModeValidation(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("PREDICTOR_MODE", "autopilot")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for unsupported predictor mode")
 	}
 }
 
@@ -182,9 +206,16 @@ func clearConfigEnv(t *testing.T) {
 		"PREDICTOR_BASE_URL",
 		"PREDICTOR_TIMEOUT_SECONDS",
 		"PREDICTOR_SHARED_SECRET",
+		"PREDICTOR_MODE",
+		"PREDICTOR_MODEL_METADATA_PATH",
+		"PREDICTOR_MIN_FEATURE_COMPLETENESS",
+		"PREDICTOR_MAX_MODEL_AGE_HOURS",
 		"GHOST_ENABLED",
 		"GHOST_ENGINE_ADDR",
 		"GHOST_ENGINE_TIMEOUT_SECONDS",
+		"DATABASE_DRIVER",
+		"DATABASE_URL",
+		"DATABASE_MIGRATIONS_AUTO",
 		"DB_PATH",
 		"MEMORY_FILE_PATH",
 		"CHATOPS_SLACK_WEBHOOK_URL",
