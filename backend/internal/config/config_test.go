@@ -88,12 +88,17 @@ func TestProdDisallowsHeaderTokenAuth(t *testing.T) {
 	}
 }
 
-func TestLoadPostgresRequiresURL(t *testing.T) {
+func TestLoadRejectsPlannedPostgresDriver(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("DATABASE_DRIVER", "postgres")
+	t.Setenv("DATABASE_URL", "postgres://kubelens@example/kubelens")
 
-	if _, err := Load(); err == nil {
-		t.Fatal("expected error when postgres driver has no DATABASE_URL")
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for planned postgres driver")
+	}
+	if err.Error() != "DATABASE_DRIVER=postgres is planned but not implemented; use sqlite for this release" {
+		t.Fatalf("error = %q", err.Error())
 	}
 }
 

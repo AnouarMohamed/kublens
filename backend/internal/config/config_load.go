@@ -250,8 +250,8 @@ func validate(cfg Config) error {
 	if cfg.Database.Driver != "sqlite" && cfg.Database.Driver != "postgres" {
 		return fmt.Errorf("unsupported DATABASE_DRIVER: %s", cfg.Database.Driver)
 	}
-	if cfg.Database.Driver == "postgres" && strings.TrimSpace(cfg.Database.URL) == "" {
-		return errors.New("DATABASE_URL is required when DATABASE_DRIVER=postgres")
+	if cfg.Database.Driver == "postgres" {
+		return errors.New("DATABASE_DRIVER=postgres is planned but not implemented; use sqlite for this release")
 	}
 	if cfg.Predictor.Mode != "deterministic" && cfg.Predictor.Mode != "shadow" && cfg.Predictor.Mode != "blended" {
 		return fmt.Errorf("unsupported PREDICTOR_MODE: %s", cfg.Predictor.Mode)

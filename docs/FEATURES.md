@@ -109,7 +109,7 @@ For exact settings, use `.env.example` and `README.md`. The optional ML producti
 
 - Enterprise-ready today: deterministic diagnostics, RBAC/write gate controls, incident workflow, GitOps artifact generation, SLO/rightsizing views, audit trail, and core deployment hardening.
 - Narrow production slice: Ghost node-drain simulation is implemented, but full scheduler parity and network/cascade modeling are still roadmap work.
-- Prototype or planned: expanded ML training/evaluation pipeline, eBPF telemetry, fleet drift correction, and autonomous remediation.
+- Prototype or planned: Postgres-backed durable stores, expanded ML training/evaluation pipeline, eBPF telemetry, fleet drift correction, and autonomous remediation.
 
 ## Workspace auth and notification safeguards
 
