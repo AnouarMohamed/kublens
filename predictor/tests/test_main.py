@@ -73,7 +73,9 @@ def write_model_metadata(tmp_path: Path, training_timestamp: str | None = None) 
                 "featureList": ["restarts", "cpu_milli", "memory_mi"],
                 "labelDefinition": "incident within 30 minutes",
                 "evaluationMetrics": {"recall": 0.84, "precision": 0.73},
+                "promotionGates": {"recall": 0.80, "precision": 0.70},
                 "calibratedThreshold": 0.72,
+                "calibrationMethod": "f1_threshold_tuning",
                 "trainingTimestamp": training_timestamp or datetime.now(timezone.utc).isoformat(),
                 "ownerReviewer": "sre-platform",
             }
@@ -119,6 +121,10 @@ def test_model_health_reports_shadow_metadata(monkeypatch: pytest.MonkeyPatch, t
     assert data.metadataLoaded is True
     assert data.modelVersion == "pod-risk-2026-07"
     assert data.stale is False
+    assert data.calibratedThreshold == 0.72
+    assert data.calibrationMethod == "f1_threshold_tuning"
+    assert data.evaluationMetrics["recall"] == 0.84
+    assert data.promotionGates["precision"] == 0.70
 
 
 def test_predict_returns_risk_items() -> None:
@@ -240,7 +246,9 @@ def test_predict_blends_optional_ml_score(monkeypatch: pytest.MonkeyPatch, tmp_p
     item = predict_payload(payload).items[0]
     assert item.resource == "checkout"
     assert item.riskScore == 38
+    assert {"key": "mlFeatureCompleteness", "value": "100%"} in signal_payloads(item)
     assert {"key": "mlRisk", "value": "95%"} in signal_payloads(item)
+    assert {"key": "mlThreshold", "value": "0.72"} in signal_payloads(item)
 
 
 def test_predict_shadow_mode_emits_ml_without_blending(monkeypatch: pytest.MonkeyPatch) -> None:

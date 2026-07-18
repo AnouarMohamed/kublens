@@ -198,6 +198,10 @@ class ModelHealth(BaseModel):
     maxModelAgeHours: int
     minFeatureCompleteness: float
     requiredFeatures: list[str]
+    calibratedThreshold: float | None = None
+    calibrationMethod: str = ""
+    evaluationMetrics: dict[str, float] = Field(default_factory=dict)
+    promotionGates: dict[str, float] = Field(default_factory=dict)
     lastError: str = ""
 
 
@@ -432,6 +436,10 @@ def model_health() -> ModelHealth:
         maxModelAgeHours=max_model_age_hours(),
         minFeatureCompleteness=min_feature_completeness(),
         requiredFeatures=declared_ml_features(metadata),
+        calibratedThreshold=metadata.calibratedThreshold if metadata else None,
+        calibrationMethod=metadata.calibrationMethod if metadata else "",
+        evaluationMetrics=metadata.evaluationMetrics if metadata else {},
+        promotionGates=metadata.promotionGates if metadata else {},
         lastError=last_error,
     )
 
@@ -657,6 +665,13 @@ def blend_risk_score(deterministic_score: int, ml_score: int) -> int:
     return clamp(max(deterministic_score, blended), 0, 100)
 
 
+def append_ml_threshold_signal(signals: list[PredictionSignal], ml_health: ModelHealth) -> None:
+    """Attach the calibrated ML threshold when model metadata provides one."""
+
+    if ml_health.calibratedThreshold is not None:
+        signals.append(PredictionSignal(key="mlThreshold", value=f"{ml_health.calibratedThreshold:.2f}"))
+
+
 def ml_feature_set_completeness(feature_set: MLFeatureSet, feature_names: list[str]) -> float:
     """Return completeness for a concrete feature set and feature ordering."""
 
@@ -731,6 +746,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
 
         feature_completeness = ml_feature_set_completeness(ml_feature_set, ml_feature_names)
         if ml_health.enabled:
+            signals.append(PredictionSignal(key="mlFeatureCompleteness", value=f"{feature_completeness:.0%}"))
             if not ml_health.modelLoaded:
                 signals.append(PredictionSignal(key="mlRiskBlocked", value="model-unavailable"))
             elif ml_health.mode == "blended" and not ml_health.metadataLoaded:
@@ -745,17 +761,20 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
                     signals.append(PredictionSignal(key="mlShadowRisk", value=f"{ml_score}%"))
                     signals.append(PredictionSignal(key="mlMode", value="shadow"))
                     signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
+                    append_ml_threshold_signal(signals, ml_health)
                 elif feature_completeness < ml_health.minFeatureCompleteness:
                     signals.append(
                         PredictionSignal(key="mlRiskBlocked", value=f"feature-completeness {feature_completeness:.0%}")
                     )
                     signals.append(PredictionSignal(key="mlShadowRisk", value=f"{ml_score}%"))
                     signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
+                    append_ml_threshold_signal(signals, ml_health)
                 else:
                     score = blend_risk_score(score, ml_score)
                     signals.append(PredictionSignal(key="mlRisk", value=f"{ml_score}%"))
                     signals.append(PredictionSignal(key="mlMode", value="blended"))
                     signals.append(PredictionSignal(key="mlModel", value=ml_health.modelVersion))
+                    append_ml_threshold_signal(signals, ml_health)
 
         score = clamp(score, 0, 100)
         if score < 35:

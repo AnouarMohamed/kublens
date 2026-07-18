@@ -8,9 +8,10 @@ This document tracks the work required to move the optional predictor ML path fr
 - Optional ML scoring is enabled only when `PREDICTOR_MODE` is `shadow` or `blended` and `PREDICTOR_MODEL_PATH` points to a loadable joblib model.
 - Runtime ML feature order is declared by model metadata. Without metadata, the default contract includes restarts, CPU, memory, pod status, age, warning counts, namespace pressure, node readiness, restart velocity, CPU/memory trend deltas, phase duration, image-pull/backoff events, and previous incident count.
 - ML scores can raise deterministic pod risk, but cannot lower deterministic risk.
-- `GET /model` reports mode, model load status, metadata load status, freshness, required features, and blending readiness.
+- `GET /model` reports mode, model load status, metadata load status, freshness, required features, blending readiness, evaluation metrics, promotion gates, calibration method, and calibrated threshold.
 - Shadow mode emits `mlShadowRisk` without changing final risk.
 - Blended mode raises pod risk only when the model is loaded, metadata is loaded, the metadata is not stale, and feature completeness meets `PREDICTOR_MIN_FEATURE_COMPLETENESS`.
+- Prediction signals include ML feature completeness, model version, mode, threshold, blocked reason, and shadow/blended score where applicable.
 - `python -m predictor.app.train_model` trains a CSV-backed random forest model compatible with the runtime feature contract and writes a runtime metadata sidecar by default.
 - Trainer promotion gates can fail artifact generation when configured minimum precision, recall, or ROC-AUC thresholds are missed.
 - Trainer threshold tuning can choose the calibrated risk threshold from the evaluation split before metrics and metadata are written.
