@@ -11,7 +11,7 @@ This document tracks the work required to move the optional predictor ML path fr
 - `GET /model` reports mode, model load status, metadata load status, freshness, required features, and blending readiness.
 - Shadow mode emits `mlShadowRisk` without changing final risk.
 - Blended mode raises pod risk only when the model is loaded, metadata is loaded, the metadata is not stale, and feature completeness meets `PREDICTOR_MIN_FEATURE_COMPLETENESS`.
-- `predictor/app/ml_prototype.py` trains a CSV-backed random forest model compatible with the runtime feature contract and writes a runtime metadata sidecar by default.
+- `python -m predictor.app.train_model` trains a CSV-backed random forest model compatible with the runtime feature contract and writes a runtime metadata sidecar by default.
 - Trainer promotion gates can fail artifact generation when configured minimum precision, recall, or ROC-AUC thresholds are missed.
 
 ## Production target
@@ -29,7 +29,7 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 | Shadow mode       | Support emitting ML scores without blending them into final risk during rollout.                                                                                                                                       | Implemented |
 | Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial     |
 | Observability     | Export model version, inference latency, load failures, feature missing rates, score distribution, drift signals, and ML/deterministic disagreement.                                                                   | Partial     |
-| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Planned     |
+| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Partial     |
 
 ## Model metadata contract
 
@@ -79,3 +79,21 @@ PREDICTOR_MAX_MODEL_AGE_HOURS=168
 The trainer writes `pod-risk.metadata.json` next to the model unless `--metadata-path` is supplied. Promotion metadata includes the model version, source commit, training data window, feature list, label definition, evaluation metrics, promotion gates, calibrated threshold, training timestamp, and owner/reviewer.
 
 The runtime honors the feature order declared in `featureList`, so older promoted three-column models can remain in shadow/blended testing while new training data adopts the expanded feature set. Feature completeness is calculated against the declared feature order before ML can influence final risk.
+
+## Training CSV schema
+
+Required columns:
+
+- Restarts: `restarts` or `restart_count`.
+- CPU: `cpu_milli`, `cpu`, or `cpu_usage`.
+- Memory: `memory_mi`, `memory`, or `memory_usage`.
+- Label: `failure_imminent`, `label`, or `target`.
+
+Optional feature columns:
+
+- Status: `status`, `phase`, or `pod_status`.
+- Age and phase duration: `pod_age_minutes`, `age_minutes`, `age`, `pod_age`, `phase_duration_minutes`, `phase_duration`, or `phase_age`.
+- Warning and namespace pressure: `warning_events`, `warning_event_count`, `namespace_warning_events`, `namespace_warning_event_count`, `namespace_non_running_ratio`, or `namespace_pressure`.
+- Node readiness: `node_not_ready`, `node_unready`, `node_ready`, `node_is_ready`, `node_status`, or `node_phase`.
+- Trends and history: `restart_velocity_per_hour`, `restart_velocity`, `cpu_trend_delta`, `cpu_trend`, `memory_trend_delta`, or `memory_trend`.
+- Pull/backoff and prior incident context: `image_pull_backoff_events`, `image_pull_backoffs`, `image_backoff_events`, `previous_incidents`, or `prior_incidents`.
