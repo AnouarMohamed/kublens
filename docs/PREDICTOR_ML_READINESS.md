@@ -19,16 +19,16 @@ The ML module should be explainable, observable, reproducible, and safe to run i
 
 ## Feature roadmap
 
-| Area              | Required work                                                                                                                                                                                                          | Status  |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Planned |
-| Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Planned |
-| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Planned |
-| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Planned |
+| Area              | Required work                                                                                                                                                                                                          | Status      |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Feature set       | Add pod status encoding, age parsing, warning event counts, namespace pressure, node readiness, restart velocity, CPU and memory trends, pod phase duration, image pull/backoff signals, and previous incident labels. | Planned     |
+| Training pipeline | Promote the trainer into a versioned pipeline with train/validation/test splits, model metadata, reproducible seeds, and saved metrics.                                                                                | Planned     |
+| Calibration       | Add calibrated probabilities or threshold tuning so risk scores map to operational confidence.                                                                                                                         | Planned     |
+| Evaluation gates  | Fail CI/model promotion when recall, precision, false-positive rate, or calibration falls outside defined bounds.                                                                                                      | Planned     |
 | Shadow mode       | Support emitting ML scores without blending them into final risk during rollout.                                                                                                                                       | Implemented |
-| Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial |
-| Observability     | Export model version, inference latency, load failures, feature missing rates, score distribution, drift signals, and ML/deterministic disagreement.                                                                   | Partial |
-| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Planned |
+| Runtime safety    | Weight ML influence by feature completeness, model health, and data freshness.                                                                                                                                         | Partial     |
+| Observability     | Export model version, inference latency, load failures, feature missing rates, score distribution, drift signals, and ML/deterministic disagreement.                                                                   | Partial     |
+| Packaging         | Rename the trainer to a production-oriented entrypoint, document CSV schema, add fixtures, and separate optional ML dependencies from default runtime.                                                                 | Planned     |
 
 ## Model metadata contract
 
