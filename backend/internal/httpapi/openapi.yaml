@@ -1378,6 +1378,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuditLogResponse"
+  /audit/{id}/verify:
+    get:
+      operationId: getAuditVerification
+      summary: Verify audit hash-chain integrity up to one entry
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Audit entry hash-chain verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerification"
+        "404":
+          description: Audit entry not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Audit entry hash-chain verification failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditVerification"
   /alerts/dispatch:
     post:
       operationId: postAlertDispatch
@@ -3196,6 +3225,10 @@ components:
           type: string
         success:
           type: boolean
+        previousHash:
+          type: string
+        hash:
+          type: string
     AuditLogResponse:
       type: object
       properties:
@@ -3205,6 +3238,26 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/AuditEntry"
+    AuditVerification:
+      type: object
+      required:
+        - id
+        - ok
+        - message
+        - verifiedAt
+      properties:
+        id:
+          type: string
+        ok:
+          type: boolean
+        message:
+          type: string
+        previousHash:
+          type: string
+        hash:
+          type: string
+        verifiedAt:
+          type: string
     AlertDispatchRequest:
       type: object
       required: [title, message]

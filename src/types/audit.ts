@@ -13,11 +13,22 @@ export interface AuditEntry {
   user?: string;
   role?: string;
   success: boolean;
+  previousHash?: string;
+  hash?: string;
 }
 
 export interface AuditLogResponse {
   total: number;
   items: AuditEntry[];
+}
+
+export interface AuditVerification {
+  id: string;
+  ok: boolean;
+  message: string;
+  previousHash?: string;
+  hash?: string;
+  verifiedAt: string;
 }
 
 export interface StreamEvent<T = unknown> {

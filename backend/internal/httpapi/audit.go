@@ -2,6 +2,8 @@ package httpapi
 
 import (
 	"bufio"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"log/slog"
 	"net"
@@ -101,6 +103,10 @@ func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
 	}
 
 	l.mu.Lock()
+	if len(l.items) > 0 {
+		entry.PreviousHash = strings.TrimSpace(l.items[len(l.items)-1].Hash)
+	}
+	entry.Hash = hashAuditEntry(entry)
 	l.items = append(l.items, entry)
 	if overflow := len(l.items) - l.maxItems; overflow > 0 {
 		l.items = append([]model.AuditEntry(nil), l.items[overflow:]...)
@@ -113,6 +119,45 @@ func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
 	}
 
 	return entry
+}
+
+func (l *auditLog) verify(id string, now time.Time) (model.AuditVerification, bool) {
+	target := strings.TrimSpace(id)
+	if target == "" {
+		return model.AuditVerification{}, false
+	}
+
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	previousHash := ""
+	for _, entry := range l.items {
+		expectedPrevious := previousHash
+		expectedHash := hashAuditEntryWithPrevious(entry, expectedPrevious)
+		if entry.ID == target {
+			ok := strings.TrimSpace(entry.Hash) != "" &&
+				entry.PreviousHash == expectedPrevious &&
+				entry.Hash == expectedHash
+			message := "verified"
+			if strings.TrimSpace(entry.Hash) == "" {
+				message = "entry-missing-hash"
+			} else if entry.PreviousHash != expectedPrevious {
+				message = "previous-hash-mismatch"
+			} else if entry.Hash != expectedHash {
+				message = "hash-mismatch"
+			}
+			return model.AuditVerification{
+				ID:           entry.ID,
+				OK:           ok,
+				Message:      message,
+				PreviousHash: entry.PreviousHash,
+				Hash:         entry.Hash,
+				VerifiedAt:   now.UTC().Format(time.RFC3339),
+			}, true
+		}
+		previousHash = strings.TrimSpace(entry.Hash)
+	}
+	return model.AuditVerification{}, false
 }
 
 func (l *auditLog) list(limit int) []model.AuditEntry {
@@ -196,6 +241,7 @@ func NewAuditController(audit *auditLog) *AuditController {
 func (ac *AuditController) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", ac.handleAuditLog)
+	r.Get("/{id}/verify", ac.handleAuditVerification)
 	return r
 }
 
@@ -211,6 +257,24 @@ func (ac *AuditController) handleAuditLog(w http.ResponseWriter, r *http.Request
 		Total: ac.audit.total(),
 		Items: items,
 	})
+}
+
+func (ac *AuditController) handleAuditVerification(w http.ResponseWriter, r *http.Request) {
+	if ac.audit == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "audit log unavailable"})
+		return
+	}
+
+	verification, ok := ac.audit.verify(chi.URLParam(r, "id"), time.Now())
+	if !ok {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "audit entry not found"})
+		return
+	}
+	status := http.StatusOK
+	if !verification.OK {
+		status = http.StatusConflict
+	}
+	writeJSON(w, status, verification)
 }
 
 func parsePositiveInt(raw string, fallback int) int {
@@ -308,6 +372,51 @@ func loadAuditEntries(path string, maxItems int) ([]model.AuditEntry, uint64, er
 	}
 
 	return entries, maxID, nil
+}
+
+type auditHashMaterial struct {
+	ID           string `json:"id"`
+	Timestamp    string `json:"timestamp"`
+	RequestID    string `json:"requestId,omitempty"`
+	Method       string `json:"method"`
+	Path         string `json:"path"`
+	Route        string `json:"route,omitempty"`
+	Action       string `json:"action,omitempty"`
+	Status       int    `json:"status"`
+	DurationMs   int64  `json:"durationMs"`
+	Bytes        int64  `json:"bytes"`
+	ClientIP     string `json:"clientIp,omitempty"`
+	User         string `json:"user,omitempty"`
+	Role         string `json:"role,omitempty"`
+	Success      bool   `json:"success"`
+	PreviousHash string `json:"previousHash,omitempty"`
+}
+
+func hashAuditEntry(entry model.AuditEntry) string {
+	return hashAuditEntryWithPrevious(entry, entry.PreviousHash)
+}
+
+func hashAuditEntryWithPrevious(entry model.AuditEntry, previousHash string) string {
+	material := auditHashMaterial{
+		ID:           entry.ID,
+		Timestamp:    entry.Timestamp,
+		RequestID:    entry.RequestID,
+		Method:       entry.Method,
+		Path:         entry.Path,
+		Route:        entry.Route,
+		Action:       entry.Action,
+		Status:       entry.Status,
+		DurationMs:   entry.DurationMs,
+		Bytes:        entry.Bytes,
+		ClientIP:     entry.ClientIP,
+		User:         entry.User,
+		Role:         entry.Role,
+		Success:      entry.Success,
+		PreviousHash: previousHash,
+	}
+	bytes, _ := json.Marshal(material)
+	sum := sha256.Sum256(bytes)
+	return hex.EncodeToString(sum[:])
 }
 
 func actionForRequest(method, path string) string {

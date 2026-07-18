@@ -2,6 +2,7 @@ import type {
   AlertDispatchRequest,
   AlertDispatchResponse,
   AuditLogResponse,
+  AuditVerification,
   NodeAlertLifecycle,
   NodeAlertLifecycleUpdateRequest,
 } from "../../../types";
@@ -26,4 +27,5 @@ export const alertsApi = {
       body: JSON.stringify(payload),
     }),
   getAuditLog: (limit = 120) => requestJson<AuditLogResponse>(`${apiRoute("/audit")}?limit=${limit}`),
+  verifyAuditEntry: (id: string) => requestJson<AuditVerification>(apiRoute("/audit/{id}/verify", { id })),
 };

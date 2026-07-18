@@ -65,11 +65,13 @@ Enterprise readiness checks add production posture signals for auth, write gatin
 - `GET /stream` (SSE)
 - `GET /stream/ws` (WebSocket)
 - `GET /audit`
+- `GET /audit/{id}/verify`
 
 Notes:
 
 - WebSocket upgrades enforce same-origin/trusted-origin checks.
 - Cross-origin upgrade attempts are rejected with `403`.
+- Audit entries include `previousHash` and `hash` for tamper-evident verification of newly recorded events.
 
 ## Alerts
 

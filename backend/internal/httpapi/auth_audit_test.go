@@ -94,6 +94,58 @@ func TestAuditEndpointIncludesAuthFailures(t *testing.T) {
 	}
 }
 
+func TestAuditVerificationEndpointVerifiesHashChain(t *testing.T) {
+	router := newAuthTestServer().Router("")
+
+	readReq := httptest.NewRequest(http.MethodGet, "/api/pods", nil)
+	readReq.Header.Set("Authorization", "Bearer viewer-token")
+	readResp := httptest.NewRecorder()
+	router.ServeHTTP(readResp, readReq)
+	if readResp.Code != http.StatusOK {
+		t.Fatalf("read status = %d, want 200", readResp.Code)
+	}
+
+	auditReq := httptest.NewRequest(http.MethodGet, "/api/audit?limit=10", nil)
+	auditReq.Header.Set("Authorization", "Bearer admin-token")
+	auditResp := httptest.NewRecorder()
+	router.ServeHTTP(auditResp, auditReq)
+	if auditResp.Code != http.StatusOK {
+		t.Fatalf("audit status = %d, want 200", auditResp.Code)
+	}
+
+	var auditPayload model.AuditLogResponse
+	if err := json.NewDecoder(auditResp.Body).Decode(&auditPayload); err != nil {
+		t.Fatalf("decode audit payload: %v", err)
+	}
+	if len(auditPayload.Items) == 0 {
+		t.Fatal("expected audit items")
+	}
+
+	entry := auditPayload.Items[0]
+	if strings.TrimSpace(entry.Hash) == "" {
+		t.Fatalf("expected audit entry hash: %+v", entry)
+	}
+
+	verifyReq := httptest.NewRequest(http.MethodGet, "/api/audit/"+entry.ID+"/verify", nil)
+	verifyReq.Header.Set("Authorization", "Bearer admin-token")
+	verifyResp := httptest.NewRecorder()
+	router.ServeHTTP(verifyResp, verifyReq)
+	if verifyResp.Code != http.StatusOK {
+		t.Fatalf("verify status = %d, want 200", verifyResp.Code)
+	}
+
+	var verification model.AuditVerification
+	if err := json.NewDecoder(verifyResp.Body).Decode(&verification); err != nil {
+		t.Fatalf("decode verification payload: %v", err)
+	}
+	if !verification.OK {
+		t.Fatalf("verification failed: %+v", verification)
+	}
+	if verification.Hash != entry.Hash {
+		t.Fatalf("verification hash = %q, want %q", verification.Hash, entry.Hash)
+	}
+}
+
 func TestAuthLoginCreatesCookieSession(t *testing.T) {
 	router := newAuthTestServer().Router("")
 
