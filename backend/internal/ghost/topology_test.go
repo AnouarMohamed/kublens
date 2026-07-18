@@ -91,3 +91,45 @@ func TestSimulateNodeDrainLeavesPodsPendingWhenNoCapacity(t *testing.T) {
 		t.Fatalf("pod status = %q, want Pending", got)
 	}
 }
+
+func TestChooseDestinationRespectsTaintsAndTolerations(t *testing.T) {
+	nodes := map[string]model.GhostNode{
+		"node-a": {
+			Name:     "node-a",
+			Status:   "Ready",
+			Headroom: model.GhostResources{CPUMilli: 1000, MemoryBytes: 1000},
+		},
+		"node-b": {
+			Name:     "node-b",
+			Status:   "Ready",
+			Taints:   []string{"dedicated"},
+			Headroom: model.GhostResources{CPUMilli: 1000, MemoryBytes: 1000},
+		},
+		"node-c": {
+			Name:     "node-c",
+			Status:   "Ready",
+			Headroom: model.GhostResources{CPUMilli: 1000, MemoryBytes: 1000},
+		},
+	}
+	pod := model.GhostPod{
+		ID:       "default/api",
+		Requests: model.GhostResources{CPUMilli: 100, MemoryBytes: 100},
+	}
+
+	destination, ok := chooseDestination(nodes, pod, "node-a")
+	if !ok {
+		t.Fatal("expected destination")
+	}
+	if destination != "node-c" {
+		t.Fatalf("destination = %q, want node-c", destination)
+	}
+
+	pod.Tolerations = []string{"dedicated=:NoSchedule"}
+	destination, ok = chooseDestination(nodes, pod, "node-a")
+	if !ok {
+		t.Fatal("expected tolerated destination")
+	}
+	if destination != "node-b" {
+		t.Fatalf("destination = %q, want node-b", destination)
+	}
+}

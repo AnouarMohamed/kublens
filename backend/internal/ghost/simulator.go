@@ -133,6 +133,9 @@ func chooseDestination(nodes map[string]model.GhostNode, pod model.GhostPod, sou
 		if !nodeSelectorMatches(pod.NodeSelector, node.Labels) {
 			continue
 		}
+		if !toleratesNodeTaints(pod.Tolerations, node.Taints) {
+			continue
+		}
 		if node.Headroom.CPUMilli < pod.Requests.CPUMilli || node.Headroom.MemoryBytes < pod.Requests.MemoryBytes {
 			continue
 		}
@@ -148,6 +151,40 @@ func nodeSelectorMatches(selector map[string]string, labels map[string]string) b
 		}
 	}
 	return true
+}
+
+func toleratesNodeTaints(tolerations []string, taints []string) bool {
+	if len(taints) == 0 {
+		return true
+	}
+	tolerated := make(map[string]struct{}, len(tolerations))
+	for _, toleration := range tolerations {
+		key := taintKey(toleration)
+		if key != "" {
+			tolerated[key] = struct{}{}
+		}
+	}
+	for _, taint := range taints {
+		key := taintKey(taint)
+		if key == "" {
+			continue
+		}
+		if _, ok := tolerated[key]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func taintKey(value string) string {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return ""
+	}
+	if index := strings.IndexAny(raw, "=:"); index >= 0 {
+		return strings.TrimSpace(raw[:index])
+	}
+	return raw
 }
 
 func simulationResult(

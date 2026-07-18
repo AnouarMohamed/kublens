@@ -4,7 +4,7 @@
 
 **Project Ghost Cluster** is a high-fidelity, discrete-event simulation (DES) module for KubLens-AI. It enables "Predictive Operations" by allowing users to simulate cluster-wide changes in a sandbox that mirrors their real production environment.
 
-**Implementation status:** Roadmap / MVP planning. The first executable slice is a read-only node-drain simulation behind a Go API and isolated gRPC engine boundary; eBPF-driven telemetry, network propagation, and cascade scoring are later phases.
+**Implementation status:** MVP in progress. The executable slice is a read-only node-drain simulation behind a Go API and isolated gRPC engine boundary. It persists recent runs, exposes confidence and limitations, and applies basic scheduler filters for readiness, unschedulable nodes, node selectors, taints/tolerations, and requested CPU/memory headroom. eBPF-driven telemetry, full scheduler plugin parity, network propagation, and cascade scoring are later phases.
 
 ## 1. Core Architecture
 

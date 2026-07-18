@@ -53,23 +53,23 @@ flowchart TD
 
 ## What it does
 
-| Area                        | Detail                                                                                                                                                          |
-| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Incident Workbench**      | Primary detect, simulate, remediate, and audit queue for on-call operators                                                                                      |
-| **Ghost Engine**            | Proactive node-drain maintenance simulation with predictive timelines. Advanced scheduler parity, eBPF network modeling, and cascade scoring are roadmap items. |
-| **Inventory**               | Pods, nodes, deployments, services, ingresses, namespaces, RBAC, events, storage, config                                                                        |
-| **Safe operations**         | Controlled write actions (restart/scale/rollback/cordon/drain/apply) behind RBAC + global write gate                                                            |
-| **Diagnostics**             | Deterministic intelligence engine with evidence + recommendations                                                                                               |
-| **Predictions**             | Predictor-backed risk scoring with deterministic local fallback                                                                                                 |
-| **Assistant + RAG**         | Deterministic context with optional OpenAI-compatible LLM and documentation grounding                                                                           |
-| **Incident workflow**       | Incident creation, runbook step progression, resolution, and remediation association                                                                            |
-| **Remediation workflow**    | Proposal, approval, execution, rejection (with four-eyes enforcement in `prod`)                                                                                 |
-| **Cluster memory**          | Runbook and fix-pattern memory for operational learning                                                                                                         |
-| **Postmortems**             | Generated postmortems from incident timeline + runbook state                                                                                                    |
-| **Metrics + observability** | API telemetry, Prometheus export, dashboard charts, tracing integration                                                                                         |
-| **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, and hash-chain verification                                                                             |
-| **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                         |
-| **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                              |
+| Area                        | Detail                                                                                                                                                                                                                                  |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Incident Workbench**      | Primary detect, simulate, remediate, and audit queue for on-call operators                                                                                                                                                              |
+| **Ghost Engine**            | Proactive node-drain maintenance simulation with predictive timelines, confidence, node-selector checks, and taint/toleration-aware placement. Advanced scheduler parity, eBPF network modeling, and cascade scoring are roadmap items. |
+| **Inventory**               | Pods, nodes, deployments, services, ingresses, namespaces, RBAC, events, storage, config                                                                                                                                                |
+| **Safe operations**         | Controlled write actions (restart/scale/rollback/cordon/drain/apply) behind RBAC + global write gate                                                                                                                                    |
+| **Diagnostics**             | Deterministic intelligence engine with evidence + recommendations                                                                                                                                                                       |
+| **Predictions**             | Predictor-backed risk scoring with deterministic local fallback                                                                                                                                                                         |
+| **Assistant + RAG**         | Deterministic context with optional OpenAI-compatible LLM and documentation grounding                                                                                                                                                   |
+| **Incident workflow**       | Incident creation, runbook step progression, resolution, and remediation association                                                                                                                                                    |
+| **Remediation workflow**    | Proposal, approval, execution, rejection (with four-eyes enforcement in `prod`)                                                                                                                                                         |
+| **Cluster memory**          | Runbook and fix-pattern memory for operational learning                                                                                                                                                                                 |
+| **Postmortems**             | Generated postmortems from incident timeline + runbook state                                                                                                                                                                            |
+| **Metrics + observability** | API telemetry, Prometheus export, dashboard charts, tracing integration                                                                                                                                                                 |
+| **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, and hash-chain verification                                                                                                                                                     |
+| **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                                                                                                 |
+| **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                                                                                                      |
 
 ---
 
