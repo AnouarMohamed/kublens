@@ -42,6 +42,8 @@ env:
   DATABASE_URL: ""
   DATABASE_MIGRATIONS_AUTO: "true"
   DB_PATH: "data/kubelens.db"
+  MEMORY_STORE: "file"
+  MEMORY_FILE_PATH: "data/memory-runbooks.json"
   GHOST_ENABLED: "true"
   GHOST_ENGINE_ADDR: "kubelens-ghost-engine:8091"
   GHOST_ENGINE_TIMEOUT_SECONDS: "5"
@@ -55,6 +57,10 @@ env:
   OTEL_EXPORTER_OTLP_INSECURE: "true"
   OTEL_SERVICE_NAME: kubelens-backend
   OTEL_TRACES_SAMPLE_RATIO: "1"
+  AUDIT_STORE: "memory"
+  AUDIT_LOG_FILE: ""
+  AUDIT_MAX_ITEMS: "500"
+  AUDIT_SIGNING_KEY: ""
 
 resources: {}
 nodeSelector: {}

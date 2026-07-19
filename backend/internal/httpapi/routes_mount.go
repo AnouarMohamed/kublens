@@ -13,6 +13,7 @@ func (s *Server) mountSystemRoutes(api chi.Router) {
 	api.Get("/healthz", s.handleHealthz)
 	api.Get("/readyz", s.handleReadyz)
 	api.Get("/readiness/enterprise", s.handleEnterpriseReadyz)
+	api.Get("/readiness/production", s.handleProductionReadyz)
 	api.Get("/openapi.yaml", s.handleOpenAPIYAML)
 	api.Get("/version", s.handleVersion)
 	api.Get("/runtime", s.handleRuntime)
@@ -49,7 +50,7 @@ func (s *Server) mountClusterRoutes(api chi.Router) {
 }
 
 func (s *Server) mountObservabilityRoutes(api chi.Router) {
-	api.Mount("/metrics", NewMetricsController(s.metrics, s.docs, s.runtimeSnapshot).Routes())
+	api.Mount("/metrics", NewMetricsController(s.metrics, s.docs, s.runtimeSnapshot, s.audit.posture).Routes())
 	api.Mount("/slo", NewSLOController(s.metrics, s.incidents, s.currentClusterStats, s.now).Routes())
 	api.Mount("/rightsizing", NewRightsizingController(s.cluster, s.now).Routes())
 	api.Mount("/audit", NewAuditController(s.audit).Routes())

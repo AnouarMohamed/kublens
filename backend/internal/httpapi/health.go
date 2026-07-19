@@ -120,6 +120,15 @@ func (s *Server) handleEnterpriseReadyz(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *Server) handleProductionReadyz(w http.ResponseWriter, r *http.Request) {
+	status := s.productionReadinessStatus(r.Context())
+	httpStatus := http.StatusOK
+	if len(status.Blockers) > 0 {
+		httpStatus = http.StatusServiceUnavailable
+	}
+	writeJSON(w, httpStatus, status)
+}
+
 func (s *Server) clusterReadinessCheck(parent context.Context) model.HealthCheck {
 	if !s.cluster.IsRealCluster() {
 		return model.HealthCheck{
@@ -152,6 +161,46 @@ func (s *Server) clusterReadinessCheck(parent context.Context) model.HealthCheck
 		OK:      false,
 		Message: "cancelled",
 	}
+}
+
+func (s *Server) ghostReadinessCheck() model.HealthCheck {
+	runtime := s.runtimeSnapshot()
+	if !runtime.GhostEnabled {
+		return model.HealthCheck{
+			Name:    "ghost",
+			OK:      true,
+			Message: "disabled",
+		}
+	}
+	if s.ghostClient == nil {
+		return model.HealthCheck{
+			Name:    "ghost",
+			OK:      true,
+			Message: "fallback-engine",
+		}
+	}
+
+	state := s.ghostHealthSnapshot()
+	check := model.HealthCheck{
+		Name:    "ghost",
+		OK:      true,
+		Message: "healthy",
+	}
+	if !state.lastSuccess.IsZero() {
+		check.LastSuccess = state.lastSuccess.UTC().Format(time.RFC3339)
+	}
+	if !state.lastFailure.IsZero() {
+		check.LastFailure = state.lastFailure.UTC().Format(time.RFC3339)
+	}
+	if state.lastFailure.After(state.lastSuccess) {
+		check.OK = false
+		if state.lastError != "" {
+			check.Message = state.lastError
+		} else {
+			check.Message = "unavailable"
+		}
+	}
+	return check
 }
 
 func (s *Server) predictorReadinessCheck() model.HealthCheck {
@@ -188,15 +237,23 @@ func (s *Server) predictorReadinessCheck() model.HealthCheck {
 
 func (s *Server) runtimeSnapshot() model.RuntimeStatus {
 	runtime := s.runtime
-	state := s.predictorHealthSnapshot()
+	predictorState := s.predictorHealthSnapshot()
 	if !runtime.PredictorEnabled {
 		runtime.PredictorHealthy = true
 		runtime.PredictorLastError = ""
-		return runtime
+	} else {
+		runtime.PredictorHealthy = !predictorState.lastFailure.After(predictorState.lastSuccess)
+		runtime.PredictorLastError = predictorState.lastError
 	}
 
-	runtime.PredictorHealthy = !state.lastFailure.After(state.lastSuccess)
-	runtime.PredictorLastError = state.lastError
+	ghostState := s.ghostHealthSnapshot()
+	if !runtime.GhostEnabled {
+		runtime.GhostHealthy = true
+		runtime.GhostLastError = ""
+	} else {
+		runtime.GhostHealthy = !ghostState.lastFailure.After(ghostState.lastSuccess)
+		runtime.GhostLastError = ghostState.lastError
+	}
 	return runtime
 }
 
@@ -221,6 +278,29 @@ func (s *Server) predictorHealthSnapshot() predictorHealthState {
 	s.predictorHealthMu.RLock()
 	defer s.predictorHealthMu.RUnlock()
 	return s.predictorHealth
+}
+
+func (s *Server) recordGhostSuccess() {
+	s.ghostHealthMu.Lock()
+	s.ghostHealth.lastSuccess = s.now()
+	s.ghostHealth.lastError = ""
+	s.ghostHealthMu.Unlock()
+}
+
+func (s *Server) recordGhostFailure(err error) {
+	if err == nil {
+		return
+	}
+	s.ghostHealthMu.Lock()
+	s.ghostHealth.lastFailure = s.now()
+	s.ghostHealth.lastError = err.Error()
+	s.ghostHealthMu.Unlock()
+}
+
+func (s *Server) ghostHealthSnapshot() predictorHealthState {
+	s.ghostHealthMu.RLock()
+	defer s.ghostHealthMu.RUnlock()
+	return s.ghostHealth
 }
 
 func boolMessage(ok bool, okMessage string, failMessage string) string {

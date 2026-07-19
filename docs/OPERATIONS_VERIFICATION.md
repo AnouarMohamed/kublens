@@ -6,6 +6,7 @@ Use this checklist after deployments and before enabling write features in share
 
 ```bash
 curl -s http://localhost:3000/api/runtime | jq
+curl -s http://localhost:3000/api/readiness/production | jq
 ```
 
 Verify:
@@ -14,10 +15,15 @@ Verify:
 - `authEnabled=true` in production
 - `writeActionsEnabled` matches intended policy
 - `databaseDriver` is `sqlite` or `postgres`
+- `databaseMigrations=true`
 - `enterpriseStorage=true` in production
+- `memoryStore=sql` and `memoryDurable=true` in production
+- `auditStore=sql`, `auditDurable=true`, and `auditSinkFailures=0` in production
 - `alertsEnabled` and `ragEnabled` match configuration intent
 
 For Postgres deployments, verify `DATABASE_DRIVER=postgres`, `DATABASE_URL` is set, and startup logs do not report migration failures.
+
+`/api/readiness/production` returns `blocked` with HTTP `503` when production baseline requirements are missing. Warnings keep HTTP `200` but should be reviewed before promotion.
 
 ## 2) Auth and role gating
 
@@ -211,3 +217,7 @@ References:
 - [SUPPLY_CHAIN_POLICY.md](SUPPLY_CHAIN_POLICY.md)
 - [SECRET_ROTATION_RUNBOOK.md](SECRET_ROTATION_RUNBOOK.md)
 - [DOCUMENTATION_GOVERNANCE.md](DOCUMENTATION_GOVERNANCE.md)
+- [runbooks/production-readiness.md](runbooks/production-readiness.md)
+- [runbooks/backup-restore.md](runbooks/backup-restore.md)
+- [runbooks/failed-migration.md](runbooks/failed-migration.md)
+- [runbooks/write-gate.md](runbooks/write-gate.md)

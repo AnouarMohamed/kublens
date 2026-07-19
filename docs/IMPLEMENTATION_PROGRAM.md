@@ -128,7 +128,10 @@ Every epic and sub-feature must satisfy all checks below before merge:
 | Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
 | Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |
 | Durable enterprise storage                 | shipped | TBD   | Phase 4      |
+| SQL-backed memory and fix patterns         | shipped | TBD   | Phase 4      |
+| SQL-backed durable audit storage           | shipped | TBD   | Phase 4      |
 | Tamper-evident audit verification          | shipped | TBD   | Phase 4      |
+| Production readiness API and UI posture    | shipped | TBD   | Phase 4      |
 | Incident Risk Workbench                    | shipped | TBD   | Phase 4      |
 | Ghost confidence and scheduler fidelity    | shipped | TBD   | Phase 4      |
 | Predictor ML governance                    | shipped | TBD   | Phase 4      |

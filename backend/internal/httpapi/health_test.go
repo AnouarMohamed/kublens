@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -154,6 +155,103 @@ func TestEnterpriseReadinessAcceptsDurableSQLiteInProd(t *testing.T) {
 	}
 	if !hasHealthCheck(payload.Checks, "storage", "sqlite-durable") {
 		t.Fatalf("expected durable sqlite storage check: %+v", payload.Checks)
+	}
+}
+
+func TestProductionReadinessReportsBlockers(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(testClusterReader{}, nil, logger)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/readiness/production", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("production readiness status = %d, want 503", rr.Code)
+	}
+
+	var payload model.ProductionReadinessStatus
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode production readiness payload: %v", err)
+	}
+	if payload.Status != "blocked" {
+		t.Fatalf("status = %q, want blocked", payload.Status)
+	}
+	if !hasProductionIssue(payload.Blockers, "mode") {
+		t.Fatalf("expected mode blocker: %+v", payload.Blockers)
+	}
+	if !hasProductionIssue(payload.Blockers, "memory-store") {
+		t.Fatalf("expected memory-store blocker: %+v", payload.Blockers)
+	}
+	if !hasProductionIssue(payload.Blockers, "audit-store") {
+		t.Fatalf("expected audit-store blocker: %+v", payload.Blockers)
+	}
+}
+
+func TestProductionReadinessAcceptsProductionPosture(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	db, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithRuntimeStatus(model.RuntimeStatus{
+			Mode:                "prod",
+			IsRealCluster:       true,
+			AuthEnabled:         true,
+			WriteActionsEnabled: true,
+			DatabaseDriver:      "sqlite",
+			DatabaseMigrations:  true,
+			EnterpriseStorage:   true,
+			MemoryStore:         "sql",
+			MemoryDurable:       true,
+			AuditStore:          "sql",
+			AuditDurable:        true,
+			AuditSigned:         true,
+			PredictorEnabled:    true,
+			PredictorHealthy:    true,
+			PredictorMode:       "blended",
+			GhostEnabled:        true,
+			GhostHealthy:        true,
+			AlertsEnabled:       true,
+		}),
+		WithAuditConfig(AuditConfig{
+			MaxItems:   10,
+			Store:      "sql",
+			SigningKey: "audit-secret",
+			SQLDB:      db,
+			Dialect:    storesql.DialectSQLite,
+		}),
+	)
+	server.predictorHealth.enabled = true
+	server.ghostClient = healthyGhostClient{}
+	server.ghostHealth.enabled = true
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodGet, "/api/readiness/production", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("production readiness status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var payload model.ProductionReadinessStatus
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode production readiness payload: %v", err)
+	}
+	if payload.Status != "ready" {
+		t.Fatalf("status = %q, want ready; blockers=%+v warnings=%+v", payload.Status, payload.Blockers, payload.Warnings)
+	}
+	if len(payload.Blockers) != 0 || len(payload.Warnings) != 0 {
+		t.Fatalf("unexpected readiness issues: blockers=%+v warnings=%+v", payload.Blockers, payload.Warnings)
+	}
+	if !payload.Stores.MemoryDurable || !payload.Stores.AuditDurable || !payload.Stores.AuditSigned {
+		t.Fatalf("unexpected store posture: %+v", payload.Stores)
 	}
 }
 
@@ -330,6 +428,12 @@ func TestPrometheusMetricsEndpoint(t *testing.T) {
 	if !strings.Contains(body, "kubelens_runtime_predictor_healthy") {
 		t.Fatal("missing kubelens_runtime_predictor_healthy metric")
 	}
+	if !strings.Contains(body, "kubelens_runtime_memory_durable") {
+		t.Fatal("missing kubelens_runtime_memory_durable metric")
+	}
+	if !strings.Contains(body, "kubelens_audit_sink_failures_total") {
+		t.Fatal("missing kubelens_audit_sink_failures_total metric")
+	}
 }
 
 type flakyPredictionProvider struct {
@@ -342,4 +446,23 @@ func (f *flakyPredictionProvider) Predict(_ context.Context, _ predictorRequest)
 		return model.PredictionsResult{}, f.err
 	}
 	return f.response, nil
+}
+
+type healthyGhostClient struct{}
+
+func (healthyGhostClient) Simulate(
+	context.Context,
+	model.GhostSimulationRequest,
+	model.GhostTopology,
+) (model.GhostSimulationResult, error) {
+	return model.GhostSimulationResult{}, nil
+}
+
+func hasProductionIssue(issues []model.ProductionReadinessIssue, key string) bool {
+	for _, issue := range issues {
+		if issue.Key == key {
+			return true
+		}
+	}
+	return false
 }

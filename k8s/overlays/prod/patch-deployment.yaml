@@ -31,3 +31,7 @@ spec:
                 secretKeyRef:
                   name: k8s-ops-secret
                   key: KUBECONFIG_DATA
+          readinessProbe:
+            httpGet:
+              path: /api/readiness/production
+              port: http

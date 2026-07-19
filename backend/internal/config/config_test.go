@@ -30,6 +30,12 @@ func TestLoadDefaultsDemoMode(t *testing.T) {
 	if cfg.Assistant.AssistantMaxTokens != 2048 {
 		t.Fatalf("assistant max tokens = %d, want 2048", cfg.Assistant.AssistantMaxTokens)
 	}
+	if cfg.Memory.Store != "file" {
+		t.Fatalf("memory store = %q, want file", cfg.Memory.Store)
+	}
+	if cfg.Audit.Store != "memory" {
+		t.Fatalf("audit store = %q, want memory", cfg.Audit.Store)
+	}
 }
 
 func TestLoadProdRequiresAuth(t *testing.T) {
@@ -131,6 +137,64 @@ func TestLoadProdRejectsMemorySQLiteStorage(t *testing.T) {
 	}
 	if err.Error() != "APP_MODE=prod requires a durable DB_PATH when DATABASE_DRIVER=sqlite" {
 		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestLoadProdDefaultsToSQLMemoryAndAuditStores(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("APP_MODE", "prod")
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_TOKENS", "admin:admin:secret-token")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Memory.Store != "sql" {
+		t.Fatalf("memory store = %q, want sql", cfg.Memory.Store)
+	}
+	if cfg.Audit.Store != "sql" {
+		t.Fatalf("audit store = %q, want sql", cfg.Audit.Store)
+	}
+}
+
+func TestLoadRejectsInvalidMemoryStore(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("MEMORY_STORE", "redis")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for unsupported MEMORY_STORE")
+	}
+}
+
+func TestLoadRejectsInvalidAuditStore(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUDIT_STORE", "stdout")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error for unsupported AUDIT_STORE")
+	}
+}
+
+func TestLoadAuditFileStoreRequiresPath(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUDIT_STORE", "file")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected error when AUDIT_STORE=file has no AUDIT_LOG_FILE")
+	}
+}
+
+func TestLoadAuditLogFileDefaultsToFileStore(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUDIT_LOG_FILE", "data/audit.log")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Audit.Store != "file" {
+		t.Fatalf("audit store = %q, want file", cfg.Audit.Store)
 	}
 }
 
@@ -350,6 +414,7 @@ func clearConfigEnv(t *testing.T) {
 		"DATABASE_URL",
 		"DATABASE_MIGRATIONS_AUTO",
 		"DB_PATH",
+		"MEMORY_STORE",
 		"MEMORY_FILE_PATH",
 		"CHATOPS_SLACK_WEBHOOK_URL",
 		"CHATOPS_BASE_URL",
@@ -373,6 +438,7 @@ func clearConfigEnv(t *testing.T) {
 		"RATE_LIMIT_REQUESTS",
 		"RATE_LIMIT_WINDOW_SECONDS",
 		"AUDIT_MAX_ITEMS",
+		"AUDIT_STORE",
 		"AUDIT_LOG_FILE",
 		"ALERT_TIMEOUT_SECONDS",
 		"ALERTMANAGER_WEBHOOK_URL",

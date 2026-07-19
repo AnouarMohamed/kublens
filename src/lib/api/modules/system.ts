@@ -10,6 +10,7 @@ import type {
   HealthStatus,
   NodeTelemetryReport,
   PredictionsResult,
+  ProductionReadinessStatus,
   PredictorModelHealth,
   RightsizingOverview,
   RuntimeStatus,
@@ -34,8 +35,37 @@ async function requestHealthStatus(url: string): Promise<HealthStatus> {
   throw new ApiError(`Unexpected response shape from ${url}`, 502);
 }
 
+async function requestProductionReadiness(url: string): Promise<ProductionReadinessStatus> {
+  const response = await fetch(url, {
+    credentials: "same-origin",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+  const payload = (await response.json()) as unknown;
+  if (isProductionReadinessStatus(payload)) {
+    return payload;
+  }
+  if (!response.ok) {
+    throw new ApiError(`Request failed with status ${response.status}`, response.status);
+  }
+  throw new ApiError(`Unexpected response shape from ${url}`, 502);
+}
+
 function isHealthStatus(value: unknown): value is HealthStatus {
   return typeof value === "object" && value !== null && "status" in value && "checks" in value && "timestamp" in value;
+}
+
+function isProductionReadinessStatus(value: unknown): value is ProductionReadinessStatus {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "status" in value &&
+    "generatedAt" in value &&
+    "blockers" in value &&
+    "warnings" in value &&
+    "stores" in value
+  );
 }
 
 export const systemApi = {
@@ -43,6 +73,7 @@ export const systemApi = {
   getHealth: () => requestJson<HealthStatus>(apiRoute("/healthz")),
   getReadiness: () => requestJson<HealthStatus>(apiRoute("/readyz")),
   getEnterpriseReadiness: () => requestHealthStatus(apiRoute("/readiness/enterprise")),
+  getProductionReadiness: () => requestProductionReadiness(apiRoute("/readiness/production")),
   getRuntimeStatus: () => requestJson<RuntimeStatus>(apiRoute("/runtime")),
   getClusterInfo: () => requestJson<ClusterInfo>(apiRoute("/cluster-info")),
   getApiMetrics: (signal?: AbortSignal) => requestJson<ApiMetricsSnapshot>(apiRoute("/metrics"), { signal }),

@@ -6,6 +6,7 @@ import type { RemediationProposal } from "../../../types";
 const mockAPI = vi.hoisted(() => ({
   getRuntimeStatus: vi.fn(),
   getEnterpriseReadiness: vi.fn(),
+  getProductionReadiness: vi.fn(),
   getDiagnostics: vi.fn(),
   getPredictions: vi.fn(),
   getPredictorModelHealth: vi.fn(),
@@ -71,7 +72,13 @@ describe("IncidentWorkbench", () => {
       authEnabled: true,
       writeActionsEnabled: true,
       databaseDriver: "sqlite",
+      databaseMigrations: true,
       enterpriseStorage: true,
+      memoryStore: "sql",
+      memoryDurable: true,
+      auditStore: "sql",
+      auditDurable: true,
+      auditSigned: false,
       predictorEnabled: true,
       predictorHealthy: true,
       predictorMode: "shadow",
@@ -90,6 +97,47 @@ describe("IncidentWorkbench", () => {
         { name: "auth", ok: true, message: "Authentication is enabled." },
         { name: "predictor", ok: false, message: "Predictor is in shadow mode." },
       ],
+    });
+    mockAPI.getProductionReadiness.mockResolvedValue({
+      status: "degraded",
+      generatedAt: "2026-07-18T12:00:00Z",
+      summary: "Production baseline met with 1 warning.",
+      mode: "prod",
+      blockers: [],
+      warnings: [
+        {
+          key: "audit-signing",
+          severity: "warning",
+          message: "unsigned",
+          recommendation: "Set AUDIT_SIGNING_KEY for tamper-evident audit verification.",
+        },
+      ],
+      checks: [
+        { name: "memory-store", ok: true, severity: "blocker", message: "sql-durable" },
+        { name: "audit-signing", ok: false, severity: "warning", message: "unsigned" },
+      ],
+      stores: {
+        databaseDriver: "sqlite",
+        enterpriseStorage: true,
+        migrationsEnabled: true,
+        memoryStore: "sql",
+        memoryDurable: true,
+        auditStore: "sql",
+        auditDurable: true,
+        auditSigned: false,
+        auditSinkFailures: 0,
+      },
+      dependencies: {
+        cluster: { enabled: true, healthy: true, message: "reachable" },
+        predictor: { enabled: true, healthy: true, message: "healthy" },
+        ghost: { enabled: true, healthy: true, message: "healthy" },
+        alerts: { enabled: true, healthy: true, message: "enabled" },
+      },
+      runbooks: [
+        { title: "Production readiness", path: "/docs/runbooks/production-readiness.md" },
+        { title: "Backup and restore", path: "/docs/runbooks/backup-restore.md" },
+      ],
+      build: { version: "dev", commit: "abc1234", builtAt: "" },
     });
     mockAPI.getDiagnostics.mockResolvedValue({
       summary: "One critical issue",
@@ -209,6 +257,11 @@ describe("IncidentWorkbench", () => {
     });
 
     expect(screen.getByText("shadow")).toBeInTheDocument();
+    expect(screen.getByText("Production Readiness")).toBeInTheDocument();
+    expect(screen.getByText("Production baseline met with 1 warning.")).toBeInTheDocument();
+    expect(screen.getByText("MEMORY_STORE=sql")).toBeInTheDocument();
+    expect(screen.getByText("AUDIT_STORE=sql")).toBeInTheDocument();
+    expect(screen.getByText("Set AUDIT_SIGNING_KEY for tamper-evident audit verification.")).toBeInTheDocument();
     expect(screen.getByText("pod-risk-2026-07")).toBeInTheDocument();
     expect(screen.getByText("Autonomous Remediation Proposals")).toBeInTheDocument();
     expect(screen.getByText("mlShadowRisk: 97%")).toBeInTheDocument();

@@ -62,6 +62,30 @@ data:
             { "expr": "kubelens_http_inflight_requests", "legendFormat": "inflight" }
           ],
           "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Production Posture Gauges",
+          "datasource": "Prometheus",
+          "targets": [
+            { "expr": "kubelens_runtime_enterprise_storage", "legendFormat": "enterprise storage" },
+            { "expr": "kubelens_runtime_database_migrations_enabled", "legendFormat": "migrations" },
+            { "expr": "kubelens_runtime_memory_durable", "legendFormat": "memory durable" },
+            { "expr": "kubelens_runtime_audit_durable", "legendFormat": "audit durable" },
+            { "expr": "kubelens_runtime_audit_signed", "legendFormat": "audit signed" }
+          ],
+          "gridPos": { "h": 6, "w": 16, "x": 0, "y": 16 }
+        },
+        {
+          "id": 6,
+          "type": "stat",
+          "title": "Audit Sink Failures",
+          "datasource": "Prometheus",
+          "targets": [
+            { "expr": "kubelens_audit_sink_failures_total", "legendFormat": "failures" }
+          ],
+          "gridPos": { "h": 6, "w": 8, "x": 16, "y": 16 }
         }
       ]
     }

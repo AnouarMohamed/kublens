@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -114,6 +115,63 @@ func TestStorePersistsRunbooksAndFixes(t *testing.T) {
 	found := reloaded.Search("crash")
 	if len(found) == 0 || found[0].ID != runbook.ID {
 		t.Fatalf("expected persisted runbook %s, got %#v", runbook.ID, found)
+	}
+
+	fixes := reloaded.ListFixes()
+	if len(fixes) != 1 {
+		t.Fatalf("persisted fixes length = %d, want 1", len(fixes))
+	}
+	if fixes[0].ProposalID != "rem-1" {
+		t.Fatalf("unexpected fix payload: %+v", fixes[0])
+	}
+}
+
+func TestSQLStorePersistsRunbooksAndFixes(t *testing.T) {
+	db, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+
+	store := NewSQLStore(db, storesql.DialectSQLite, nil, mockEmbeddingClient{})
+	store.now = func() time.Time { return time.Date(2026, time.March, 10, 12, 0, 0, 0, time.UTC) }
+
+	runbook, err := store.CreateRunbook(model.MemoryRunbookUpsertRequest{
+		Title:       "Payment gateway OOM recovery",
+		Tags:        []string{"payments", "oom"},
+		Description: "Recover payment-gateway after repeated OOMKilled crashes.",
+		Steps:       []string{"Check memory requests", "Restart deployment"},
+	})
+	if err != nil {
+		t.Fatalf("CreateRunbook() error = %v", err)
+	}
+	if len(runbook.Embedding) == 0 {
+		t.Fatal("expected SQL runbook to persist an embedding")
+	}
+	if ok := store.IncrementUsage(runbook.ID); !ok {
+		t.Fatal("IncrementUsage should succeed")
+	}
+
+	_, err = store.RecordFix(model.MemoryFixCreateRequest{
+		IncidentID:  "inc-1",
+		ProposalID:  "rem-1",
+		Title:       "Raised payment gateway memory limit",
+		Description: "Resolved OOM by raising the memory limit and restarting pods.",
+		Resource:    "production/payment-gateway",
+		Kind:        model.RemediationKindRestartPod,
+	}, "operator")
+	if err != nil {
+		t.Fatalf("RecordFix() error = %v", err)
+	}
+
+	reloaded := NewSQLStore(db, storesql.DialectSQLite, nil, mockEmbeddingClient{})
+	found := reloaded.Search("heap exhaustion during checkout")
+	if len(found) == 0 || found[0].ID != runbook.ID {
+		t.Fatalf("expected persisted runbook %s, got %#v", runbook.ID, found)
+	}
+	if found[0].UsageCount != 1 {
+		t.Fatalf("usage count = %d, want 1", found[0].UsageCount)
 	}
 
 	fixes := reloaded.ListFixes()

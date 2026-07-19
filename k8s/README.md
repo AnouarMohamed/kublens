@@ -39,11 +39,11 @@ kubectl apply -k k8s/overlays/demo
 
 ```bash
 cp k8s/secret.example.yaml k8s/secret.yaml
-# fill values, especially AUTH_TOKENS and DATABASE_URL
+# fill values, especially AUTH_TOKENS, DATABASE_URL, KUBECONFIG_DATA, and AUDIT_SIGNING_KEY
 kubectl apply -f k8s/secret.yaml
 ```
 
-The prod overlay sets `DATABASE_DRIVER=postgres`, so `DATABASE_URL` must point to a reachable Postgres database before the deployment can become ready.
+The prod overlay sets `DATABASE_DRIVER=postgres`, `MEMORY_STORE=sql`, `AUDIT_STORE=sql`, and probes `/api/readiness/production`, so `DATABASE_URL` must point to a reachable Postgres database before the deployment can become ready.
 
 2. Apply overlay:
 

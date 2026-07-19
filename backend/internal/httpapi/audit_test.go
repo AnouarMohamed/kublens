@@ -1,9 +1,11 @@
 package httpapi
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
 )
 
@@ -51,5 +53,59 @@ func TestAuditVerificationChecksHMACSignature(t *testing.T) {
 	}
 	if verification.Message != "signature-mismatch" {
 		t.Fatalf("message = %q, want signature-mismatch", verification.Message)
+	}
+}
+
+func TestSQLAuditLogPersistsAndReloadsSignedEntries(t *testing.T) {
+	db, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { _ = db.Close() })
+
+	now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
+	log := newAuditLogWithConfig(AuditConfig{
+		MaxItems:   10,
+		Store:      "sql",
+		SigningKey: "audit-secret",
+		SQLDB:      db,
+		Dialect:    storesql.DialectSQLite,
+	}, nil)
+
+	entry := log.append(model.AuditEntry{
+		Timestamp:  now.Format(time.RFC3339),
+		Method:     "POST",
+		Path:       "/api/remediation/1/approve",
+		Action:     "remediation.approve",
+		Status:     200,
+		DurationMs: 4,
+		Success:    true,
+	})
+	if entry.Hash == "" || entry.Signature == "" {
+		t.Fatalf("expected signed audit entry, got %+v", entry)
+	}
+
+	reloaded := newAuditLogWithConfig(AuditConfig{
+		MaxItems:   10,
+		Store:      "sql",
+		SigningKey: "audit-secret",
+		SQLDB:      db,
+		Dialect:    storesql.DialectSQLite,
+	}, nil)
+	posture := reloaded.posture()
+	if !posture.Durable || !posture.Signed || posture.Failures != 0 {
+		t.Fatalf("unexpected SQL audit posture: %+v", posture)
+	}
+	if reloaded.total() != 1 {
+		t.Fatalf("reloaded audit count = %d, want 1", reloaded.total())
+	}
+
+	verification, ok := reloaded.verify(entry.ID, now)
+	if !ok {
+		t.Fatal("expected persisted audit entry")
+	}
+	if !verification.OK {
+		t.Fatalf("persisted verification failed: %+v", verification)
 	}
 }

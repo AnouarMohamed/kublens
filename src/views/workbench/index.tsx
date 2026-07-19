@@ -1,7 +1,10 @@
 import {
+  AlertTriangle,
+  Database,
   ExternalLink,
   FileText,
   FlaskConical,
+  LockKeyhole,
   Network,
   RefreshCw,
   ShieldCheck,
@@ -20,6 +23,8 @@ import type {
   HealthStatus,
   IncidentPrediction,
   PredictionsResult,
+  ProductionReadinessIssue,
+  ProductionReadinessStatus,
   PredictorModelHealth,
   RemediationProposal,
   RuntimeStatus,
@@ -33,6 +38,7 @@ interface LoadResult<T> {
 interface WorkbenchSnapshot {
   runtime: LoadResult<RuntimeStatus>;
   enterprise: LoadResult<HealthStatus>;
+  production: LoadResult<ProductionReadinessStatus>;
   diagnostics: LoadResult<DiagnosticsResult>;
   predictions: LoadResult<PredictionsResult>;
   predictorModel: LoadResult<PredictorModelHealth>;
@@ -63,6 +69,7 @@ export default function IncidentWorkbench() {
     const [
       runtime,
       enterprise,
+      production,
       diagnostics,
       predictions,
       predictorModel,
@@ -73,6 +80,7 @@ export default function IncidentWorkbench() {
     ] = await Promise.all([
       capture(api.getRuntimeStatus()),
       capture(api.getEnterpriseReadiness()),
+      capture(api.getProductionReadiness()),
       capture(api.getDiagnostics()),
       capture(api.getPredictions()),
       capture(api.getPredictorModelHealth()),
@@ -85,6 +93,7 @@ export default function IncidentWorkbench() {
     setSnapshot({
       runtime,
       enterprise,
+      production,
       diagnostics,
       predictions,
       predictorModel,
@@ -116,7 +125,9 @@ export default function IncidentWorkbench() {
   );
   const latestGhostRun = snapshot?.ghostRuns.data?.items[0] ?? null;
   const latestAudit = snapshot?.audit.data?.[0] ?? null;
-  const blockedChecks = snapshot?.enterprise.data?.checks.filter((check) => !check.ok) ?? [];
+  const production = snapshot?.production.data ?? null;
+  const productionBlockers = production?.blockers.length ?? 0;
+  const productionWarnings = production?.warnings.length ?? 0;
   const enabledExperimental = snapshot?.experimental.data?.features.filter((feature) => feature.enabled) ?? [];
   const loadErrors = useMemo(() => collectErrors(snapshot), [snapshot]);
 
@@ -153,12 +164,14 @@ export default function IncidentWorkbench() {
         <StatusBanner tone="warn" text={`Partial data loaded. Failed: ${loadErrors.join(", ")}.`} />
       )}
 
+      <ProductionReadinessPanel status={production} isLoading={isLoading} />
+
       <section className="kpi-strip">
         <KpiCell
-          label="Enterprise"
-          value={snapshot?.enterprise.data?.status ?? "unknown"}
-          tone={readinessTone(snapshot?.enterprise.data?.status)}
-          note={`${blockedChecks.length} blocked checks`}
+          label="Production"
+          value={production?.status ?? "unknown"}
+          tone={productionTone(production?.status)}
+          note={`${productionBlockers} blockers, ${productionWarnings} warnings`}
         />
         <KpiCell
           label="Predictor"
@@ -346,6 +359,128 @@ export default function IncidentWorkbench() {
   );
 }
 
+function ProductionReadinessPanel({
+  status,
+  isLoading,
+}: {
+  status: ProductionReadinessStatus | null;
+  isLoading: boolean;
+}) {
+  const issues = [...(status?.blockers ?? []), ...(status?.warnings ?? [])].slice(0, 4);
+  return (
+    <section className="surface p-4">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(360px,0.85fr)]">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-[10px] uppercase tracking-[0.22em] text-zinc-500">Production</p>
+              <h3 className="mt-1 text-sm font-semibold text-zinc-100">Production Readiness</h3>
+            </div>
+            <span className={`shrink-0 border px-2 py-1 text-xs font-semibold ${productionBadge(status?.status)}`}>
+              {status?.status ?? "unknown"}
+            </span>
+          </div>
+          <p className="mt-3 max-w-[72ch] text-sm text-zinc-300">
+            {status?.summary ?? (isLoading ? "Loading production readiness..." : "Production readiness unavailable.")}
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <MetricBlock label="Mode" value={status?.mode ?? "unknown"} />
+            <MetricBlock label="Blockers" value={String(status?.blockers.length ?? 0)} />
+            <MetricBlock label="Warnings" value={String(status?.warnings.length ?? 0)} />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(status?.runbooks ?? []).slice(0, 4).map((runbook) => (
+              <a key={runbook.path} href={runbook.path} className="btn-sm inline-flex items-center gap-2">
+                <FileText size={13} />
+                {runbook.title}
+              </a>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <StoreChip
+              icon={<Database size={14} />}
+              label="Database"
+              value={status?.stores.databaseDriver ?? "unknown"}
+              ok={status?.stores.enterpriseStorage === true}
+              detail={status?.stores.migrationsEnabled ? "migrations on" : "migrations off"}
+            />
+            <StoreChip
+              icon={<Database size={14} />}
+              label="Memory"
+              value={`MEMORY_STORE=${status?.stores.memoryStore ?? "unknown"}`}
+              ok={status?.stores.memoryDurable === true}
+              detail={status?.stores.memoryDurable ? "durable" : "not durable"}
+            />
+            <StoreChip
+              icon={<ShieldCheck size={14} />}
+              label="Audit"
+              value={`AUDIT_STORE=${status?.stores.auditStore ?? "unknown"}`}
+              ok={status?.stores.auditDurable === true && (status?.stores.auditSinkFailures ?? 0) === 0}
+              detail={
+                status?.stores.auditSinkFailures
+                  ? `${status.stores.auditSinkFailures} sink failures`
+                  : status?.stores.auditDurable
+                    ? "durable"
+                    : "not durable"
+              }
+            />
+            <StoreChip
+              icon={<LockKeyhole size={14} />}
+              label="Audit Signing"
+              value={status?.stores.auditSigned ? "signed" : "unsigned"}
+              ok={status?.stores.auditSigned === true}
+              detail={status?.stores.auditSinkLastError ?? "tamper evidence"}
+            />
+          </div>
+
+          {status && (
+            <div className="grid grid-cols-2 border border-zinc-800 text-xs md:grid-cols-4">
+              <DependencyCell
+                label="Cluster"
+                enabled={status.dependencies.cluster.enabled}
+                healthy={status.dependencies.cluster.healthy}
+                message={status.dependencies.cluster.message}
+              />
+              <DependencyCell
+                label="Predictor"
+                enabled={status.dependencies.predictor.enabled}
+                healthy={status.dependencies.predictor.healthy}
+                message={status.dependencies.predictor.message}
+              />
+              <DependencyCell
+                label="Ghost"
+                enabled={status.dependencies.ghost.enabled}
+                healthy={status.dependencies.ghost.healthy}
+                message={status.dependencies.ghost.message}
+              />
+              <DependencyCell
+                label="Alerts"
+                enabled={status.dependencies.alerts.enabled}
+                healthy={status.dependencies.alerts.healthy}
+                message={status.dependencies.alerts.message}
+              />
+            </div>
+          )}
+
+          <div className="divide-y divide-zinc-800 border border-zinc-800">
+            {issues.map((issue) => (
+              <ProductionIssueRow key={`${issue.severity}-${issue.key}`} issue={issue} />
+            ))}
+            {issues.length === 0 && (
+              <EmptyRow
+                text={isLoading ? "Loading production checks..." : "No production blockers or warnings returned."}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 async function capture<T>(request: Promise<T>): Promise<LoadResult<T>> {
   try {
     return { data: await request, error: null };
@@ -381,14 +516,41 @@ function remediationRiskRank(value: string): number {
   return 1;
 }
 
-function readinessTone(status?: string): KpiTone {
-  if (status === "ok") {
+function productionTone(status?: string): KpiTone {
+  if (status === "ready") {
     return "good";
   }
-  if (status === "not-ready" || status === "degraded") {
+  if (status === "blocked") {
+    return "bad";
+  }
+  if (status === "degraded") {
     return "warn";
   }
   return "neutral";
+}
+
+function productionBadge(status?: string): string {
+  const tone = productionTone(status);
+  if (tone === "good") {
+    return goodBadge;
+  }
+  if (tone === "bad") {
+    return badBadge;
+  }
+  if (tone === "warn") {
+    return warnBadge;
+  }
+  return neutralBadge;
+}
+
+function issueBadge(severity: string): string {
+  if (severity === "blocker") {
+    return badBadge;
+  }
+  if (severity === "warning") {
+    return warnBadge;
+  }
+  return neutralBadge;
 }
 
 function predictorTone(
@@ -474,6 +636,79 @@ function KpiCell({ label, value, note, tone }: { label: string; value: string; n
       <p className="kpi-label">{label}</p>
       <p className={`kpi-value truncate text-lg ${valueClass}`}>{value}</p>
       <p className="mt-1 truncate text-xs text-zinc-500">{note}</p>
+    </div>
+  );
+}
+
+function StoreChip({
+  icon,
+  label,
+  value,
+  ok,
+  detail,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  ok: boolean;
+  detail: string;
+}) {
+  return (
+    <div className="min-w-0 border border-zinc-800 px-3 py-2">
+      <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em] text-zinc-500">
+        {icon}
+        <span className="truncate">{label}</span>
+      </div>
+      <div className="mt-2 flex items-start justify-between gap-3">
+        <p className="min-w-0 truncate text-sm font-medium text-zinc-100">{value}</p>
+        <span className={`shrink-0 border px-2 py-0.5 text-[11px] ${ok ? goodBadge : warnBadge}`}>
+          {ok ? "ok" : "check"}
+        </span>
+      </div>
+      <p className="mt-1 truncate text-xs text-zinc-500">{detail}</p>
+    </div>
+  );
+}
+
+function DependencyCell({
+  label,
+  enabled,
+  healthy,
+  message,
+}: {
+  label: string;
+  enabled: boolean;
+  healthy: boolean;
+  message: string;
+}) {
+  const badge = healthy ? "ok" : enabled ? "degraded" : "off";
+  return (
+    <div className="min-w-0 border-l border-zinc-800 px-3 py-2 first:border-l-0 md:first:border-l-0">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-zinc-500">{label}</p>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <span className={`shrink-0 border px-2 py-0.5 text-[11px] ${healthy ? goodBadge : warnBadge}`}>{badge}</span>
+        <p className="min-w-0 truncate text-xs text-zinc-400">{message}</p>
+      </div>
+    </div>
+  );
+}
+
+function ProductionIssueRow({ issue }: { issue: ProductionReadinessIssue }) {
+  return (
+    <div className="grid gap-2 px-3 py-2 md:grid-cols-[140px_minmax(0,1fr)]">
+      <div className="flex min-w-0 items-start gap-2">
+        <AlertTriangle size={14} className="mt-0.5 shrink-0 text-[var(--amber)]" />
+        <div className="min-w-0">
+          <p className="truncate text-sm font-medium text-zinc-100">{issue.key}</p>
+          <span className={`mt-1 inline-flex border px-2 py-0.5 text-[11px] ${issueBadge(issue.severity)}`}>
+            {issue.severity}
+          </span>
+        </div>
+      </div>
+      <div className="min-w-0">
+        <p className="truncate text-sm text-zinc-300">{issue.message}</p>
+        <p className="mt-1 line-clamp-2 text-xs text-zinc-500">{issue.recommendation}</p>
+      </div>
     </div>
   );
 }

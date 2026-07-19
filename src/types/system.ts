@@ -16,7 +16,13 @@ export interface RuntimeStatus {
   authEnabled: boolean;
   writeActionsEnabled: boolean;
   databaseDriver: string;
+  databaseMigrations: boolean;
   enterpriseStorage: boolean;
+  memoryStore: string;
+  memoryDurable: boolean;
+  auditStore: string;
+  auditDurable: boolean;
+  auditSigned: boolean;
   predictorEnabled: boolean;
   predictorHealthy: boolean;
   predictorLastError?: string;
@@ -43,6 +49,67 @@ export interface HealthStatus {
   timestamp: string;
   checks: HealthCheck[];
   build: BuildInfo;
+}
+
+export interface ProductionReadinessStatus {
+  status: "ready" | "degraded" | "blocked" | string;
+  generatedAt: string;
+  summary: string;
+  mode: string;
+  blockers: ProductionReadinessIssue[];
+  warnings: ProductionReadinessIssue[];
+  checks: ProductionReadinessCheck[];
+  stores: ProductionStorePosture;
+  dependencies: ProductionDependencyPosture;
+  runbooks: ProductionRunbookLink[];
+  build: BuildInfo;
+}
+
+export interface ProductionReadinessIssue {
+  key: string;
+  severity: "blocker" | "warning" | string;
+  message: string;
+  recommendation: string;
+}
+
+export interface ProductionReadinessCheck {
+  name: string;
+  ok: boolean;
+  severity: "blocker" | "warning" | "info" | string;
+  message: string;
+}
+
+export interface ProductionStorePosture {
+  databaseDriver: string;
+  enterpriseStorage: boolean;
+  migrationsEnabled: boolean;
+  memoryStore: string;
+  memoryDurable: boolean;
+  auditStore: string;
+  auditDurable: boolean;
+  auditSigned: boolean;
+  auditSinkFailures: number;
+  auditSinkLastError?: string;
+}
+
+export interface ProductionDependencyPosture {
+  cluster: ProductionDependencyStatus;
+  predictor: ProductionDependencyStatus;
+  ghost: ProductionDependencyStatus;
+  alerts: ProductionDependencyStatus;
+}
+
+export interface ProductionDependencyStatus {
+  enabled: boolean;
+  healthy: boolean;
+  message: string;
+  lastSuccess?: string;
+  lastFailure?: string;
+}
+
+export interface ProductionRunbookLink {
+  title: string;
+  path: string;
 }
 
 export interface ApiRouteMetrics {

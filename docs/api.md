@@ -42,6 +42,7 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /healthz`
 - `GET /readyz`
 - `GET /readiness/enterprise`
+- `GET /readiness/production`
 - `GET /openapi.yaml`
 - `GET /version`
 - `GET /runtime`
@@ -56,7 +57,11 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 
 Enterprise readiness checks add production posture signals for auth, write gating, durable storage, audit availability, predictor state, and cluster reachability. A failed enterprise check returns `503` with the same `HealthStatus` shape as `/readyz`.
 
+Production readiness returns a `ProductionReadinessStatus` payload with `status=ready|degraded|blocked`, actionable blockers, warnings, store posture, dependency posture, and runbook links. Blocking issues return HTTP `503`; warnings return HTTP `200` so automation can distinguish hard rollout blockers from follow-up work.
+
 Durable storage uses `DATABASE_DRIVER=sqlite` with `DB_PATH` or `DATABASE_DRIVER=postgres` with `DATABASE_URL`. Automatic migrations run when `DATABASE_MIGRATIONS_AUTO=true`.
+
+SQL-backed production memory and audit use `MEMORY_STORE=sql` and `AUDIT_STORE=sql`. Configure `AUDIT_SIGNING_KEY` for HMAC audit signatures.
 
 Experimental endpoints always return payloads labeled `experimental`. The eBPF telemetry, fleet drift, and autonomous remediation proposal paths are disabled by default through feature flags.
 

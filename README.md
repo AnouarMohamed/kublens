@@ -398,6 +398,12 @@ DATABASE_URL=
 DATABASE_MIGRATIONS_AUTO=true
 # Required for production readiness; do not use :memory: in prod.
 DB_PATH=data/kubelens.db
+MEMORY_STORE=file                # file | sql, production readiness requires sql
+MEMORY_FILE_PATH=data/memory-runbooks.json
+AUDIT_STORE=memory               # memory | file | sql, production readiness requires sql
+AUDIT_LOG_FILE=                  # required when AUDIT_STORE=file
+AUDIT_MAX_ITEMS=500
+AUDIT_SIGNING_KEY=               # recommended for tamper-evident production audit
 
 ALERTMANAGER_WEBHOOK_URL=
 SLACK_WEBHOOK_URL=

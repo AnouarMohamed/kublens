@@ -14,20 +14,26 @@ type MetricsController struct {
 	metrics         *requestMetrics
 	docs            docsRetriever
 	runtimeSnapshot func() model.RuntimeStatus
+	auditPosture    func() auditPosture
 }
 
 func NewMetricsController(
 	metrics *requestMetrics,
 	docs docsRetriever,
 	runtimeSnapshot func() model.RuntimeStatus,
+	auditPostureSnapshot func() auditPosture,
 ) *MetricsController {
 	if runtimeSnapshot == nil {
 		runtimeSnapshot = func() model.RuntimeStatus { return model.RuntimeStatus{} }
+	}
+	if auditPostureSnapshot == nil {
+		auditPostureSnapshot = func() auditPosture { return auditPosture{Store: "unavailable"} }
 	}
 	return &MetricsController{
 		metrics:         metrics,
 		docs:            docs,
 		runtimeSnapshot: runtimeSnapshot,
+		auditPosture:    auditPostureSnapshot,
 	}
 }
 
@@ -57,7 +63,14 @@ func (mc *MetricsController) handlePrometheusMetrics(w http.ResponseWriter, _ *h
 
 	snap := mc.metrics.snapshot()
 	runtime := mc.runtimeSnapshot()
+	audit := mc.auditPosture()
 	rag := ragMetricsFromRetriever(mc.docs)
+	auditDurable := runtime.AuditDurable
+	auditSigned := runtime.AuditSigned
+	if audit.Store != "unavailable" {
+		auditDurable = audit.Durable
+		auditSigned = audit.Signed
+	}
 
 	var b strings.Builder
 	writePrometheusMetric(&b, "kubelens_http_requests_total", float64(snap.TotalRequests), nil)
@@ -69,8 +82,17 @@ func (mc *MetricsController) handlePrometheusMetrics(w http.ResponseWriter, _ *h
 
 	writePrometheusMetric(&b, "kubelens_runtime_auth_enabled", boolToGauge(runtime.AuthEnabled), nil)
 	writePrometheusMetric(&b, "kubelens_runtime_write_actions_enabled", boolToGauge(runtime.WriteActionsEnabled), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_enterprise_storage", boolToGauge(runtime.EnterpriseStorage), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_database_migrations_enabled", boolToGauge(runtime.DatabaseMigrations), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_memory_durable", boolToGauge(runtime.MemoryDurable), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_audit_durable", boolToGauge(auditDurable), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_audit_signed", boolToGauge(auditSigned), nil)
 	writePrometheusMetric(&b, "kubelens_runtime_predictor_enabled", boolToGauge(runtime.PredictorEnabled), nil)
 	writePrometheusMetric(&b, "kubelens_runtime_predictor_healthy", boolToGauge(runtime.PredictorHealthy), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_ghost_enabled", boolToGauge(runtime.GhostEnabled), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_ghost_healthy", boolToGauge(runtime.GhostHealthy), nil)
+	writePrometheusMetric(&b, "kubelens_runtime_alerts_enabled", boolToGauge(runtime.AlertsEnabled), nil)
+	writePrometheusMetric(&b, "kubelens_audit_sink_failures_total", float64(audit.Failures), nil)
 	writePrometheusMetric(&b, "kubelens_rag_enabled", boolToGauge(rag.Enabled), nil)
 	writePrometheusMetric(&b, "kubelens_rag_queries_total", float64(rag.TotalQueries), nil)
 	writePrometheusMetric(&b, "kubelens_rag_empty_results_total", float64(rag.EmptyResults), nil)

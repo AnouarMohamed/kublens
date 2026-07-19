@@ -110,12 +110,14 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 1. Runtime publishes events to in-process bus.
 2. Clients subscribe over `/api/stream` (SSE) or `/api/stream/ws` (WebSocket).
 3. Request-level and action-level audit entries are persisted in bounded audit storage.
+4. Production deployments use `AUDIT_STORE=sql` and `AUDIT_SIGNING_KEY` for durable, signed verification.
 
 ### Durable workflow storage
 
 1. Backend startup opens `DATABASE_DRIVER=sqlite` or `DATABASE_DRIVER=postgres`.
 2. Automatic migrations create workflow tables when `DATABASE_MIGRATIONS_AUTO=true`.
-3. Incident, remediation, postmortem, alert lifecycle, and Ghost simulation history share the SQL handle.
+3. Incident, remediation, postmortem, alert lifecycle, Ghost simulation history, SQL memory, and SQL audit history share the SQL handle.
+4. `MEMORY_STORE=file` remains available for demo/local runs; `MEMORY_STORE=sql` is required for production readiness.
 
 ### Experimental flow
 
@@ -134,6 +136,7 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 
 - `GET /api/healthz` - liveness
 - `GET /api/readyz` - readiness/dependency checks
+- `GET /api/readiness/production` - production blockers, warnings, store posture, dependency posture, and runbook links
 - `GET /api/runtime` - runtime security posture summary
 - `GET /api/experimental` - experimental feature gate summary
 - `GET /api/predictor/model` - predictor model governance summary

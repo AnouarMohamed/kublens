@@ -1,17 +1,17 @@
 package model
 
 type ProductionReadinessStatus struct {
-	Status       string                     `json:"status"`
-	GeneratedAt  string                     `json:"generatedAt"`
-	Summary      string                     `json:"summary"`
-	Mode         string                     `json:"mode"`
-	Blockers     []ProductionReadinessIssue `json:"blockers"`
-	Warnings     []ProductionReadinessIssue `json:"warnings"`
-	Checks       []ProductionReadinessCheck `json:"checks"`
-	Stores       ProductionStorePosture     `json:"stores"`
+	Status       string                      `json:"status"`
+	GeneratedAt  string                      `json:"generatedAt"`
+	Summary      string                      `json:"summary"`
+	Mode         string                      `json:"mode"`
+	Blockers     []ProductionReadinessIssue  `json:"blockers"`
+	Warnings     []ProductionReadinessIssue  `json:"warnings"`
+	Checks       []ProductionReadinessCheck  `json:"checks"`
+	Stores       ProductionStorePosture      `json:"stores"`
 	Dependencies ProductionDependencyPosture `json:"dependencies"`
 	Runbooks     []ProductionRunbookLink     `json:"runbooks"`
-	Build        BuildInfo                  `json:"build"`
+	Build        BuildInfo                   `json:"build"`
 }
 
 type ProductionReadinessIssue struct {

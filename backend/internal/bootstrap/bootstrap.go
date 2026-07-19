@@ -123,7 +123,10 @@ func Build(cfg config.Config) (Result, error) {
 		Enabled:         cfg.Assistant.RAGEnabled,
 		EmbeddingClient: embeddingClient,
 	})
-	memoryStore := memory.NewWithEmbeddings(cfg.Memory.FilePath, nil, embeddingClient)
+	memoryStoreOption := httpapi.WithMemoryStore(memory.NewWithEmbeddings(cfg.Memory.FilePath, nil, embeddingClient))
+	if cfg.Memory.Store == "sql" {
+		memoryStoreOption = httpapi.WithMemoryStore(memory.NewSQLStore(sqlDB, dialect, nil, embeddingClient))
+	}
 	incidentStore := incident.NewStore(sqlDB, incident.DefaultStoreLimit, nil, dialect)
 	remediationStore := remediation.NewStore(sqlDB, remediation.DefaultStoreLimit, nil, dialect)
 	postmortemStore := postmortem.NewStore(sqlDB, postmortem.DefaultStoreLimit, nil, dialect)
@@ -159,7 +162,7 @@ func Build(cfg config.Config) (Result, error) {
 		httpapi.WithAIProvider(aiProvider),
 		httpapi.WithAITimeout(cfg.Assistant.Timeout),
 		httpapi.WithDocsRetriever(ragger),
-		httpapi.WithMemoryStore(memoryStore),
+		memoryStoreOption,
 		httpapi.WithIncidentStore(incidentStore),
 		httpapi.WithRemediationStore(remediationStore),
 		httpapi.WithRiskAnalyzer(riskAnalyzer),
@@ -177,6 +180,9 @@ func Build(cfg config.Config) (Result, error) {
 			MaxItems:   cfg.Audit.MaxItems,
 			FilePath:   cfg.Audit.FilePath,
 			SigningKey: cfg.Audit.SigningKey,
+			Store:      cfg.Audit.Store,
+			SQLDB:      sqlDB,
+			Dialect:    dialect,
 		}),
 		httpapi.WithAlertDispatcher(alertDispatcher),
 		httpapi.WithSQLiteDB(sqlDB),
