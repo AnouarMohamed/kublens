@@ -149,6 +149,10 @@ class PodSummary(BaseModel):
     previousIncidents: int | None = None
     cpuHistory: list[CPUPoint] = Field(default_factory=list)
     memoryHistory: list[CPUPoint] = Field(default_factory=list)
+    cpuRequest: str | None = None
+    memoryRequest: str | None = None
+    cpuLimit: str | None = None
+    memoryLimit: str | None = None
 
 
 class NodeSummary(BaseModel):
@@ -519,9 +523,195 @@ def parse_duration_minutes(value: str | None) -> tuple[float, bool]:
     return max(0.0, minutes), True
 
 
-def namespace_warning_events(events: list[K8sEvent], namespace: str) -> int:
-    """Count warning events scoped to a namespace."""
+def pod_cpu_threshold_milli() -> int:
+    """Return the configured pod CPU threshold in milli-CPUs."""
+    raw = os.getenv("PREDICTOR_POD_CPU_THRESHOLD_MILLI", "400").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 400
 
+
+def pod_mem_threshold_mi() -> int:
+    """Return the configured pod Memory threshold in MiB."""
+    raw = os.getenv("PREDICTOR_POD_MEM_THRESHOLD_MI", "512").strip()
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 512
+
+
+def node_cpu_threshold_pct() -> float:
+    """Return the configured node CPU threshold percentage."""
+    raw = os.getenv("PREDICTOR_NODE_CPU_THRESHOLD_PCT", "90.0").strip()
+    try:
+        return max(0.0, min(100.0, float(raw)))
+    except ValueError:
+        return 90.0
+
+
+def node_mem_threshold_pct() -> float:
+    """Return the configured node Memory threshold percentage."""
+    raw = os.getenv("PREDICTOR_NODE_MEM_THRESHOLD_PCT", "90.0").strip()
+    try:
+        return max(0.0, min(100.0, float(raw)))
+    except ValueError:
+        return 90.0
+
+
+def node_cpu_trend_threshold_pct() -> int:
+    """Return the configured node CPU trend threshold percentage."""
+    raw = os.getenv("PREDICTOR_NODE_CPU_TREND_THRESHOLD_PCT", "20").strip()
+    try:
+        return int(raw)
+    except ValueError:
+        return 20
+
+
+def node_cpu_trend_base_pct() -> float:
+    """Return the configured node CPU trend base utilization percentage."""
+    raw = os.getenv("PREDICTOR_NODE_CPU_TREND_BASE_PCT", "80.0").strip()
+    try:
+        return max(0.0, min(100.0, float(raw)))
+    except ValueError:
+        return 80.0
+
+
+@dataclass
+class EventIndex:
+    """Lookup index to scan warning events in O(1) matching key and O(F) fallback search."""
+
+    exact_map: dict[tuple[str, str], list[K8sEvent]]
+    fallback_list: list[K8sEvent]
+    namespace_warnings: dict[str, int]
+
+
+def build_event_index(events: list[K8sEvent]) -> EventIndex:
+    """Index warning events by namespace and resource name."""
+    exact_map: dict[tuple[str, str], list[K8sEvent]] = {}
+    fallback_list: list[K8sEvent] = []
+    namespace_warnings: dict[str, int] = {}
+
+    for event in events:
+        if not is_warning_event(event):
+            continue
+
+        count = max(1, event.count or 1)
+        ns_name = event.namespace.strip().lower()
+        if ns_name:
+            namespace_warnings[ns_name] = namespace_warnings.get(ns_name, 0) + count
+
+        res_name = event.resource.strip().lower()
+        if res_name:
+            key = (ns_name, res_name)
+            if key not in exact_map:
+                exact_map[key] = []
+            exact_map[key].append(event)
+        else:
+            fallback_list.append(event)
+
+    return EventIndex(exact_map=exact_map, fallback_list=fallback_list, namespace_warnings=namespace_warnings)
+
+
+def count_resource_warning_events_indexed(
+    event_index: EventIndex,
+    resource: str,
+    namespace: str | None,
+) -> int:
+    """Count warning-like events referencing a resource using the prebuilt EventIndex."""
+    resource_name = resource.strip().lower()
+    if not resource_name:
+        return 0
+    namespace_name = (namespace or "").strip().lower()
+    total = 0
+
+    # 1. Exact match search
+    key = (namespace_name, resource_name)
+    exact_events = event_index.exact_map.get(key, [])
+    for event in exact_events:
+        total += max(1, event.count or 1)
+
+    # 2. Pattern-based fallback search (word boundaries match)
+    for event in event_index.fallback_list:
+        event_namespace = event.namespace.strip().lower()
+        if namespace_name and event_namespace and event_namespace != namespace_name:
+            continue
+
+        haystack = f"{event.reason} {event.message} {event.from_}".lower()
+        if re.search(rf"\b{re.escape(resource_name)}\b", haystack):
+            total += max(1, event.count or 1)
+
+    return total
+
+
+def count_image_pull_backoff_events_indexed(
+    event_index: EventIndex,
+    resource: str,
+    namespace: str,
+) -> int:
+    """Count image-pull/backoff warning events using the prebuilt EventIndex."""
+    resource_name = resource.strip().lower()
+    namespace_name = namespace.strip().lower()
+    total = 0
+
+    def is_image_pull_backoff(event: K8sEvent) -> bool:
+        reason = event.reason.strip().lower()
+        message = event.message.strip().lower()
+        return any(token in f"{reason} {message}" for token in ("imagepull", "image pull", "errimagepull"))
+
+    # 1. Exact match search
+    key = (namespace_name, resource_name)
+    exact_events = event_index.exact_map.get(key, [])
+    for event in exact_events:
+        if is_image_pull_backoff(event):
+            total += max(1, event.count or 1)
+
+    # 2. Pattern-based fallback search (word boundaries match)
+    for event in event_index.fallback_list:
+        event_namespace = event.namespace.strip().lower()
+        if namespace_name and event_namespace and event_namespace != namespace_name:
+            continue
+
+        haystack = f"{event.reason} {event.message} {event.from_}".lower()
+        if re.search(rf"\b{re.escape(resource_name)}\b", haystack):
+            if is_image_pull_backoff(event):
+                total += max(1, event.count or 1)
+
+    return total
+
+
+def count_namespace_warning_events_indexed(
+    event_index: EventIndex,
+    namespace: str,
+) -> int:
+    """Count warning events scoped to a namespace using the prebuilt EventIndex."""
+    namespace_name = namespace.strip().lower()
+    if not namespace_name:
+        return 0
+
+    total = event_index.namespace_warnings.get(namespace_name, 0)
+
+    for event in event_index.fallback_list:
+        event_namespace = event.namespace.strip().lower()
+        if event_namespace == namespace_name:
+            continue
+        haystack = f"{event.reason} {event.message} {event.from_}".lower()
+        if re.search(rf"\b{re.escape(namespace_name)}\b", haystack):
+            total += max(1, event.count or 1)
+
+    for (evt_ns, evt_res), evts in event_index.exact_map.items():
+        if evt_ns == namespace_name:
+            continue
+        for event in evts:
+            haystack = f"{event.reason} {event.message} {event.from_}".lower()
+            if re.search(rf"\b{re.escape(namespace_name)}\b", haystack):
+                total += max(1, event.count or 1)
+
+    return total
+
+
+def namespace_warning_events(events: list[K8sEvent], namespace: str) -> int:
+    """Count warning events scoped to a namespace (legacy backward-compatible signature)."""
     namespace_name = namespace.strip().lower()
     if namespace_name == "":
         return 0
@@ -530,15 +720,19 @@ def namespace_warning_events(events: list[K8sEvent], namespace: str) -> int:
         if not is_warning_event(event):
             continue
         event_namespace = event.namespace.strip().lower()
-        haystack = f"{event.reason} {event.message} {event.from_}".lower()
-        if event_namespace == namespace_name or namespace_name in haystack:
-            total += max(1, event.count or 1)
+        if event_namespace:
+            if event_namespace != namespace_name:
+                continue
+        else:
+            haystack = f"{event.reason} {event.message} {event.from_}".lower()
+            if not re.search(rf"\b{re.escape(namespace_name)}\b", haystack):
+                continue
+        total += max(1, event.count or 1)
     return total
 
 
 def is_warning_event(event: K8sEvent) -> bool:
     """Return whether an event should count as warning evidence."""
-
     event_type = event.type.strip().lower()
     reason = event.reason.strip().lower()
     return event_type == "warning" or reason in {"backoff", "failed", "unhealthy", "oomkilled"}
@@ -546,7 +740,6 @@ def is_warning_event(event: K8sEvent) -> bool:
 
 def namespace_non_running_ratio(pods: list[PodSummary], namespace: str) -> tuple[float, bool]:
     """Return the ratio of non-running pods in the current namespace."""
-
     namespace_name = namespace.strip().lower()
     namespace_pods = [pod for pod in pods if pod.namespace.strip().lower() == namespace_name]
     if not namespace_pods:
@@ -557,7 +750,6 @@ def namespace_non_running_ratio(pods: list[PodSummary], namespace: str) -> tuple
 
 def node_not_ready_value(pod: PodSummary, nodes: list[NodeSummary]) -> tuple[float, bool]:
     """Return whether the pod's assigned node is currently NotReady."""
-
     node_name = pod.nodeName.strip().lower()
     if node_name == "":
         return 0.0, False
@@ -568,8 +760,7 @@ def node_not_ready_value(pod: PodSummary, nodes: list[NodeSummary]) -> tuple[flo
 
 
 def count_image_pull_backoff_events(events: list[K8sEvent], resource: str, namespace: str) -> int:
-    """Count image-pull/backoff events that reference a pod."""
-
+    """Count image-pull/backoff events that reference a pod (legacy backward-compatible signature)."""
     resource_name = resource.strip().lower()
     namespace_name = namespace.strip().lower()
     total = 0
@@ -582,11 +773,48 @@ def count_image_pull_backoff_events(events: list[K8sEvent], resource: str, names
             continue
         event_resource = event.resource.strip().lower()
         event_namespace = event.namespace.strip().lower()
-        haystack = f"{event.reason} {event.message} {event.from_}".lower()
-        resource_match = resource_name != "" and (event_resource == resource_name or resource_name in haystack)
-        namespace_match = namespace_name != "" and (event_namespace == namespace_name or namespace_name in haystack)
-        if resource_match or namespace_match:
-            total += max(1, event.count or 1)
+
+        if namespace_name and event_namespace and event_namespace != namespace_name:
+            continue
+
+        if event_resource:
+            if event_resource != resource_name:
+                continue
+        else:
+            haystack = f"{event.reason} {event.message} {event.from_}".lower()
+            if not re.search(rf"\b{re.escape(resource_name)}\b", haystack):
+                continue
+        total += max(1, event.count or 1)
+    return total
+
+
+def count_resource_warning_events(events: list[K8sEvent], resource: str, namespace: str | None) -> int:
+    """Count warning-like events referencing a resource (legacy backward-compatible signature)."""
+    resource_name = resource.strip().lower()
+    if not resource_name:
+        return 0
+    namespace_name = (namespace or "").strip().lower()
+    total = 0
+
+    for event in events:
+        if not is_warning_event(event):
+            continue
+
+        event_namespace = event.namespace.strip().lower()
+        if namespace_name and event_namespace and event_namespace != namespace_name:
+            continue
+
+        event_resource = event.resource.strip().lower()
+        if event_resource:
+            if event_resource != resource_name:
+                continue
+        else:
+            haystack = f"{event.reason} {event.message} {event.from_}".lower()
+            if not re.search(rf"\b{re.escape(resource_name)}\b", haystack):
+                continue
+
+        total += max(1, event.count or 1)
+
     return total
 
 
@@ -599,17 +827,23 @@ def build_pod_ml_feature_set(
     mem_mi: int,
     mem_known: bool,
     resource_warnings: int,
+    event_index: EventIndex | None = None,
 ) -> MLFeatureSet:
     """Build all supported pod ML features from the current snapshot."""
-
     status = pod.status.lower().strip()
     age_minutes, age_known = parse_duration_minutes(pod.age)
     phase_raw = pod.phaseDuration if pod.phaseDuration is not None else pod.age
     phase_minutes, phase_known = parse_duration_minutes(phase_raw)
-    ns_warnings = namespace_warning_events(request.events, pod.namespace)
+
+    if event_index is not None:
+        ns_warnings = count_namespace_warning_events_indexed(event_index, pod.namespace)
+        image_backoffs = count_image_pull_backoff_events_indexed(event_index, pod.name, pod.namespace)
+    else:
+        ns_warnings = namespace_warning_events(request.events, pod.namespace)
+        image_backoffs = count_image_pull_backoff_events(request.events, pod.name, pod.namespace)
+
     ns_pressure, ns_pressure_known = namespace_non_running_ratio(request.pods, pod.namespace)
     node_not_ready, node_known = node_not_ready_value(pod, request.nodes)
-    image_backoffs = count_image_pull_backoff_events(request.events, pod.name, pod.namespace)
     cpu_trend = compute_trend(pod.cpuHistory)
     memory_trend = compute_trend(pod.memoryHistory)
     restart_velocity = 0.0 if not age_known or age_minutes <= 0 else float(pod.restarts) / (age_minutes / 60)
@@ -794,13 +1028,28 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
     ml_inference_failures = 0
     ml_disagreements = 0
 
+    # Build warning events index to achieve O(P + E) scaling
+    event_index = build_event_index(request.events)
+
+    # Read configurable thresholds
+    pod_cpu_thresh = pod_cpu_threshold_milli()
+    pod_mem_thresh = pod_mem_threshold_mi()
+    node_cpu_thresh = node_cpu_threshold_pct()
+    node_mem_thresh = node_mem_threshold_pct()
+    node_cpu_trend_thresh = node_cpu_trend_threshold_pct()
+    node_cpu_trend_base = node_cpu_trend_base_pct()
+
     for pod in request.pods:
         score = 0
         signals: list[PredictionSignal] = []
         status = pod.status.lower().strip()
-        resource_warnings = count_resource_warning_events(request.events, pod.name, pod.namespace)
-        cpu_milli, cpu_known = parse_cpu_milli(pod.cpu)
-        mem_mi, mem_known = parse_memory_mi(pod.memory)
+
+        # O(1) indexed lookup of warning events targeted to this pod
+        resource_warnings = count_resource_warning_events_indexed(event_index, pod.name, pod.namespace)
+
+        cpu_milli, cpu_known = parse_cpu_milli(pod.cpu or "")
+        mem_mi, mem_known = parse_memory_mi(pod.memory or "")
+
         ml_feature_set = build_pod_ml_feature_set(
             pod,
             request,
@@ -809,6 +1058,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             mem_mi=mem_mi,
             mem_known=mem_known,
             resource_warnings=resource_warnings,
+            event_index=event_index,
         )
 
         if status == "failed":
@@ -825,11 +1075,39 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             score += min(42, pod.restarts * 8)
             signals.append(PredictionSignal(key="restarts", value=str(pod.restarts)))
 
-        if cpu_milli >= 400:
+        # Dynamic CPU request/limit scoring
+        cpu_req_val, cpu_req_known = parse_cpu_milli(pod.cpuRequest or "")
+        cpu_limit_val, cpu_limit_known = parse_cpu_milli(pod.cpuLimit or "")
+        cpu_triggered = False
+        if cpu_known:
+            if cpu_req_known and cpu_req_val > 0:
+                if cpu_milli >= int(cpu_req_val * 0.90):
+                    cpu_triggered = True
+            elif cpu_limit_known and cpu_limit_val > 0:
+                if cpu_milli >= int(cpu_limit_val * 0.90):
+                    cpu_triggered = True
+            else:
+                if cpu_milli >= pod_cpu_thresh:
+                    cpu_triggered = True
+        if cpu_triggered:
             score += 10
             signals.append(PredictionSignal(key="cpu", value=pod.cpu))
 
-        if mem_mi >= 512:
+        # Dynamic Memory request/limit scoring
+        mem_req_val, mem_req_known = parse_memory_mi(pod.memoryRequest or "")
+        mem_limit_val, mem_limit_known = parse_memory_mi(pod.memoryLimit or "")
+        mem_triggered = False
+        if mem_known:
+            if mem_req_known and mem_req_val > 0:
+                if mem_mi >= int(mem_req_val * 0.90):
+                    mem_triggered = True
+            elif mem_limit_known and mem_limit_val > 0:
+                if mem_mi >= int(mem_limit_val * 0.90):
+                    mem_triggered = True
+            else:
+                if mem_mi >= pod_mem_thresh:
+                    mem_triggered = True
+        if mem_triggered:
             score += 10
             signals.append(PredictionSignal(key="memory", value=pod.memory))
 
@@ -893,7 +1171,7 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             strong_status=status in {"failed", "pending"},
             signal_count=len(signals),
             metric_known=int(cpu_known) + int(mem_known),
-            metric_signal_count=int(cpu_milli >= 400) + int(mem_mi >= 512),
+            metric_signal_count=int(cpu_triggered) + int(mem_triggered),
             warning_matches=resource_warnings,
             restart_signal=pod.restarts > 0,
         )
@@ -916,22 +1194,22 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         signals: list[PredictionSignal] = []
         cpu_pct, cpu_known = parse_percent(node.cpuUsage)
         mem_pct, mem_known = parse_percent(node.memUsage)
-        resource_warnings = count_resource_warning_events(request.events, node.name, None)
+        resource_warnings = count_resource_warning_events_indexed(event_index, node.name, None)
         cpu_trend = compute_trend(node.cpuHistory)
 
         if node.status.strip().lower() == "notready":
             score += 75
             signals.append(PredictionSignal(key="status", value="NotReady"))
 
-        if cpu_known and cpu_pct >= 90:
+        if cpu_known and cpu_pct >= node_cpu_thresh:
             score += 20
             signals.append(PredictionSignal(key="cpuUsage", value=node.cpuUsage))
 
-        if mem_known and mem_pct >= 90:
+        if mem_known and mem_pct >= node_mem_thresh:
             score += 20
             signals.append(PredictionSignal(key="memUsage", value=node.memUsage))
 
-        if cpu_trend >= 20 and cpu_known and cpu_pct >= 80:
+        if cpu_trend >= node_cpu_trend_thresh and cpu_known and cpu_pct >= node_cpu_trend_base:
             score += 10
             signals.append(PredictionSignal(key="cpuTrend", value=f"+{cpu_trend}%"))
 
@@ -946,12 +1224,12 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
             strong_status=node.status.strip().lower() == "notready",
             signal_count=len(signals),
             metric_known=int(cpu_known) + int(mem_known),
-            metric_signal_count=int(cpu_known and cpu_pct >= 90) + int(mem_known and mem_pct >= 90),
+            metric_signal_count=int(cpu_known and cpu_pct >= node_cpu_thresh) + int(mem_known and mem_pct >= node_mem_thresh),
             warning_matches=resource_warnings,
             restart_signal=False,
         )
         recommendation = "Inspect kubelet health, pressure conditions, and workload distribution."
-        if cpu_trend >= 20 and cpu_known and cpu_pct >= 80:
+        if cpu_trend >= node_cpu_trend_thresh and cpu_known and cpu_pct >= node_cpu_trend_base:
             recommendation = "CPU usage is trending up quickly; review noisy neighbors and consider scaling."
 
         items.append(
@@ -983,35 +1261,6 @@ def predict(request: PredictionRequest, _: None = Depends(require_predictor_secr
         generatedAt=datetime.now(timezone.utc).isoformat(),
         items=items,
     )
-
-
-def count_resource_warning_events(events: list[K8sEvent], resource: str, namespace: str | None) -> int:
-    """Count warning-like events that reference a resource.
-
-    Args:
-        events: Cluster events from the request payload.
-        resource: Resource name to match in event reason/message/source fields.
-        namespace: Optional namespace hint used for matching.
-
-    Returns:
-        int: Weighted count of matching warning events.
-    """
-
-    resource_name = resource.strip().lower()
-    namespace_name = (namespace or "").strip().lower()
-    total = 0
-
-    for event in events:
-        if not is_warning_event(event):
-            continue
-
-        haystack = f"{event.reason} {event.message} {event.from_}".lower()
-        if resource_name not in haystack and (namespace_name == "" or namespace_name not in haystack):
-            continue
-
-        total += max(1, event.count or 1)
-
-    return total
 
 
 def compute_trend(history: list[CPUPoint]) -> int:

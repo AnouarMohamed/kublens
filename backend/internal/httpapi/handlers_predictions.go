@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"os"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -288,13 +290,103 @@ func (s *Server) invalidatePredictionsCache() {
 	s.predictionsMu.Unlock()
 }
 
+func getEnvInt(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+type eventIndex struct {
+	exactMap     map[string][]model.K8sEvent
+	fallbackList []model.K8sEvent
+}
+
+func buildEventIndex(events []model.K8sEvent) eventIndex {
+	exactMap := make(map[string][]model.K8sEvent)
+	var fallbackList []model.K8sEvent
+
+	for _, event := range events {
+		eventType := strings.ToLower(strings.TrimSpace(event.Type))
+		reason := strings.ToLower(strings.TrimSpace(event.Reason))
+		if eventType != "warning" && reason != "backoff" && reason != "failed" && reason != "unhealthy" && reason != "oomkilled" {
+			continue
+		}
+
+		resName := strings.ToLower(strings.TrimSpace(event.Resource))
+		if resName != "" {
+			nsName := strings.ToLower(strings.TrimSpace(event.Namespace))
+			key := nsName + "/" + resName
+			exactMap[key] = append(exactMap[key], event)
+		} else {
+			fallbackList = append(fallbackList, event)
+		}
+	}
+
+	return eventIndex{
+		exactMap:     exactMap,
+		fallbackList: fallbackList,
+	}
+}
+
+func countResourceWarningEventsIndexed(idx eventIndex, resource, namespace string) int {
+	resourceName := strings.ToLower(strings.TrimSpace(resource))
+	if resourceName == "" {
+		return 0
+	}
+	namespaceName := strings.ToLower(strings.TrimSpace(namespace))
+	total := 0
+
+	key := namespaceName + "/" + resourceName
+	if exactEvents, ok := idx.exactMap[key]; ok {
+		for _, event := range exactEvents {
+			if event.Count > 1 {
+				total += int(event.Count)
+			} else {
+				total++
+			}
+		}
+	}
+
+	for _, event := range idx.fallbackList {
+		eventNamespace := strings.ToLower(strings.TrimSpace(event.Namespace))
+		if namespaceName != "" && eventNamespace != "" && eventNamespace != namespaceName {
+			continue
+		}
+
+		haystack := strings.ToLower(strings.TrimSpace(event.Reason + " " + event.Message + " " + event.From))
+		pattern := `\b` + regexp.QuoteMeta(resourceName) + `\b`
+		matched, _ := regexp.MatchString(pattern, haystack)
+		if matched {
+			if event.Count > 1 {
+				total += int(event.Count)
+			} else {
+				total++
+			}
+		}
+	}
+
+	return total
+}
+
 func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, events []model.K8sEvent, now time.Time) model.PredictionsResult {
 	items := make([]model.IncidentPrediction, 0, len(pods)+len(nodes))
+
+	podCPUThreshold := getEnvInt("PREDICTOR_POD_CPU_THRESHOLD_MILLI", 400)
+	podMemThreshold := getEnvInt("PREDICTOR_POD_MEM_THRESHOLD_MI", 512)
+	nodeCPUThreshold := getEnvInt("PREDICTOR_NODE_CPU_THRESHOLD_PCT", 90)
+	nodeMemThreshold := getEnvInt("PREDICTOR_NODE_MEM_THRESHOLD_PCT", 90)
+	nodeCPUTrendThreshold := getEnvInt("PREDICTOR_NODE_CPU_TREND_THRESHOLD_PCT", 20)
+	nodeCPUTrendBase := getEnvInt("PREDICTOR_NODE_CPU_TREND_BASE_PCT", 80)
+
+	idx := buildEventIndex(events)
 
 	for _, pod := range pods {
 		score := 0
 		signals := make([]model.PredictionSignal, 0, 4)
-		resourceWarnings := countResourceWarningEvents(events, pod.Name, pod.Namespace)
+		resourceWarnings := countResourceWarningEventsIndexed(idx, pod.Name, pod.Namespace)
 		cpuMilli, cpuKnown := parseCPUMilli(pod.CPU)
 		memMi, memKnown := parseMemoryMi(pod.Memory)
 		cpuSignal := false
@@ -321,13 +413,49 @@ func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, e
 			signals = append(signals, model.PredictionSignal{Key: "restarts", Value: strconv.Itoa(int(pod.Restarts))})
 		}
 
-		if cpuKnown && cpuMilli >= 400 {
+		cpuReqVal, cpuReqKnown := parseCPUMilli(pod.CPURequest)
+		cpuLimitVal, cpuLimitKnown := parseCPUMilli(pod.CPULimit)
+		cpuTriggered := false
+		if cpuKnown {
+			if cpuReqKnown && cpuReqVal > 0 {
+				if cpuMilli >= int(float64(cpuReqVal)*0.90) {
+					cpuTriggered = true
+				}
+			} else if cpuLimitKnown && cpuLimitVal > 0 {
+				if cpuMilli >= int(float64(cpuLimitVal)*0.90) {
+					cpuTriggered = true
+				}
+			} else {
+				if cpuMilli >= podCPUThreshold {
+					cpuTriggered = true
+				}
+			}
+		}
+		if cpuTriggered {
 			score += 10
 			signals = append(signals, model.PredictionSignal{Key: "cpu", Value: pod.CPU})
 			cpuSignal = true
 		}
 
-		if memKnown && memMi >= 512 {
+		memReqVal, memReqKnown := parseMemoryMi(pod.MemoryRequest)
+		memLimitVal, memLimitKnown := parseMemoryMi(pod.MemoryLimit)
+		memTriggered := false
+		if memKnown {
+			if memReqKnown && memReqVal > 0 {
+				if memMi >= int(float64(memReqVal)*0.90) {
+					memTriggered = true
+				}
+			} else if memLimitKnown && memLimitVal > 0 {
+				if memMi >= int(float64(memLimitVal)*0.90) {
+					memTriggered = true
+				}
+			} else {
+				if memMi >= podMemThreshold {
+					memTriggered = true
+				}
+			}
+		}
+		if memTriggered {
 			score += 10
 			signals = append(signals, model.PredictionSignal{Key: "memory", Value: pod.Memory})
 			memSignal = true
@@ -375,7 +503,7 @@ func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, e
 		signals := make([]model.PredictionSignal, 0, 3)
 		cpu, cpuKnown := parsePercent(node.CPUUsage)
 		mem, memKnown := parsePercent(node.MemUsage)
-		resourceWarnings := countResourceWarningEvents(events, node.Name, "")
+		resourceWarnings := countResourceWarningEventsIndexed(idx, node.Name, "")
 		cpuTrend := cpuTrendDelta(node.CPUHistory)
 		cpuSignal := false
 		memSignal := false
@@ -385,19 +513,19 @@ func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, e
 			signals = append(signals, model.PredictionSignal{Key: "status", Value: "NotReady"})
 		}
 
-		if cpuKnown && cpu >= 90 {
+		if cpuKnown && cpu >= float64(nodeCPUThreshold) {
 			score += 20
 			signals = append(signals, model.PredictionSignal{Key: "cpuUsage", Value: node.CPUUsage})
 			cpuSignal = true
 		}
 
-		if memKnown && mem >= 90 {
+		if memKnown && mem >= float64(nodeMemThreshold) {
 			score += 20
 			signals = append(signals, model.PredictionSignal{Key: "memUsage", Value: node.MemUsage})
 			memSignal = true
 		}
 
-		if cpuTrend >= 20 && cpuKnown && cpu >= 80 {
+		if cpuTrend >= nodeCPUTrendThreshold && cpuKnown && cpu >= float64(nodeCPUTrendBase) {
 			score += 10
 			signals = append(signals, model.PredictionSignal{Key: "cpuTrend", Value: fmt.Sprintf("+%d%%", cpuTrend)})
 		}
@@ -419,7 +547,7 @@ func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, e
 			warningMatches:    resourceWarnings,
 		})
 		recommendation := "Inspect kubelet health, node conditions, and workload pressure before scheduling more pods."
-		if cpuTrend >= 20 && cpuKnown && cpu >= 80 {
+		if cpuTrend >= nodeCPUTrendThreshold && cpuKnown && cpu >= float64(nodeCPUTrendBase) {
 			recommendation = "CPU usage is trending up quickly; review noisy neighbors and consider scaling."
 		}
 
@@ -455,6 +583,9 @@ func buildLocalPredictions(pods []model.PodSummary, nodes []model.NodeSummary, e
 
 func countResourceWarningEvents(events []model.K8sEvent, resource, namespace string) int {
 	resourceName := strings.ToLower(strings.TrimSpace(resource))
+	if resourceName == "" {
+		return 0
+	}
 	namespaceName := strings.ToLower(strings.TrimSpace(namespace))
 	total := 0
 
@@ -465,11 +596,23 @@ func countResourceWarningEvents(events []model.K8sEvent, resource, namespace str
 			continue
 		}
 
-		haystack := strings.ToLower(strings.TrimSpace(event.Reason + " " + event.Message + " " + event.From))
-		resourceMatch := resourceName != "" && strings.Contains(haystack, resourceName)
-		namespaceMatch := namespaceName != "" && strings.Contains(haystack, namespaceName)
-		if !resourceMatch && !namespaceMatch {
+		eventNamespace := strings.ToLower(strings.TrimSpace(event.Namespace))
+		if namespaceName != "" && eventNamespace != "" && eventNamespace != namespaceName {
 			continue
+		}
+
+		eventResource := strings.ToLower(strings.TrimSpace(event.Resource))
+		if eventResource != "" {
+			if eventResource != resourceName {
+				continue
+			}
+		} else {
+			haystack := strings.ToLower(strings.TrimSpace(event.Reason + " " + event.Message + " " + event.From))
+			pattern := `\b` + regexp.QuoteMeta(resourceName) + `\b`
+			matched, _ := regexp.MatchString(pattern, haystack)
+			if !matched {
+				continue
+			}
 		}
 
 		if event.Count > 1 {

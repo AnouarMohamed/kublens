@@ -21,15 +21,19 @@ const (
 )
 
 type PodSummary struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	Namespace string    `json:"namespace"`
-	NodeName  string    `json:"nodeName,omitempty"`
-	Status    PodStatus `json:"status"`
-	CPU       string    `json:"cpu"`
-	Memory    string    `json:"memory"`
-	Age       string    `json:"age"`
-	Restarts  int32     `json:"restarts"`
+	ID            string    `json:"id"`
+	Name          string    `json:"name"`
+	Namespace     string    `json:"namespace"`
+	NodeName      string    `json:"nodeName,omitempty"`
+	Status        PodStatus `json:"status"`
+	CPU           string    `json:"cpu"`
+	Memory        string    `json:"memory"`
+	Age           string    `json:"age"`
+	Restarts      int32     `json:"restarts"`
+	CPURequest    string    `json:"cpuRequest,omitempty"`
+	MemoryRequest string    `json:"memoryRequest,omitempty"`
+	CPULimit      string    `json:"cpuLimit,omitempty"`
+	MemoryLimit   string    `json:"memoryLimit,omitempty"`
 }
 
 type ContainerEnv struct {
