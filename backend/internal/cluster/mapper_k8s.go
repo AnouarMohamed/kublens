@@ -58,92 +58,17 @@ func mapPodSummary(pod corev1.Pod) model.PodSummary {
 		id = pod.Namespace + "-" + pod.Name
 	}
 
-	cpuReq, memReq, cpuLim, memLim := sumPodResources(pod)
-
 	return model.PodSummary{
-		ID:            id,
-		Name:          pod.Name,
-		Namespace:     pod.Namespace,
-		NodeName:      pod.Spec.NodeName,
-		Status:        mapPodStatus(pod.Status.Phase),
-		CPU:           "N/A",
-		Memory:        "N/A",
-		Age:           formatAge(pod.CreationTimestamp.Time),
-		Restarts:      restarts,
-		CPURequest:    cpuReq,
-		MemoryRequest: memReq,
-		CPULimit:      cpuLim,
-		MemoryLimit:   memLim,
+		ID:        id,
+		Name:      pod.Name,
+		Namespace: pod.Namespace,
+		NodeName:  pod.Spec.NodeName,
+		Status:    mapPodStatus(pod.Status.Phase),
+		CPU:       "N/A",
+		Memory:    "N/A",
+		Age:       formatAge(pod.CreationTimestamp.Time),
+		Restarts:  restarts,
 	}
-}
-
-func sumPodResources(pod corev1.Pod) (cpuReq, memReq, cpuLim, memLim string) {
-	var cpuReqMilli, cpuLimMilli int64
-	var memReqBytes, memLimBytes int64
-
-	for _, container := range pod.Spec.Containers {
-		cpuReqMilli += container.Resources.Requests.Cpu().MilliValue()
-		cpuLimMilli += container.Resources.Limits.Cpu().MilliValue()
-		memReqBytes += container.Resources.Requests.Memory().Value()
-		memLimBytes += container.Resources.Limits.Memory().Value()
-	}
-
-	var maxInitCpuReq, maxInitCpuLim int64
-	var maxInitMemReq, maxInitMemLim int64
-	for _, container := range pod.Spec.InitContainers {
-		if cReq := container.Resources.Requests.Cpu().MilliValue(); cReq > maxInitCpuReq {
-			maxInitCpuReq = cReq
-		}
-		if cLim := container.Resources.Limits.Cpu().MilliValue(); cLim > maxInitCpuLim {
-			maxInitCpuLim = cLim
-		}
-		if mReq := container.Resources.Requests.Memory().Value(); mReq > maxInitMemReq {
-			maxInitMemReq = mReq
-		}
-		if mLim := container.Resources.Limits.Memory().Value(); mLim > maxInitMemLim {
-			maxInitMemLim = mLim
-		}
-	}
-
-	finalCpuReq := cpuReqMilli
-	if maxInitCpuReq > finalCpuReq {
-		finalCpuReq = maxInitCpuReq
-	}
-	finalCpuLim := cpuLimMilli
-	if maxInitCpuLim > finalCpuLim {
-		finalCpuLim = maxInitCpuLim
-	}
-	finalMemReq := memReqBytes
-	if maxInitMemReq > finalMemReq {
-		finalMemReq = maxInitMemReq
-	}
-	finalMemLim := memLimBytes
-	if maxInitMemLim > finalMemLim {
-		finalMemLim = maxInitMemLim
-	}
-
-	if finalCpuReq > 0 {
-		cpuReq = formatMilliCPU(finalCpuReq)
-	} else {
-		cpuReq = "0m"
-	}
-	if finalCpuLim > 0 {
-		cpuLim = formatMilliCPU(finalCpuLim)
-	} else {
-		cpuLim = "0m"
-	}
-	if finalMemReq > 0 {
-		memReq = formatMemoryBytes(finalMemReq)
-	} else {
-		memReq = "0Mi"
-	}
-	if finalMemLim > 0 {
-		memLim = formatMemoryBytes(finalMemLim)
-	} else {
-		memLim = "0Mi"
-	}
-
-	return
 }
 
 func mapNodeSummary(node corev1.Node) model.NodeSummary {
