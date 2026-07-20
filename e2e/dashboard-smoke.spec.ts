@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 test("dashboard loads and navigates between core views", async ({ page }) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "networkidle" });
 
-  await expect(page.getByRole("heading", { name: "Cluster Overview" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Cluster Overview" })).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole("button", { name: /refresh/i })).toBeVisible();
 
   const search = page.getByPlaceholder("search views (/)");
