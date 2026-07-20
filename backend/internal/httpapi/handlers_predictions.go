@@ -17,6 +17,7 @@ import (
 	"go.opentelemetry.io/otel/propagation"
 
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 const (
@@ -217,7 +218,7 @@ func (s *Server) handlePredictorModelHealth(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		s.recordPredictorFailure(err)
 		fallback.Source = "backend-unavailable"
-		fallback.LastError = err.Error()
+		fallback.LastError = redact.Error(err)
 		writeJSON(w, http.StatusOK, fallback)
 		return
 	}
@@ -252,7 +253,7 @@ func (pc *PredictionController) handlePredictions(w http.ResponseWriter, r *http
 			return
 		}
 		pc.recordFailure(err)
-		pc.logger.Warn("predictor service unavailable, using local fallback", "error", err.Error())
+		pc.logger.Warn("predictor service unavailable, using local fallback", "error", redact.Error(err))
 	}
 
 	fallback := buildLocalPredictions(pods, nodes, events, pc.now())

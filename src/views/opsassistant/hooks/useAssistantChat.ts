@@ -242,7 +242,10 @@ function toDiagnosePrompt(resource: string): string {
 }
 
 function createID(): string {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.floor(Math.random() * Number.MAX_SAFE_INTEGER).toString(16)}`;
 }
 
 function cloneMessages(messages: AssistantMessage[]): AssistantMessage[] {

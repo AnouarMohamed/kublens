@@ -110,20 +110,21 @@ Controllers receive narrow dependencies such as `ClusterReader`, request metrics
 1. Runtime publishes events to in-process bus.
 2. Clients subscribe over `/api/stream` (SSE) or `/api/stream/ws` (WebSocket).
 3. Request-level and action-level audit entries are persisted in bounded audit storage.
-4. Production deployments use `AUDIT_STORE=sql` and `AUDIT_SIGNING_KEY` for durable, signed verification.
+4. Production deployments require `AUDIT_STORE=sql` and `AUDIT_SIGNING_KEY` for durable, signed verification.
 
 ### Durable workflow storage
 
 1. Backend startup opens `DATABASE_DRIVER=sqlite` or `DATABASE_DRIVER=postgres`.
 2. Automatic migrations create workflow tables when `DATABASE_MIGRATIONS_AUTO=true`.
 3. Incident, remediation, postmortem, alert lifecycle, Ghost simulation history, SQL memory, and SQL audit history share the SQL handle.
-4. `MEMORY_STORE=file` remains available for demo/local runs; `MEMORY_STORE=sql` is required for production readiness.
+4. `MEMORY_STORE=file` remains available for demo/local runs; `APP_MODE=prod` requires `MEMORY_STORE=sql`.
 
 ### Experimental flow
 
 1. `/api/experimental` reports eBPF telemetry, fleet drift, and autonomous remediation feature gates.
-2. eBPF telemetry and fleet drift reports are read-only and disabled by default.
-3. Autonomous remediation proposal generation is disabled by default, requires operator role and write gate, and only writes proposal records for later human approval.
+2. eBPF telemetry is disabled by default. When enabled, operator-authenticated agents can submit bounded node telemetry through `/api/experimental/ebpf/nodes`; SQL-backed deployments persist samples in the workflow database, and reports use recent agent data when present or Kubernetes compatibility signals otherwise.
+3. Fleet drift reports are read-only, disabled by default, and limited to configured cluster contexts. The optional `/api/experimental/fleet-drift/propose` route converts warning-level drift signals into review-only remediation proposals.
+4. Autonomous remediation proposal generation is disabled by default, requires operator role and write gate, and only writes proposal records for later human approval.
 
 ## Policy boundaries
 

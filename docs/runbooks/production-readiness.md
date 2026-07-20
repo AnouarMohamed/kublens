@@ -15,16 +15,17 @@ The response should be `ready` or `degraded`. `blocked` means the pod should not
 - `APP_MODE=prod`
 - Real cluster kubeconfig is mounted through `KUBECONFIG_DATA`
 - `AUTH_ENABLED=true`
+- Static `AUTH_TOKENS` are at least 32 characters when OIDC is not used
 - `WRITE_ACTIONS_ENABLED` is either `false` or guarded by authenticated operator/admin roles
 - Durable SQL storage is active
 - `DATABASE_MIGRATIONS_AUTO=true`, or migrations were run before startup
 - `MEMORY_STORE=sql`
 - `AUDIT_STORE=sql`
+- `AUDIT_SIGNING_KEY` is configured
 - `auditSinkFailures=0`
 
 ## Recommended Baseline
 
-- `AUDIT_SIGNING_KEY` is configured
 - Predictor service is enabled and `/api/predictor/model` has no stale or load errors
 - Ghost engine is configured with `GHOST_ENGINE_ADDR`
 - Alert routing is enabled for at least one channel

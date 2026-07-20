@@ -79,6 +79,7 @@ type Server struct {
 	ghostClient    ghostClient
 	ghostRuns      ghostSimulationStore
 	experimental   ExperimentalConfig
+	nodeTelemetry  nodeTelemetryStore
 
 	predictionsTTL   time.Duration
 	predictionsMu    sync.RWMutex
@@ -274,6 +275,14 @@ func WithExperimentalConfig(config ExperimentalConfig) Option {
 	}
 }
 
+func WithNodeTelemetrySQLStore(handle *sql.DB, dialect storesql.Dialect) Option {
+	return func(s *Server) {
+		if store := newSQLNodeTelemetryStore(handle, dialect, 256, 5*time.Minute); store != nil {
+			s.nodeTelemetry = store
+		}
+	}
+}
+
 func WithAlertDispatcher(dispatcher alertDispatcher) Option {
 	return func(s *Server) {
 		s.alerts = dispatcher
@@ -391,6 +400,7 @@ func newServer(clusterSvc ClusterReader, now func() time.Time, logger *slog.Logg
 			AutonomousRemediationMinScore: 85,
 			AutonomousRemediationMaxItems: 5,
 		},
+		nodeTelemetry: newMemoryNodeTelemetryStore(256, 5*time.Minute),
 	}
 	server.limiter.configure(RateLimitConfig{
 		Enabled:  true,

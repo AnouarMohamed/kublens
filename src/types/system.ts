@@ -51,6 +51,13 @@ export interface HealthStatus {
   build: BuildInfo;
 }
 
+export interface HealthzStatus {
+  status: "ok" | string;
+  timestamp: string;
+  version: string;
+  commit: string;
+}
+
 export interface ProductionReadinessStatus {
   status: "ready" | "degraded" | "blocked" | string;
   generatedAt: string;
@@ -176,9 +183,17 @@ export interface NodeTelemetryReport {
   experimental: boolean;
   source: string;
   agentConnected: boolean;
+  lastReceivedAt?: string;
   summary: string;
   nodes: NodeTelemetryItem[];
   limitations: string[];
+}
+
+export interface NodeTelemetryIngestRequest {
+  agentId?: string;
+  source?: string;
+  capturedAt?: string;
+  nodes: NodeTelemetryItem[];
 }
 
 export interface NodeTelemetryItem {
@@ -198,6 +213,14 @@ export interface FleetDriftReport {
   baseline: string;
   compared: number;
   items: FleetDriftItem[];
+  limitations: string[];
+}
+
+export interface FleetDriftProposalReport {
+  generatedAt: string;
+  enabled: boolean;
+  experimental: boolean;
+  proposals: RemediationProposal[];
   limitations: string[];
 }
 

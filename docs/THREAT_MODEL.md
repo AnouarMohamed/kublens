@@ -50,9 +50,10 @@ This document captures high-risk abuse paths and implemented controls for the cu
 ## Current assumptions and non-goals
 
 - Full OAuth browser redirect flow is out of scope (OIDC/JWT bearer validation is supported).
-- Audit signatures require `AUDIT_SIGNING_KEY`; unsigned historical entries remain verifiable only by hash chain.
+- Audit signatures require `AUDIT_SIGNING_KEY` in production; unsigned historical entries remain verifiable only by hash chain.
 - Secret-management backends are deployment-specific and external to this codebase.
-- Experimental eBPF telemetry uses compatibility reports until a production node agent rollout, privacy review, and rollback runbook are complete.
+- Experimental eBPF telemetry uses operator-authenticated, bounded node telemetry ingestion with compatibility fallback reports until a production node agent rollout, privacy review, and rollback runbook are complete. SQL-backed deployments persist recent samples with TTL/count pruning.
+- Experimental fleet drift proposal generation is review-only: it can create remediation proposal records from warning-level drift signals, but it does not mutate clusters or Git repositories by itself.
 
 ## Verification references
 

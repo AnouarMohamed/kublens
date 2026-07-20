@@ -6,12 +6,14 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"kubelens-backend/internal/model"
 )
 
 const experimentalMaturity = "experimental"
+const maxNodeTelemetryItems = 200
 
 func (s *Server) handleExperimentalStatus(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, model.ExperimentalStatus{
@@ -57,6 +59,11 @@ func (s *Server) handleExperimentalNodeTelemetry(w http.ResponseWriter, r *http.
 		return
 	}
 
+	if report, ok := s.nodeTelemetryReportFromAgents(); ok {
+		writeJSON(w, http.StatusOK, report)
+		return
+	}
+
 	pods, nodes := s.cluster.Snapshot(r.Context())
 	events := s.cluster.ListClusterEvents(r.Context())
 	podsByNode := map[string]int{}
@@ -99,9 +106,45 @@ func (s *Server) handleExperimentalNodeTelemetry(w http.ResponseWriter, r *http.
 	})
 }
 
+func (s *Server) handleExperimentalNodeTelemetryIngest(w http.ResponseWriter, r *http.Request) {
+	if !s.experimental.EBPFTelemetryEnabled {
+		writeError(w, http.StatusForbidden, "eBPF node telemetry is disabled")
+		return
+	}
+
+	var req model.NodeTelemetryIngestRequest
+	if err := s.decodeJSONBody(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	sample, err := normalizeNodeTelemetryIngest(req, s.now())
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if s.nodeTelemetry == nil {
+		s.nodeTelemetry = newMemoryNodeTelemetryStore(256, 5*time.Minute)
+	}
+	if err := s.nodeTelemetry.Save(sample, s.now); err != nil {
+		writeError(w, http.StatusInternalServerError, "node telemetry ingest failed")
+		return
+	}
+
+	if report, ok := s.nodeTelemetryReportFromAgents(); ok {
+		writeJSON(w, http.StatusOK, report)
+		return
+	}
+	writeError(w, http.StatusInternalServerError, "node telemetry report unavailable")
+}
+
 func (s *Server) handleExperimentalFleetDrift(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, s.currentFleetDriftReport())
+}
+
+func (s *Server) currentFleetDriftReport() model.FleetDriftReport {
 	if !s.experimental.FleetDriftEnabled {
-		writeJSON(w, http.StatusOK, model.FleetDriftReport{
+		return model.FleetDriftReport{
 			GeneratedAt:  s.now().UTC().Format(time.RFC3339),
 			Enabled:      false,
 			Experimental: true,
@@ -109,13 +152,12 @@ func (s *Server) handleExperimentalFleetDrift(w http.ResponseWriter, _ *http.Req
 			Compared:     0,
 			Items:        []model.FleetDriftItem{},
 			Limitations:  fleetDriftLimitations(),
-		})
-		return
+		}
 	}
 
 	selector, ok := s.cluster.(*routedCluster)
 	if !ok || len(selector.readers) < 2 {
-		writeJSON(w, http.StatusOK, model.FleetDriftReport{
+		return model.FleetDriftReport{
 			GeneratedAt:  s.now().UTC().Format(time.RFC3339),
 			Enabled:      true,
 			Experimental: true,
@@ -128,8 +170,7 @@ func (s *Server) handleExperimentalFleetDrift(w http.ResponseWriter, _ *http.Req
 				Signals:  []string{"multi-cluster-context-required"},
 			}},
 			Limitations: fleetDriftLimitations(),
-		})
-		return
+		}
 	}
 
 	baselineName := selector.DefaultName()
@@ -143,7 +184,7 @@ func (s *Server) handleExperimentalFleetDrift(w http.ResponseWriter, _ *http.Req
 		items = append(items, compareFleetSnapshot(name, baseline, captureFleetSnapshot(selector.readers[name])))
 	}
 
-	writeJSON(w, http.StatusOK, model.FleetDriftReport{
+	return model.FleetDriftReport{
 		GeneratedAt:  s.now().UTC().Format(time.RFC3339),
 		Enabled:      true,
 		Experimental: true,
@@ -151,7 +192,37 @@ func (s *Server) handleExperimentalFleetDrift(w http.ResponseWriter, _ *http.Req
 		Compared:     len(items),
 		Items:        items,
 		Limitations:  fleetDriftLimitations(),
-	})
+	}
+}
+
+func (s *Server) handleExperimentalFleetDriftPropose(w http.ResponseWriter, _ *http.Request) {
+	report := s.currentFleetDriftReport()
+	out := model.FleetDriftProposalReport{
+		GeneratedAt:  s.now().UTC().Format(time.RFC3339),
+		Enabled:      report.Enabled,
+		Experimental: true,
+		Proposals:    []model.RemediationProposal{},
+		Limitations:  fleetDriftLimitations(),
+	}
+	if !report.Enabled || s.remediations == nil {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+
+	candidates := make([]model.RemediationProposal, 0, len(report.Items))
+	for _, item := range report.Items {
+		proposal, ok := fleetDriftProposalFromItem(item, s.now)
+		if ok {
+			candidates = append(candidates, proposal)
+		}
+	}
+	if len(candidates) == 0 {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+
+	out.Proposals = s.remediations.SaveProposals(candidates)
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAutonomousRemediationPropose(w http.ResponseWriter, r *http.Request) {
@@ -310,6 +381,42 @@ func compareFleetSnapshot(name string, baseline fleetSnapshot, current fleetSnap
 	}
 }
 
+func fleetDriftProposalFromItem(
+	item model.FleetDriftItem,
+	now func() time.Time,
+) (model.RemediationProposal, bool) {
+	cluster := strings.TrimSpace(item.Cluster)
+	if cluster == "" || !strings.EqualFold(item.Severity, "warning") || len(item.Signals) == 0 {
+		return model.RemediationProposal{}, false
+	}
+
+	riskLevel := "medium"
+	for _, signal := range item.Signals {
+		if strings.Contains(strings.ToLower(signal), "not-ready-nodes") {
+			riskLevel = "high"
+			break
+		}
+	}
+
+	nowAt := now().UTC().Format(time.RFC3339)
+	return model.RemediationProposal{
+		ID:        fmt.Sprintf("fleet-%d-%s", now().UTC().UnixNano(), strings.ReplaceAll(strings.ToLower(cluster), " ", "-")),
+		Kind:      model.RemediationKindFleetDriftReview,
+		Status:    "proposed",
+		Namespace: "",
+		Resource:  cluster,
+		Reason:    item.Summary,
+		RiskLevel: riskLevel,
+		DryRunResult: fmt.Sprintf(
+			"Proposal-only fleet drift review for cluster %s. Signals: %s. Compare against the baseline context and prepare GitOps changes in the owning repository before applying any correction.",
+			cluster,
+			strings.Join(item.Signals, "; "),
+		),
+		CreatedAt: nowAt,
+		UpdatedAt: nowAt,
+	}, true
+}
+
 func missingSetMembers(left map[string]struct{}, right map[string]struct{}) []string {
 	out := make([]string, 0)
 	for value := range left {
@@ -336,6 +443,260 @@ func nodePressureSignals(node model.NodeSummary, warnings int) []string {
 		signals = append(signals, "warning-events")
 	}
 	return signals
+}
+
+type nodeTelemetrySample struct {
+	agentID    string
+	source     string
+	capturedAt string
+	receivedAt time.Time
+	nodes      []model.NodeTelemetryItem
+}
+
+type nodeTelemetryStore interface {
+	Save(sample nodeTelemetrySample, now func() time.Time) error
+	Recent(now time.Time) []nodeTelemetrySample
+}
+
+type memoryNodeTelemetryStore struct {
+	mu      sync.RWMutex
+	max     int
+	ttl     time.Duration
+	samples []nodeTelemetrySample
+}
+
+func newMemoryNodeTelemetryStore(maxItems int, ttl time.Duration) *memoryNodeTelemetryStore {
+	if maxItems <= 0 {
+		maxItems = 256
+	}
+	if ttl <= 0 {
+		ttl = 5 * time.Minute
+	}
+	return &memoryNodeTelemetryStore{
+		max:     maxItems,
+		ttl:     ttl,
+		samples: []nodeTelemetrySample{},
+	}
+}
+
+func (s *memoryNodeTelemetryStore) Save(sample nodeTelemetrySample, now func() time.Time) error {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if sample.receivedAt.IsZero() {
+		sample.receivedAt = now().UTC()
+	}
+	s.samples = append(s.samples, cloneNodeTelemetrySample(sample))
+	s.pruneLocked(now().UTC())
+	if overflow := len(s.samples) - s.max; overflow > 0 {
+		s.samples = append([]nodeTelemetrySample(nil), s.samples[overflow:]...)
+	}
+	return nil
+}
+
+func (s *memoryNodeTelemetryStore) Recent(now time.Time) []nodeTelemetrySample {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.pruneLocked(now.UTC())
+	out := make([]nodeTelemetrySample, 0, len(s.samples))
+	for _, sample := range s.samples {
+		out = append(out, cloneNodeTelemetrySample(sample))
+	}
+	return out
+}
+
+func (s *memoryNodeTelemetryStore) pruneLocked(now time.Time) {
+	if s.ttl <= 0 || len(s.samples) == 0 {
+		return
+	}
+	cutoff := now.Add(-s.ttl)
+	kept := s.samples[:0]
+	for _, sample := range s.samples {
+		if sample.receivedAt.IsZero() || sample.receivedAt.Before(cutoff) {
+			continue
+		}
+		kept = append(kept, sample)
+	}
+	s.samples = kept
+}
+
+func (s *Server) nodeTelemetryReportFromAgents() (model.NodeTelemetryReport, bool) {
+	if s.nodeTelemetry == nil {
+		return model.NodeTelemetryReport{}, false
+	}
+	samples := s.nodeTelemetry.Recent(s.now())
+	if len(samples) == 0 {
+		return model.NodeTelemetryReport{}, false
+	}
+
+	agents := map[string]struct{}{}
+	type telemetryNodeSnapshot struct {
+		item      model.NodeTelemetryItem
+		updatedAt time.Time
+	}
+	latestByNode := map[string]telemetryNodeSnapshot{}
+	latestReceivedAt := time.Time{}
+	for _, sample := range samples {
+		if sample.agentID != "" {
+			agents[sample.agentID] = struct{}{}
+		}
+		if sample.receivedAt.After(latestReceivedAt) {
+			latestReceivedAt = sample.receivedAt
+		}
+		for _, item := range sample.nodes {
+			current, ok := latestByNode[item.Node]
+			if !ok || sample.receivedAt.After(current.updatedAt) {
+				latestByNode[item.Node] = telemetryNodeSnapshot{
+					item:      cloneNodeTelemetryItem(item),
+					updatedAt: sample.receivedAt,
+				}
+			}
+		}
+	}
+
+	items := make([]model.NodeTelemetryItem, 0, len(latestByNode))
+	for _, snapshot := range latestByNode {
+		items = append(items, snapshot.item)
+	}
+	sortNodeTelemetryItems(items)
+
+	return model.NodeTelemetryReport{
+		GeneratedAt:    s.now().UTC().Format(time.RFC3339),
+		Enabled:        true,
+		Experimental:   true,
+		Source:         "ebpf-agent",
+		AgentConnected: len(items) > 0,
+		LastReceivedAt: latestReceivedAt.UTC().Format(time.RFC3339),
+		Summary:        fmt.Sprintf("Received telemetry from %d agent(s) across %d node(s).", len(agents), len(items)),
+		Nodes:          items,
+		Limitations:    ebpfLimitations(),
+	}, len(items) > 0
+}
+
+func normalizeNodeTelemetryIngest(req model.NodeTelemetryIngestRequest, now time.Time) (nodeTelemetrySample, error) {
+	if len(req.Nodes) == 0 {
+		return nodeTelemetrySample{}, fmt.Errorf("nodes are required")
+	}
+	if len(req.Nodes) > maxNodeTelemetryItems {
+		return nodeTelemetrySample{}, fmt.Errorf("nodes cannot exceed %d items", maxNodeTelemetryItems)
+	}
+
+	agentID := strings.TrimSpace(req.AgentID)
+	if agentID == "" {
+		agentID = "unknown-agent"
+	}
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = "ebpf-agent"
+	}
+	capturedAt := strings.TrimSpace(req.CapturedAt)
+	if capturedAt == "" {
+		capturedAt = now.UTC().Format(time.RFC3339)
+	}
+
+	items := make([]model.NodeTelemetryItem, 0, len(req.Nodes))
+	for _, item := range req.Nodes {
+		normalized, err := normalizeNodeTelemetryItem(item)
+		if err != nil {
+			return nodeTelemetrySample{}, err
+		}
+		items = append(items, normalized)
+	}
+	sortNodeTelemetryItems(items)
+
+	return nodeTelemetrySample{
+		agentID:    agentID,
+		source:     source,
+		capturedAt: capturedAt,
+		receivedAt: now.UTC(),
+		nodes:      items,
+	}, nil
+}
+
+func normalizeNodeTelemetryItem(item model.NodeTelemetryItem) (model.NodeTelemetryItem, error) {
+	item.Node = strings.TrimSpace(item.Node)
+	if item.Node == "" {
+		return model.NodeTelemetryItem{}, fmt.Errorf("node is required")
+	}
+	item.Status = strings.TrimSpace(item.Status)
+	if item.Status == "" {
+		item.Status = "Unknown"
+	}
+	item.CPUUsage = strings.TrimSpace(item.CPUUsage)
+	item.MemoryUsage = strings.TrimSpace(item.MemoryUsage)
+	if item.WarningEvents < 0 {
+		item.WarningEvents = 0
+	}
+	if item.ObservedWorkload < 0 {
+		item.ObservedWorkload = 0
+	}
+	item.PressureSignals = normalizeTelemetrySignals(item)
+	return item, nil
+}
+
+func normalizeTelemetrySignals(item model.NodeTelemetryItem) []string {
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(item.PressureSignals)+3)
+	appendSignal := func(signal string) {
+		trimmed := strings.TrimSpace(signal)
+		if trimmed == "" {
+			return
+		}
+		if _, ok := seen[trimmed]; ok {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		out = append(out, trimmed)
+	}
+	for _, signal := range item.PressureSignals {
+		appendSignal(signal)
+	}
+	if len(out) == 0 {
+		if !strings.EqualFold(item.Status, "Ready") && strings.TrimSpace(item.Status) != "" {
+			appendSignal("node-not-ready")
+		}
+		if cpu, ok := parsePercent(item.CPUUsage); ok && cpu >= 90 {
+			appendSignal("cpu-pressure")
+		}
+		if memory, ok := parsePercent(item.MemoryUsage); ok && memory >= 90 {
+			appendSignal("memory-pressure")
+		}
+		if item.WarningEvents > 0 {
+			appendSignal("warning-events")
+		}
+	}
+	return out
+}
+
+func sortNodeTelemetryItems(items []model.NodeTelemetryItem) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if len(items[i].PressureSignals) == len(items[j].PressureSignals) {
+			return items[i].Node < items[j].Node
+		}
+		return len(items[i].PressureSignals) > len(items[j].PressureSignals)
+	})
+}
+
+func cloneNodeTelemetrySample(sample nodeTelemetrySample) nodeTelemetrySample {
+	out := sample
+	out.nodes = make([]model.NodeTelemetryItem, 0, len(sample.nodes))
+	for _, item := range sample.nodes {
+		out.nodes = append(out.nodes, cloneNodeTelemetryItem(item))
+	}
+	return out
+}
+
+func cloneNodeTelemetryItem(item model.NodeTelemetryItem) model.NodeTelemetryItem {
+	out := item
+	out.PressureSignals = append([]string(nil), item.PressureSignals...)
+	return out
 }
 
 func autonomousProposalFromPrediction(

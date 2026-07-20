@@ -48,7 +48,9 @@ Mutating cluster routes are additionally blocked unless `WRITE_ACTIONS_ENABLED=t
 - `GET /runtime`
 - `GET /experimental`
 - `GET /experimental/ebpf/nodes`
+- `POST /experimental/ebpf/nodes`
 - `GET /experimental/fleet-drift`
+- `POST /experimental/fleet-drift/propose`
 - `POST /experimental/autonomous-remediation/propose`
 - `GET /metrics`
 - `GET /metrics/prometheus`
@@ -61,9 +63,9 @@ Production readiness returns a `ProductionReadinessStatus` payload with `status=
 
 Durable storage uses `DATABASE_DRIVER=sqlite` with `DB_PATH` or `DATABASE_DRIVER=postgres` with `DATABASE_URL`. Automatic migrations run when `DATABASE_MIGRATIONS_AUTO=true`.
 
-SQL-backed production memory and audit use `MEMORY_STORE=sql` and `AUDIT_STORE=sql`. Configure `AUDIT_SIGNING_KEY` for HMAC audit signatures.
+SQL-backed production memory and audit use `MEMORY_STORE=sql` and `AUDIT_STORE=sql`. `APP_MODE=prod` requires `AUDIT_SIGNING_KEY` for HMAC audit signatures and requires static `AUTH_TOKENS` to be at least 32 characters when OIDC is not used.
 
-Experimental endpoints always return payloads labeled `experimental`. The eBPF telemetry, fleet drift, and autonomous remediation proposal paths are disabled by default through feature flags.
+Experimental endpoints always return payloads labeled `experimental`. The eBPF telemetry, fleet drift, and autonomous remediation proposal paths are disabled by default through feature flags. When eBPF telemetry is enabled, operator-authenticated agents can submit bounded node telemetry with `POST /experimental/ebpf/nodes`; `GET /experimental/ebpf/nodes` returns recent agent data when present and falls back to Kubernetes compatibility signals otherwise. With SQL configured, node telemetry samples are persisted in the shared workflow database and pruned by TTL/count limits. Fleet drift can also create review-only remediation proposals with `POST /experimental/fleet-drift/propose`; those proposals still require the normal remediation approval and execution flow.
 
 ## Auth and cluster context
 
@@ -169,6 +171,7 @@ Predictor model health reports deterministic/shadow/blended mode, model and meta
 - `GET /memory/fixes`
 - `POST /memory/fixes`
 - `POST /risk-guard/analyze`
+- `POST /experimental/fleet-drift/propose`
 - `POST /experimental/autonomous-remediation/propose`
 
 ## Example requests

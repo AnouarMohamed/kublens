@@ -19,7 +19,9 @@ func (s *Server) mountSystemRoutes(api chi.Router) {
 	api.Get("/runtime", s.handleRuntime)
 	api.Get("/experimental", s.handleExperimentalStatus)
 	api.Get("/experimental/ebpf/nodes", s.handleExperimentalNodeTelemetry)
+	api.Post("/experimental/ebpf/nodes", s.handleExperimentalNodeTelemetryIngest)
 	api.Get("/experimental/fleet-drift", s.handleExperimentalFleetDrift)
+	api.Post("/experimental/fleet-drift/propose", s.handleExperimentalFleetDriftPropose)
 	api.Post("/experimental/autonomous-remediation/propose", s.handleAutonomousRemediationPropose)
 
 	api.Get("/auth/session", s.handleAuthSession)

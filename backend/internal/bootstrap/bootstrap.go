@@ -187,6 +187,7 @@ func Build(cfg config.Config) (Result, error) {
 		httpapi.WithAlertDispatcher(alertDispatcher),
 		httpapi.WithSQLiteDB(sqlDB),
 		httpapi.WithGhostSimulationStore(ghostStore),
+		httpapi.WithNodeTelemetrySQLStore(sqlDB, dialect),
 		httpapi.WithEventBus(eventBus),
 		httpapi.WithIntelligence(diagnosticAnalyzer),
 		httpapi.WithClusterContexts(httpapi.ClusterContextsConfig{

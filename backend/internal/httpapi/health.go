@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 const readinessClusterTimeout = 2 * time.Second
@@ -243,7 +244,7 @@ func (s *Server) runtimeSnapshot() model.RuntimeStatus {
 		runtime.PredictorLastError = ""
 	} else {
 		runtime.PredictorHealthy = !predictorState.lastFailure.After(predictorState.lastSuccess)
-		runtime.PredictorLastError = predictorState.lastError
+		runtime.PredictorLastError = redact.SensitiveText(predictorState.lastError)
 	}
 
 	ghostState := s.ghostHealthSnapshot()
@@ -252,7 +253,7 @@ func (s *Server) runtimeSnapshot() model.RuntimeStatus {
 		runtime.GhostLastError = ""
 	} else {
 		runtime.GhostHealthy = !ghostState.lastFailure.After(ghostState.lastSuccess)
-		runtime.GhostLastError = ghostState.lastError
+		runtime.GhostLastError = redact.SensitiveText(ghostState.lastError)
 	}
 	return runtime
 }
@@ -270,7 +271,7 @@ func (s *Server) recordPredictorFailure(err error) {
 	}
 	s.predictorHealthMu.Lock()
 	s.predictorHealth.lastFailure = s.now()
-	s.predictorHealth.lastError = err.Error()
+	s.predictorHealth.lastError = redact.Error(err)
 	s.predictorHealthMu.Unlock()
 }
 
@@ -293,7 +294,7 @@ func (s *Server) recordGhostFailure(err error) {
 	}
 	s.ghostHealthMu.Lock()
 	s.ghostHealth.lastFailure = s.now()
-	s.ghostHealth.lastError = err.Error()
+	s.ghostHealth.lastError = redact.Error(err)
 	s.ghostHealthMu.Unlock()
 }
 

@@ -1,7 +1,7 @@
 package ghost
 
 import (
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"sort"
@@ -266,6 +266,6 @@ func nodesFromMap(nodes map[string]model.GhostNode) []model.GhostNode {
 }
 
 func simulationID(req model.GhostSimulationRequest, generatedAt string) string {
-	hash := sha1.Sum([]byte(req.Action + "|" + req.NodeName + "|" + generatedAt))
+	hash := sha256.Sum256([]byte(req.Action + "|" + req.NodeName + "|" + generatedAt))
 	return "ghost-" + hex.EncodeToString(hash[:])[:12]
 }

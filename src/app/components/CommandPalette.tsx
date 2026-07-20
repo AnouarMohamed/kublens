@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateActio
 import { Bot, RefreshCw, type LucideIcon } from "lucide-react";
 import { ASSISTANT_DRAFT_KEY } from "../../features/opsassistant/constants";
 import { flattenViewItems, type ViewItem, type ViewSection } from "../../features/viewCatalog";
+import { redactSensitiveText } from "../../lib/security/redaction";
 import { navigateToView, requestClusterRefresh } from "../viewNavigation";
 import { VIEW_ICON } from "../../components/viewIcons";
 import type { View } from "../../types";
@@ -159,7 +160,7 @@ export function CommandPalette({ paletteOpen, setPaletteOpen, sections, searchab
               description: "Open the assistant and prefill the composer with this prompt.",
               icon: Bot,
               activate: () => {
-                window.localStorage.setItem(ASSISTANT_DRAFT_KEY, query.trim());
+                window.localStorage.setItem(ASSISTANT_DRAFT_KEY, redactSensitiveText(query.trim()));
                 navigateToView("assistant");
                 setPaletteOpen(false);
               },

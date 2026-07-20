@@ -7,6 +7,22 @@ service:
   type: ClusterIP
   port: 3000
 
+podSecurityContext:
+  runAsNonRoot: true
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  runAsUser: 10001
+  runAsGroup: 10001
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
 predictor:
   enabled: true
   image:
@@ -15,6 +31,25 @@ predictor:
     pullPolicy: IfNotPresent
   service:
     port: 8001
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 400m
+      memory: 384Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 10001
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 ghostEngine:
   enabled: true
@@ -24,6 +59,25 @@ ghostEngine:
     pullPolicy: IfNotPresent
   service:
     port: 8091
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    runAsUser: 10001
+    runAsGroup: 0
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
 
 env:
   APP_MODE: demo
@@ -62,7 +116,13 @@ env:
   AUDIT_MAX_ITEMS: "500"
   AUDIT_SIGNING_KEY: ""
 
-resources: {}
+resources:
+  requests:
+    cpu: 150m
+    memory: 256Mi
+  limits:
+    cpu: 700m
+    memory: 768Mi
 nodeSelector: {}
 tolerations: []
 affinity: {}

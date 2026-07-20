@@ -1,5 +1,7 @@
 import type { MutableRefObject } from "react";
+import { parseStreamEvent } from "../../../lib/api/stream";
 import type { K8sEvent } from "../../../types";
+import { redactSensitiveText } from "../../../lib/security/redaction";
 
 export interface NotificationSignalMetrics {
   totalLast5Minutes: number;
@@ -8,11 +10,7 @@ export interface NotificationSignalMetrics {
 }
 
 export function parseWSStreamPayload<T>(data: string): { type: string; timestamp: string; payload: T } | null {
-  try {
-    return JSON.parse(data) as { type: string; timestamp: string; payload: T };
-  } catch {
-    return null;
-  }
+  return parseStreamEvent<T>(data);
 }
 
 export function buildEventKey(event: K8sEvent): string {
@@ -82,18 +80,6 @@ export function redactEventFields(event: K8sEvent): K8sEvent {
     message: redactSensitiveText(event.message),
     from: redactSensitiveText(event.from),
   };
-}
-
-function redactSensitiveText(value: string): string {
-  if (!value) {
-    return value;
-  }
-
-  let redacted = value;
-  redacted = redacted.replace(/(bearer\s+)[^\s]+/gi, "$1[redacted]");
-  redacted = redacted.replace(/((?:token|password|secret|api[_-]?key)\s*[:=]\s*)[^\s,;]+/gi, "$1[redacted]");
-  redacted = redacted.replace(/\b[A-Za-z0-9+/_-]{24,}\b/g, "[redacted]");
-  return redacted;
 }
 
 export function deriveNotificationSignal(events: K8sEvent[], burstThreshold: number): NotificationSignalMetrics {

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { redactSensitiveText } from "../../../lib/security/redaction";
 import type { AssistantMessage, ChatSession } from "../types";
 
 export const CHAT_SESSIONS_STORAGE_KEY = "kubelens:chat-sessions";
@@ -99,7 +100,10 @@ function readStoredSessions(): ChatSession[] {
 }
 
 function writeStoredSessions(sessions: ChatSession[]): void {
-  window.localStorage.setItem(CHAT_SESSIONS_STORAGE_KEY, JSON.stringify(pruneSessions(sessions)));
+  window.localStorage.setItem(
+    CHAT_SESSIONS_STORAGE_KEY,
+    JSON.stringify(pruneSessions(sessions).map(sanitizeSessionForStorage)),
+  );
 }
 
 function normalizeSession(value: unknown): ChatSession | null {
@@ -181,6 +185,29 @@ function cloneSession(session: ChatSession): ChatSession {
   return {
     ...session,
     messages: cloneMessages(session.messages),
+  };
+}
+
+function sanitizeSessionForStorage(session: ChatSession): ChatSession {
+  return {
+    ...session,
+    title: redactSensitiveText(session.title),
+    messages: session.messages.map(sanitizeMessageForStorage),
+  };
+}
+
+function sanitizeMessageForStorage(message: AssistantMessage): AssistantMessage {
+  return {
+    ...message,
+    content: redactSensitiveText(message.content),
+    query: message.query ? redactSensitiveText(message.query) : undefined,
+    hints: message.hints?.map(redactSensitiveText),
+    resources: message.resources?.map(redactSensitiveText),
+    references: message.references?.map((reference) => ({
+      ...reference,
+      title: redactSensitiveText(reference.title),
+      snippet: reference.snippet ? redactSensitiveText(reference.snippet) : undefined,
+    })),
   };
 }
 

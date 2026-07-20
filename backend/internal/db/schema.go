@@ -103,6 +103,16 @@ var schemaStatements = []string{
 		result_json TEXT NOT NULL
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ghost_simulations_created_at ON ghost_simulations(created_at DESC)`,
+	`CREATE TABLE IF NOT EXISTS node_telemetry_samples (
+		id TEXT PRIMARY KEY,
+		agent_id TEXT NOT NULL,
+		source TEXT NOT NULL,
+		captured_at TEXT NOT NULL,
+		received_at TEXT NOT NULL,
+		nodes_json TEXT NOT NULL
+	)`,
+	`CREATE INDEX IF NOT EXISTS idx_node_telemetry_received_at ON node_telemetry_samples(received_at DESC)`,
+	`CREATE INDEX IF NOT EXISTS idx_node_telemetry_agent_id ON node_telemetry_samples(agent_id)`,
 	`CREATE TABLE IF NOT EXISTS memory_runbooks (
 		id TEXT PRIMARY KEY,
 		title TEXT NOT NULL,

@@ -60,6 +60,36 @@ describe("useChatSessions", () => {
     });
   });
 
+  it("redacts sensitive values before persisting sessions", async () => {
+    const { result } = renderHook(() => useChatSessions());
+
+    act(() => {
+      result.current.saveSession("session-secret", [
+        {
+          id: "msg-1",
+          role: "user",
+          content: "debug with Bearer token-abc and password=s3cr3t",
+          timestamp: "2026-04-20T00:00:00Z",
+          query: "token=abcd",
+          hints: ["api_key=secret-key"],
+          resources: ["secret=prod-db"],
+          references: [
+            { title: "token=abcd", source: "docs", url: "https://example.test", snippet: "password=hunter2" },
+          ],
+        },
+      ]);
+    });
+
+    await waitFor(() => {
+      const stored = window.localStorage.getItem(CHAT_SESSIONS_STORAGE_KEY) ?? "";
+      expect(stored).toContain("Bearer [redacted]");
+      expect(stored).toContain("password=[redacted]");
+      expect(stored).not.toContain("token-abc");
+      expect(stored).not.toContain("s3cr3t");
+      expect(stored).not.toContain("hunter2");
+    });
+  });
+
   it("prunes to the ten most recent sessions and deletes selected sessions", async () => {
     const { result } = renderHook(() => useChatSessions());
 

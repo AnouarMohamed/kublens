@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
+import { accessSync, constants } from "node:fs";
+import path from "node:path";
 
-function run(command, extraEnv = {}) {
-  const result = spawnSync(command, {
+function run(command, args = [], extraEnv = {}) {
+  const result = spawnSync(command, args, {
     stdio: "inherit",
     env: {
       ...process.env,
       ...extraEnv,
     },
-    shell: true,
   });
 
   if (result.error) {
@@ -21,13 +22,23 @@ function run(command, extraEnv = {}) {
 }
 
 function hasCommand(command) {
-  const probe = process.platform === "win32" ? `where ${command}` : `command -v ${command}`;
-  const result = spawnSync(probe, {
-    stdio: "ignore",
-    env: process.env,
-    shell: true,
-  });
-  return (result.status ?? 1) === 0;
+  const pathValue = process.env.PATH ?? "";
+  const extensions = process.platform === "win32" ? (process.env.PATHEXT ?? ".EXE;.CMD;.BAT").split(";") : [""];
+  for (const dir of pathValue.split(path.delimiter)) {
+    if (!dir) {
+      continue;
+    }
+    for (const ext of extensions) {
+      const candidate = path.join(dir, command + ext);
+      try {
+        accessSync(candidate, constants.X_OK);
+        return true;
+      } catch {
+        // Keep searching PATH.
+      }
+    }
+  }
+  return false;
 }
 
 function ensureRaceCompiler() {
@@ -47,9 +58,9 @@ function ensureRaceCompiler() {
   process.exit(1);
 }
 
-run("npm run fmt:go");
-run("git diff --exit-code -- backend/cmd backend/internal");
-run("node scripts/go-task.mjs -C backend vet ./...");
-run("node scripts/go-task.mjs -C backend run github.com/gordonklaus/ineffassign@v0.2.0 ./...");
+run("npm", ["run", "fmt:go"]);
+run("git", ["diff", "--exit-code", "--", "backend/cmd", "backend/internal"]);
+run("node", ["scripts/go-task.mjs", "-C", "backend", "vet", "./..."]);
+run("node", ["scripts/go-task.mjs", "-C", "backend", "run", "github.com/gordonklaus/ineffassign@v0.2.0", "./..."]);
 ensureRaceCompiler();
-run("node scripts/go-task.mjs -C backend test -race -timeout 5m ./...", { CGO_ENABLED: "1" });
+run("node", ["scripts/go-task.mjs", "-C", "backend", "test", "-race", "-timeout", "5m", "./..."], { CGO_ENABLED: "1" });

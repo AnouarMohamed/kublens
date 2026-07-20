@@ -13,6 +13,7 @@ import (
 	"kubelens-backend/internal/incident"
 	"kubelens-backend/internal/model"
 	"kubelens-backend/internal/postmortem"
+	"kubelens-backend/internal/redact"
 )
 
 const chatOpsTimeout = 10 * time.Second
@@ -301,7 +302,7 @@ func (s *Server) collectPredictionsForIncident(
 			return predictions
 		}
 		s.recordPredictorFailure(err)
-		s.logger.Warn("incident prediction fallback", "error", err.Error())
+		s.logger.Warn("incident prediction fallback", "error", redact.Error(err))
 	}
 	return buildLocalPredictions(pods, nodes, events, s.now())
 }

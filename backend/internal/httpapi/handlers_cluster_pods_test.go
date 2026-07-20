@@ -135,3 +135,20 @@ func TestHandlePodLogsStreamSSE(t *testing.T) {
 		}
 	})
 }
+
+func TestWriteSSELogLineSplitsEmbeddedNewlines(t *testing.T) {
+	rr := httptest.NewRecorder()
+	if err := writeSSELogLine(rr, flushRecorder{ResponseRecorder: rr}, "first\nsecond\r\nthird"); err != nil {
+		t.Fatalf("write SSE log line: %v", err)
+	}
+
+	if got, want := rr.Body.String(), "data: first\ndata: second\ndata: third\n\n"; got != want {
+		t.Fatalf("SSE payload = %q, want %q", got, want)
+	}
+}
+
+type flushRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (flushRecorder) Flush() {}

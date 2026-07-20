@@ -28,6 +28,7 @@ import json
 import logging
 import os
 import re
+import secrets
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -295,6 +296,29 @@ class MLFeatureSet:
     known: dict[str, bool]
 
 
+def require_predictor_secret(
+    x_predictor_secret: str | None = Header(default=None, alias="X-Predictor-Secret"),
+) -> None:
+    """Validate optional shared-secret authentication for predictor requests.
+
+    If ``PREDICTOR_SHARED_SECRET`` is not configured, protected predictor
+    endpoints allow requests for demo/local deployments. Otherwise callers must
+    provide ``X-Predictor-Secret`` with the exact value.
+
+    Args:
+        x_predictor_secret: Header value supplied by the caller.
+
+    Raises:
+        HTTPException: If the shared secret is configured but does not match.
+    """
+
+    expected = os.getenv("PREDICTOR_SHARED_SECRET", "").strip()
+    if expected == "":
+        return
+    if not secrets.compare_digest((x_predictor_secret or "").strip(), expected):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized predictor request")
+
+
 @api.get("/healthz")
 def healthz() -> dict:
     """Return predictor liveness status.
@@ -307,40 +331,18 @@ def healthz() -> dict:
 
 
 @api.get("/model", response_model=ModelHealth)
-def model_health_endpoint() -> ModelHealth:
+def model_health_endpoint(_: None = Depends(require_predictor_secret)) -> ModelHealth:
     """Return optional ML model governance state."""
 
     return model_health()
 
 
 @api.get("/telemetry", response_model=PredictorTelemetry)
-def telemetry_endpoint() -> PredictorTelemetry:
+def telemetry_endpoint(_: None = Depends(require_predictor_secret)) -> PredictorTelemetry:
     """Return predictor scoring telemetry."""
 
     with _telemetry_lock:
         return PredictorTelemetry(**_telemetry_state)
-
-
-def require_predictor_secret(
-    x_predictor_secret: str | None = Header(default=None, alias="X-Predictor-Secret"),
-) -> None:
-    """Validate optional shared-secret authentication for predictor requests.
-
-    If ``PREDICTOR_SHARED_SECRET`` is not configured, all requests are allowed.
-    Otherwise callers must provide ``X-Predictor-Secret`` with the exact value.
-
-    Args:
-        x_predictor_secret: Header value supplied by the caller.
-
-    Raises:
-        HTTPException: If the shared secret is configured but does not match.
-    """
-
-    expected = os.getenv("PREDICTOR_SHARED_SECRET", "").strip()
-    if expected == "":
-        return
-    if (x_predictor_secret or "").strip() != expected:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="unauthorized predictor request")
 
 
 def predictor_mode() -> str:

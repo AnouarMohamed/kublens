@@ -249,7 +249,13 @@ func (pc *PodController) handlePodDetail(w http.ResponseWriter, r *http.Request)
 }
 
 func writeSSELogLine(w http.ResponseWriter, flusher http.Flusher, line string) error {
-	if _, err := fmt.Fprintf(w, "data: %s\n\n", strings.ReplaceAll(line, "\r", "")); err != nil {
+	normalized := strings.ReplaceAll(line, "\r", "")
+	for _, part := range strings.Split(normalized, "\n") {
+		if _, err := fmt.Fprintf(w, "data: %s\n", part); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprint(w, "\n"); err != nil {
 		return err
 	}
 	flusher.Flush()

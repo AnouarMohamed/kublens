@@ -82,8 +82,8 @@ Exit criteria:
 
 ### Phase 5: Experimental deep visibility and autonomy
 
-1. eBPF node telemetry agent
-2. Fleet-wide drift detection
+1. eBPF node telemetry ingestion and durable sample retention
+2. Fleet-wide drift detection and review proposal generation
 3. Policy-gated autonomous remediation proposal loop
 
 Exit criteria:
@@ -119,22 +119,22 @@ Every epic and sub-feature must satisfy all checks below before merge:
 
 ## Status tracker
 
-| Epic                                       | Status  | Owner | Target phase |
-| ------------------------------------------ | ------- | ----- | ------------ |
-| SLO and error-budget control center        | shipped | TBD   | Phase 1      |
-| Policy preflight in Risk Guard             | shipped | TBD   | Phase 1      |
-| Incident replay and evidence bundles       | shipped | TBD   | Phase 1      |
-| GitOps remediation mode                    | shipped | TBD   | Phase 2      |
-| Cost and rightsizing advisor               | shipped | TBD   | Phase 2      |
-| Assistant quality and evaluation dashboard | shipped | TBD   | Phase 3      |
-| Durable enterprise storage                 | shipped | TBD   | Phase 4      |
-| SQL-backed memory and fix patterns         | shipped | TBD   | Phase 4      |
-| SQL-backed durable audit storage           | shipped | TBD   | Phase 4      |
-| Tamper-evident audit verification          | shipped | TBD   | Phase 4      |
-| Production readiness API and UI posture    | shipped | TBD   | Phase 4      |
-| Incident Risk Workbench                    | shipped | TBD   | Phase 4      |
-| Ghost confidence and scheduler fidelity    | shipped | TBD   | Phase 4      |
-| Predictor ML governance                    | shipped | TBD   | Phase 4      |
-| eBPF deep telemetry                        | shipped | TBD   | Phase 5      |
-| Fleet drift correction                     | shipped | TBD   | Phase 5      |
-| Autonomous remediation                     | shipped | TBD   | Phase 5      |
+| Epic                                       | Status             | Owner | Target phase |
+| ------------------------------------------ | ------------------ | ----- | ------------ |
+| SLO and error-budget control center        | shipped            | TBD   | Phase 1      |
+| Policy preflight in Risk Guard             | shipped            | TBD   | Phase 1      |
+| Incident replay and evidence bundles       | shipped            | TBD   | Phase 1      |
+| GitOps remediation mode                    | shipped            | TBD   | Phase 2      |
+| Cost and rightsizing advisor               | shipped            | TBD   | Phase 2      |
+| Assistant quality and evaluation dashboard | shipped            | TBD   | Phase 3      |
+| Durable enterprise storage                 | shipped            | TBD   | Phase 4      |
+| SQL-backed memory and fix patterns         | shipped            | TBD   | Phase 4      |
+| SQL-backed durable audit storage           | shipped            | TBD   | Phase 4      |
+| Tamper-evident audit verification          | shipped            | TBD   | Phase 4      |
+| Production readiness API and UI posture    | shipped            | TBD   | Phase 4      |
+| Incident Risk Workbench                    | shipped            | TBD   | Phase 4      |
+| Ghost confidence and scheduler fidelity    | shipped            | TBD   | Phase 4      |
+| Predictor ML governance                    | shipped            | TBD   | Phase 4      |
+| eBPF deep telemetry ingestion              | experimental-slice | TBD   | Phase 5      |
+| Fleet drift detection and review proposals | experimental-slice | TBD   | Phase 5      |
+| Autonomous remediation proposals           | experimental-slice | TBD   | Phase 5      |

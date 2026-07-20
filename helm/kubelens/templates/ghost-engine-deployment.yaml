@@ -20,6 +20,10 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: ghost-engine
     spec:
+      {{- with .Values.ghostEngine.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: ghost-engine
           image: "{{ .Values.ghostEngine.image.repository }}:{{ .Values.ghostEngine.image.tag }}"
@@ -38,4 +42,12 @@ spec:
               port: {{ .Values.ghostEngine.service.port }}
             initialDelaySeconds: 10
             periodSeconds: 15
+          {{- with .Values.ghostEngine.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.ghostEngine.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
 {{- end }}

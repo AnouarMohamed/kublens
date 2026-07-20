@@ -39,9 +39,17 @@ type NodeTelemetryReport struct {
 	Experimental   bool                `json:"experimental"`
 	Source         string              `json:"source"`
 	AgentConnected bool                `json:"agentConnected"`
+	LastReceivedAt string              `json:"lastReceivedAt,omitempty"`
 	Summary        string              `json:"summary"`
 	Nodes          []NodeTelemetryItem `json:"nodes"`
 	Limitations    []string            `json:"limitations"`
+}
+
+type NodeTelemetryIngestRequest struct {
+	AgentID    string              `json:"agentId"`
+	Source     string              `json:"source,omitempty"`
+	CapturedAt string              `json:"capturedAt,omitempty"`
+	Nodes      []NodeTelemetryItem `json:"nodes"`
 }
 
 type NodeTelemetryItem struct {
@@ -62,6 +70,14 @@ type FleetDriftReport struct {
 	Compared     int              `json:"compared"`
 	Items        []FleetDriftItem `json:"items"`
 	Limitations  []string         `json:"limitations"`
+}
+
+type FleetDriftProposalReport struct {
+	GeneratedAt  string                `json:"generatedAt"`
+	Enabled      bool                  `json:"enabled"`
+	Experimental bool                  `json:"experimental"`
+	Proposals    []RemediationProposal `json:"proposals"`
+	Limitations  []string              `json:"limitations"`
 }
 
 type FleetDriftItem struct {

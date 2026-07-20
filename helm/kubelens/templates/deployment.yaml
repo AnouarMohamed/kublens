@@ -16,6 +16,10 @@ spec:
         app.kubernetes.io/name: {{ include "kubelens.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
     spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: kubelens
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -45,6 +49,16 @@ spec:
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: kubelens-data
+              mountPath: /app/data
+      volumes:
+        - name: kubelens-data
+          emptyDir: {}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

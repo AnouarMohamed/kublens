@@ -48,10 +48,13 @@ describe("CommandPalette", () => {
       />,
     );
 
-    await user.type(screen.getByPlaceholderText("Search views, pods, nodes, or ask the assistant…"), "why is dns slow");
+    await user.type(
+      screen.getByPlaceholderText("Search views, pods, nodes, or ask the assistant…"),
+      "why is dns slow token=secret-123",
+    );
     await user.click(screen.getByRole("button", { name: /Ask assistant:/i }));
 
-    expect(window.localStorage.getItem(ASSISTANT_DRAFT_KEY)).toBe("why is dns slow");
+    expect(window.localStorage.getItem(ASSISTANT_DRAFT_KEY)).toBe("why is dns slow token=[redacted]");
     expect(mockNavigation.navigateToView).toHaveBeenCalledWith("assistant");
     expect(setPaletteOpen).toHaveBeenCalledWith(false);
   });

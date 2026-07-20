@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -14,6 +15,7 @@ import (
 
 	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/remediation"
 )
 
 func TestHealthzAndReadyzInMockMode(t *testing.T) {
@@ -356,6 +358,171 @@ func TestExperimentalNodeTelemetryCompatibilityReport(t *testing.T) {
 	}
 }
 
+func TestExperimentalNodeTelemetryIngestRequiresEnabledGate(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithAuth(AuthConfig{
+			Enabled: true,
+			Tokens:  []AuthToken{{Token: "operator-token", User: "agent", Role: "operator"}},
+		}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/experimental/ebpf/nodes",
+		bytes.NewBufferString(`{"agentId":"agent-a","nodes":[{"node":"node-a","status":"Ready","cpuUsage":"10%","memoryUsage":"20%","warningEvents":0,"pressureSignals":[],"observedWorkload":3}]}`),
+	)
+	req.Header.Set("Authorization", "Bearer operator-token")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("node telemetry ingest status = %d, want 403", rr.Code)
+	}
+}
+
+func TestExperimentalNodeTelemetryIngestFeedsReport(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithAuth(AuthConfig{
+			Enabled: true,
+			Tokens:  []AuthToken{{Token: "operator-token", User: "agent", Role: "operator"}},
+		}),
+		WithExperimentalConfig(ExperimentalConfig{EBPFTelemetryEnabled: true}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/experimental/ebpf/nodes",
+		bytes.NewBufferString(`{"agentId":"agent-a","nodes":[{"node":"node-a","status":"NotReady","cpuUsage":"95%","memoryUsage":"91%","warningEvents":2,"pressureSignals":[],"observedWorkload":7}]}`),
+	)
+	req.Header.Set("Authorization", "Bearer operator-token")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("node telemetry ingest status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var posted model.NodeTelemetryReport
+	if err := json.NewDecoder(rr.Body).Decode(&posted); err != nil {
+		t.Fatalf("decode posted node telemetry: %v", err)
+	}
+	if !posted.AgentConnected || posted.Source != "ebpf-agent" || posted.LastReceivedAt == "" {
+		t.Fatalf("unexpected posted telemetry report: %+v", posted)
+	}
+	if len(posted.Nodes) != 1 || len(posted.Nodes[0].PressureSignals) < 3 {
+		t.Fatalf("expected derived pressure signals, got: %+v", posted.Nodes)
+	}
+
+	getReq := httptest.NewRequest(http.MethodGet, "/api/experimental/ebpf/nodes", nil)
+	getReq.Header.Set("Authorization", "Bearer operator-token")
+	getRR := httptest.NewRecorder()
+	router.ServeHTTP(getRR, getReq)
+	if getRR.Code != http.StatusOK {
+		t.Fatalf("node telemetry report status = %d, want 200", getRR.Code)
+	}
+
+	var fetched model.NodeTelemetryReport
+	if err := json.NewDecoder(getRR.Body).Decode(&fetched); err != nil {
+		t.Fatalf("decode fetched node telemetry: %v", err)
+	}
+	if !fetched.AgentConnected || fetched.Source != "ebpf-agent" {
+		t.Fatalf("GET should use recent agent telemetry: %+v", fetched)
+	}
+}
+
+func TestProductionReadinessWarnsWhenEBPFTelemetryHasNoAgentData(t *testing.T) {
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	server := newServer(
+		testClusterReader{},
+		nil,
+		logger,
+		WithExperimentalConfig(ExperimentalConfig{EBPFTelemetryEnabled: true}),
+	)
+
+	status := server.productionReadinessStatus(context.Background())
+	found := false
+	for _, warning := range status.Warnings {
+		if warning.Key == "ebpf-telemetry" && warning.Message == "no-recent-agent-telemetry" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected ebpf telemetry warning, got: %+v", status.Warnings)
+	}
+}
+
+func TestExperimentalFleetDriftProposeCreatesReviewProposal(t *testing.T) {
+	db, err := storesql.Open(context.Background(), ":memory:")
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	defer db.Close()
+
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+	defaultReader := driftClusterReader{
+		namespaces: []string{"production"},
+		pods:       []model.PodSummary{{Name: "api", Namespace: "production", Status: model.PodStatusRunning}},
+		nodes:      []model.NodeSummary{{Name: "node-a", Status: model.NodeStatusReady}},
+	}
+	stagingReader := driftClusterReader{
+		namespaces: []string{"production", "payments"},
+		pods: []model.PodSummary{
+			{Name: "api", Namespace: "production", Status: model.PodStatusRunning},
+			{Name: "worker", Namespace: "payments", Status: model.PodStatusRunning},
+		},
+		nodes: []model.NodeSummary{{Name: "node-a", Status: model.NodeStatusReady}},
+	}
+	server := newServer(
+		defaultReader,
+		nil,
+		logger,
+		WithAuth(AuthConfig{
+			Enabled: true,
+			Tokens:  []AuthToken{{Token: "operator-token", User: "operator", Role: "operator"}},
+		}),
+		WithRemediationStore(remediation.NewStore(db, remediation.DefaultStoreLimit, nil)),
+		WithExperimentalConfig(ExperimentalConfig{FleetDriftEnabled: true}),
+		WithClusterContexts(ClusterContextsConfig{
+			Default: "prod",
+			Readers: map[string]ClusterReader{
+				"prod":    defaultReader,
+				"staging": stagingReader,
+			},
+		}),
+	)
+	router := server.Router("")
+
+	req := httptest.NewRequest(http.MethodPost, "/api/experimental/fleet-drift/propose", nil)
+	req.Header.Set("Authorization", "Bearer operator-token")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("fleet drift propose status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+
+	var payload model.FleetDriftProposalReport
+	if err := json.NewDecoder(rr.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode fleet proposal report: %v", err)
+	}
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("proposals = %d, want 1: %+v", len(payload.Proposals), payload)
+	}
+	if payload.Proposals[0].Kind != model.RemediationKindFleetDriftReview {
+		t.Fatalf("kind = %q, want fleet drift review", payload.Proposals[0].Kind)
+	}
+	if payload.Proposals[0].Resource != "staging" {
+		t.Fatalf("resource = %q, want staging", payload.Proposals[0].Resource)
+	}
+}
+
 func TestAutonomousRemediationPolicyBlocksWhenWriteGateDisabled(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := newServer(
@@ -456,6 +623,21 @@ func (healthyGhostClient) Simulate(
 	model.GhostTopology,
 ) (model.GhostSimulationResult, error) {
 	return model.GhostSimulationResult{}, nil
+}
+
+type driftClusterReader struct {
+	testClusterReader
+	pods       []model.PodSummary
+	nodes      []model.NodeSummary
+	namespaces []string
+}
+
+func (r driftClusterReader) Snapshot(context.Context) ([]model.PodSummary, []model.NodeSummary) {
+	return append([]model.PodSummary(nil), r.pods...), append([]model.NodeSummary(nil), r.nodes...)
+}
+
+func (r driftClusterReader) ListNamespaces(context.Context) []string {
+	return append([]string(nil), r.namespaces...)
 }
 
 func hasProductionIssue(issues []model.ProductionReadinessIssue, key string) bool {

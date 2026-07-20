@@ -2,6 +2,8 @@ package config
 
 import "testing"
 
+const prodStaticAuthTokens = "admin:admin:0123456789abcdef0123456789abcdef"
+
 func TestLoadDefaultsDemoMode(t *testing.T) {
 	clearConfigEnv(t)
 
@@ -86,7 +88,7 @@ func TestProdDisallowsHeaderTokenAuth(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("APP_MODE", "prod")
 	t.Setenv("AUTH_ENABLED", "true")
-	t.Setenv("AUTH_TOKENS", "admin:admin:secret-token")
+	t.Setenv("AUTH_TOKENS", prodStaticAuthTokens)
 	t.Setenv("AUTH_ALLOW_HEADER_TOKEN", "true")
 
 	if _, err := Load(); err == nil {
@@ -128,7 +130,8 @@ func TestLoadProdRejectsMemorySQLiteStorage(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("APP_MODE", "prod")
 	t.Setenv("AUTH_ENABLED", "true")
-	t.Setenv("AUTH_TOKENS", "admin:admin:secret-token")
+	t.Setenv("AUTH_TOKENS", prodStaticAuthTokens)
+	t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
 	t.Setenv("DB_PATH", ":memory:")
 
 	_, err := Load()
@@ -144,7 +147,8 @@ func TestLoadProdDefaultsToSQLMemoryAndAuditStores(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("APP_MODE", "prod")
 	t.Setenv("AUTH_ENABLED", "true")
-	t.Setenv("AUTH_TOKENS", "admin:admin:secret-token")
+	t.Setenv("AUTH_TOKENS", prodStaticAuthTokens)
+	t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
 
 	cfg, err := Load()
 	if err != nil {
@@ -155,6 +159,71 @@ func TestLoadProdDefaultsToSQLMemoryAndAuditStores(t *testing.T) {
 	}
 	if cfg.Audit.Store != "sql" {
 		t.Fatalf("audit store = %q, want sql", cfg.Audit.Store)
+	}
+}
+
+func TestLoadProdRequiresStrongStaticTokens(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("APP_MODE", "prod")
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_TOKENS", "admin:admin:short-token")
+	t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for short prod static token")
+	}
+	if err.Error() != "APP_MODE=prod requires static auth tokens to be at least 32 characters" {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
+func TestLoadProdRequiresSQLWorkflowStores(t *testing.T) {
+	tests := []struct {
+		name    string
+		key     string
+		value   string
+		wantErr string
+	}{
+		{name: "memory store", key: "MEMORY_STORE", value: "file", wantErr: "APP_MODE=prod requires MEMORY_STORE=sql"},
+		{name: "audit store", key: "AUDIT_STORE", value: "file", wantErr: "APP_MODE=prod requires AUDIT_STORE=sql"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clearConfigEnv(t)
+			t.Setenv("APP_MODE", "prod")
+			t.Setenv("AUTH_ENABLED", "true")
+			t.Setenv("AUTH_TOKENS", prodStaticAuthTokens)
+			t.Setenv("AUDIT_SIGNING_KEY", "audit-secret")
+			if tc.key == "AUDIT_STORE" {
+				t.Setenv("AUDIT_LOG_FILE", "data/audit.log")
+			}
+			t.Setenv(tc.key, tc.value)
+
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("expected error for %s", tc.name)
+			}
+			if err.Error() != tc.wantErr {
+				t.Fatalf("error = %q, want %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestLoadProdRequiresAuditSigningKey(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("APP_MODE", "prod")
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_TOKENS", prodStaticAuthTokens)
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when prod audit signing key is missing")
+	}
+	if err.Error() != "APP_MODE=prod requires AUDIT_SIGNING_KEY" {
+		t.Fatalf("error = %q", err.Error())
 	}
 }
 
@@ -315,6 +384,22 @@ func TestLoadOIDCRequiresClientID(t *testing.T) {
 	}
 }
 
+func TestLoadOIDCRequiresIssuerForGenericProvider(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_PROVIDER", "oidc")
+	t.Setenv("AUTH_OIDC_CLIENT_ID", "kubelens-web")
+	t.Setenv("AUTH_OIDC_ENABLED", "true")
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error when generic OIDC provider has no issuer")
+	}
+	if err.Error() != "AUTH_OIDC_ISSUER_URL is required for this OIDC provider" {
+		t.Fatalf("error = %q", err.Error())
+	}
+}
+
 func TestLoadOIDCWithClientIDAllowsTokenlessAuth(t *testing.T) {
 	clearConfigEnv(t)
 	t.Setenv("AUTH_ENABLED", "true")
@@ -332,6 +417,22 @@ func TestLoadOIDCWithClientIDAllowsTokenlessAuth(t *testing.T) {
 	}
 	if cfg.Auth.OIDC.ClientID != "kubelens-web" {
 		t.Fatalf("OIDC client id = %q, want kubelens-web", cfg.Auth.OIDC.ClientID)
+	}
+}
+
+func TestLoadOIDCKnownProviderAllowsDerivedIssuer(t *testing.T) {
+	clearConfigEnv(t)
+	t.Setenv("AUTH_ENABLED", "true")
+	t.Setenv("AUTH_PROVIDER", "google")
+	t.Setenv("AUTH_OIDC_CLIENT_ID", "kubelens-web")
+	t.Setenv("AUTH_OIDC_ENABLED", "true")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Auth.OIDC.Enabled {
+		t.Fatal("expected OIDC to be enabled")
 	}
 }
 

@@ -505,8 +505,33 @@ def test_predict_requires_shared_secret_when_configured(monkeypatch: pytest.Monk
         require_predictor_secret(x_predictor_secret=None)
     assert exc_info.value.status_code == 401
 
+    with pytest.raises(HTTPException) as mismatch:
+        require_predictor_secret(x_predictor_secret="secret-1234")
+    assert mismatch.value.status_code == 401
+
     require_predictor_secret(x_predictor_secret="secret-123")
     assert predict_payload(payload).source == "python-fastapi"
+
+
+def test_predictor_model_and_telemetry_require_shared_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Governance and telemetry endpoints use the same shared-secret gate."""
+
+    monkeypatch.setenv("PREDICTOR_SHARED_SECRET", "secret-123")
+    assert route_has_dependency("/model", require_predictor_secret)
+    assert route_has_dependency("/telemetry", require_predictor_secret)
+    require_predictor_secret(x_predictor_secret="secret-123")
+
+
+def route_has_dependency(path: str, dependency: object) -> bool:
+    """Return whether a FastAPI route declares the expected dependency."""
+
+    for route in predictor_main.api.routes:
+        if getattr(route, "path", "") != path:
+            continue
+        dependant = getattr(route, "dependant", None)
+        dependencies = getattr(dependant, "dependencies", [])
+        return any(getattr(item, "call", None) is dependency for item in dependencies)
+    return False
 
 
 def test_confidence_from_evidence_rewards_richer_signals() -> None:

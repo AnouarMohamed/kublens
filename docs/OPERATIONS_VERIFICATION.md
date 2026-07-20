@@ -54,6 +54,8 @@ Verify:
 - Actor fields (`user`, `role`) are populated for authenticated requests
 - `clientIp` is normalized and does not include source port
 - No bearer tokens are persisted in log entries
+- Production deployments set `AUDIT_STORE=sql` and `AUDIT_SIGNING_KEY`
+- Production static `AUTH_TOKENS` are at least 32 characters when OIDC is not used
 
 ## 5) Node maintenance safety checks
 
@@ -135,10 +137,29 @@ curl -s http://localhost:3000/api/experimental/ebpf/nodes | jq
 curl -s http://localhost:3000/api/experimental/fleet-drift | jq
 ```
 
+When `EXPERIMENTAL_EBPF_TELEMETRY_ENABLED=true`, submit a small operator-authenticated telemetry sample and confirm the report switches to `source=ebpf-agent` with `agentConnected=true`:
+
+```bash
+curl -s -X POST http://localhost:3000/api/experimental/ebpf/nodes \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"agentId":"node-agent","nodes":[{"node":"node-a","status":"Ready","cpuUsage":"42%","memoryUsage":"55%","warningEvents":0,"pressureSignals":[],"observedWorkload":12}]}' | jq
+```
+
+When `EXPERIMENTAL_FLEET_DRIFT_ENABLED=true` and more than one cluster context is configured, confirm warning-level drift can only create review proposals:
+
+```bash
+curl -s -X POST http://localhost:3000/api/experimental/fleet-drift/propose \
+  -H "Authorization: Bearer $OPERATOR_TOKEN" | jq
+```
+
 Verify:
 
 - All experimental features are disabled by default
 - Responses include `experimental=true`
+- `POST /api/experimental/ebpf/nodes` requires operator role and an enabled eBPF telemetry gate
+- SQL-backed deployments retain recent eBPF telemetry samples across API handler lifetimes
+- `POST /api/experimental/fleet-drift/propose` requires operator role and only creates remediation proposals for later review
 - `POST /api/experimental/autonomous-remediation/propose` requires operator role and `WRITE_ACTIONS_ENABLED=true`
 
 ## 12) API contract and backend quality checks

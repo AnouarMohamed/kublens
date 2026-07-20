@@ -3,6 +3,8 @@ package auth
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"errors"
 	"net/http"
 	"strings"
@@ -42,9 +44,14 @@ const (
 
 // Authenticator validates bearer/header/cookie credentials.
 type Authenticator struct {
-	config Config
-	tokens map[string]Principal
-	oidc   *oidcVerifier
+	config       Config
+	staticTokens []staticToken
+	oidc         *oidcVerifier
+}
+
+type staticToken struct {
+	digest    [sha256.Size]byte
+	principal Principal
 }
 
 // NewAuthenticator creates an Authenticator from static token and OIDC settings.
@@ -56,7 +63,7 @@ func NewAuthenticator(cfg Config) *Authenticator {
 		cfg.OIDC.Enabled = true
 	}
 
-	items := make(map[string]Principal, len(cfg.Tokens))
+	items := make([]staticToken, 0, len(cfg.Tokens))
 	for _, token := range cfg.Tokens {
 		secret := strings.TrimSpace(token.Token)
 		if secret == "" {
@@ -67,17 +74,20 @@ func NewAuthenticator(cfg Config) *Authenticator {
 		if user == "" {
 			user = "operator"
 		}
-		items[secret] = Principal{
-			User:     user,
-			Role:     ParseRole(token.Role),
-			Provider: "static",
-		}
+		items = append(items, staticToken{
+			digest: sha256.Sum256([]byte(secret)),
+			principal: Principal{
+				User:     user,
+				Role:     ParseRole(token.Role),
+				Provider: "static",
+			},
+		})
 	}
 
 	return &Authenticator{
-		config: cfg,
-		tokens: items,
-		oidc:   newOIDCVerifier(cfg.OIDC),
+		config:       cfg,
+		staticTokens: items,
+		oidc:         newOIDCVerifier(cfg.OIDC),
 	}
 }
 
@@ -127,7 +137,7 @@ func (a *Authenticator) VerifyToken(ctx context.Context, token string) (Principa
 	if a == nil {
 		return Principal{}, errors.New("authenticator not configured")
 	}
-	if principal, ok := a.tokens[token]; ok {
+	if principal, ok := a.verifyStaticToken(strings.TrimSpace(token)); ok {
 		return principal, nil
 	}
 
@@ -143,6 +153,20 @@ func (a *Authenticator) VerifyToken(ctx context.Context, token string) (Principa
 	}
 
 	return Principal{}, errors.New("invalid bearer token")
+}
+
+func (a *Authenticator) verifyStaticToken(token string) (Principal, bool) {
+	if token == "" || len(a.staticTokens) == 0 {
+		return Principal{}, false
+	}
+
+	digest := sha256.Sum256([]byte(token))
+	for _, candidate := range a.staticTokens {
+		if hmac.Equal(candidate.digest[:], digest[:]) {
+			return candidate.principal, true
+		}
+	}
+	return Principal{}, false
 }
 
 func readBearerToken(raw string) string {

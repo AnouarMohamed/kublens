@@ -21,13 +21,13 @@ func RuntimeStatus(cfg Config, isRealCluster bool, alertsEnabled bool) model.Run
 		warnings = append(warnings, "Postgres storage requires DATABASE_URL.")
 	}
 	if cfg.Mode == ModeProd && cfg.Memory.Store != "sql" {
-		warnings = append(warnings, "Production mode should use MEMORY_STORE=sql for durable team memory.")
+		warnings = append(warnings, "Production mode requires MEMORY_STORE=sql for durable team memory.")
 	}
 	if cfg.Mode == ModeProd && cfg.Audit.Store != "sql" {
-		warnings = append(warnings, "Production mode should use AUDIT_STORE=sql for durable audit records.")
+		warnings = append(warnings, "Production mode requires AUDIT_STORE=sql for durable audit records.")
 	}
 	if cfg.Mode == ModeProd && strings.TrimSpace(cfg.Audit.SigningKey) == "" {
-		warnings = append(warnings, "Production mode should configure AUDIT_SIGNING_KEY for tamper-evident audit signatures.")
+		warnings = append(warnings, "Production mode requires AUDIT_SIGNING_KEY for tamper-evident audit signatures.")
 	}
 	if cfg.Predictor.Mode == "shadow" {
 		warnings = append(warnings, "Predictor shadow mode emits ML scores without changing final risk.")

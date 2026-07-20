@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { api } from "../../lib/api";
-import type { AuditEntry, AuditVerification, StreamEvent } from "../../types";
+import { parseStreamEvent } from "../../lib/api/stream";
+import type { AuditEntry, AuditVerification } from "../../types";
 
 const MAX_ROWS = 3000;
 const ROW_HEIGHT = 54;
@@ -194,7 +195,7 @@ export default function AuditView() {
       };
 
       socket.onmessage = (event) => {
-        const payload = parseWSStreamEvent<AuditEntry>(event.data);
+        const payload = parseStreamEvent<AuditEntry>(event.data);
         if (!payload || payload.type !== "audit") {
           return;
         }
@@ -413,14 +414,6 @@ function AuditIntegrityCell({
       </div>
     </div>
   );
-}
-
-function parseWSStreamEvent<T>(data: string): StreamEvent<T> | null {
-  try {
-    return JSON.parse(data) as StreamEvent<T>;
-  } catch {
-    return null;
-  }
 }
 
 function formatTime(value: string): string {

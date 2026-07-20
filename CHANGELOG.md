@@ -6,6 +6,8 @@ All notable changes to this project are documented here.
 
 ### Fixed
 
+- Updated backend, Docker, CI, and CodeQL Go toolchain targets from 1.26.4 to 1.26.5 to address `GO-2026-5856` detected by `govulncheck`.
+- Upgraded predictor `setuptools` from 82.0.1 to 83.0.0 to address `PYSEC-2026-3447` detected by `pip-audit`.
 - Made the Ghost Engine container build self-contained by using Fedora runtime and development packages instead of untracked local `third_party` files.
 - Aligned Kubernetes defaults, release checks, and registry documentation with the renamed `kublens`, `kublenspredictor`, and `kublensghost` package names.
 

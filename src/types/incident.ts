@@ -38,7 +38,7 @@ export interface IncidentStepStatusPatch {
   status: RunbookStepStatus;
 }
 
-export type RemediationKind = "restart_pod" | "cordon_node" | "rollback_deployment";
+export type RemediationKind = "restart_pod" | "cordon_node" | "rollback_deployment" | "fleet_drift_review";
 
 export interface RemediationProposal {
   id: string;

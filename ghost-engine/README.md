@@ -4,8 +4,9 @@ This directory contains the C++20 standalone service for **Project Ghost Cluster
 
 ## Current Status
 
-- **Fully Finished**: Implements `ghost.v1.SimulationService` defined in `proto/ghost/v1/ghost.proto`.
+- **Implemented MVP**: Implements `ghost.v1.SimulationService` defined in `proto/ghost/v1/ghost.proto` for deterministic node-drain simulation.
 - **Integrated**: The Go backend contains a `ghost.Client` that automatically serializes topology details, communicates with this service via gRPC, and maps results back to Go structures.
+- **Scheduler fidelity**: The engine filters node readiness, unschedulable nodes, node selectors, taints/tolerations, and requested CPU/memory headroom. Full kube-scheduler plugin parity, disruption budgets, storage attachment, topology spread, and cascade modeling remain later phases.
 - **Local Toolchain Setup**: Dependencies (Protobuf, gRPC, and Abseil) are locally resolved and configured in `third_party/` to avoid requiring system-wide root/sudo privileges.
 
 ## How to Build
@@ -16,6 +17,7 @@ This directory contains the C++20 standalone service for **Project Ghost Cluster
    mkdir -p build && cd build
    cmake ..
    LD_LIBRARY_PATH=../../third_party/usr/lib64 make
+   LD_LIBRARY_PATH=../../third_party/usr/lib64 ctest --output-on-failure
    ```
 
 ## How to Build the Container Image

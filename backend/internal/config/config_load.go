@@ -11,6 +11,8 @@ import (
 	"kubelens-backend/internal/model"
 )
 
+const minProdStaticTokenLength = 32
+
 func Load() (Config, error) {
 	cfg := Config{}
 	now := time.Now().UTC()
@@ -260,6 +262,10 @@ func validate(cfg Config) error {
 	if cfg.Auth.Enabled && cfg.Auth.OIDC.Enabled && strings.TrimSpace(cfg.Auth.OIDC.ClientID) == "" {
 		return errors.New("AUTH_OIDC_CLIENT_ID is required when OIDC auth is enabled")
 	}
+	if cfg.Auth.Enabled && cfg.Auth.OIDC.Enabled && oidcRequiresIssuerURL(cfg.Auth.OIDC.Provider) &&
+		strings.TrimSpace(cfg.Auth.OIDC.IssuerURL) == "" {
+		return errors.New("AUTH_OIDC_ISSUER_URL is required for this OIDC provider")
+	}
 	for _, raw := range cfg.Auth.TrustedProxyCIDRs {
 		if _, err := netip.ParsePrefix(strings.TrimSpace(raw)); err != nil {
 			return fmt.Errorf("invalid AUTH_TRUSTED_PROXY_CIDRS entry %q: %w", raw, err)
@@ -268,6 +274,13 @@ func validate(cfg Config) error {
 
 	if cfg.WriteActionsEnabled && !cfg.Auth.Enabled {
 		return errors.New("WRITE_ACTIONS_ENABLED=true requires AUTH_ENABLED=true")
+	}
+	if cfg.Mode == ModeProd {
+		for _, token := range cfg.Auth.Tokens {
+			if len(strings.TrimSpace(token.Token)) < minProdStaticTokenLength {
+				return fmt.Errorf("APP_MODE=prod requires static auth tokens to be at least %d characters", minProdStaticTokenLength)
+			}
+		}
 	}
 
 	if cfg.Assistant.Provider != "" && cfg.Assistant.Provider != "none" && cfg.Assistant.Provider != "openai_compatible" {
@@ -285,11 +298,20 @@ func validate(cfg Config) error {
 	if cfg.Memory.Store != "file" && cfg.Memory.Store != "sql" {
 		return fmt.Errorf("unsupported MEMORY_STORE: %s", cfg.Memory.Store)
 	}
+	if cfg.Mode == ModeProd && cfg.Memory.Store != "sql" {
+		return errors.New("APP_MODE=prod requires MEMORY_STORE=sql")
+	}
 	if cfg.Audit.Store != "memory" && cfg.Audit.Store != "file" && cfg.Audit.Store != "sql" {
 		return fmt.Errorf("unsupported AUDIT_STORE: %s", cfg.Audit.Store)
 	}
 	if cfg.Audit.Store == "file" && strings.TrimSpace(cfg.Audit.FilePath) == "" {
 		return errors.New("AUDIT_LOG_FILE is required when AUDIT_STORE=file")
+	}
+	if cfg.Mode == ModeProd && cfg.Audit.Store != "sql" {
+		return errors.New("APP_MODE=prod requires AUDIT_STORE=sql")
+	}
+	if cfg.Mode == ModeProd && strings.TrimSpace(cfg.Audit.SigningKey) == "" {
+		return errors.New("APP_MODE=prod requires AUDIT_SIGNING_KEY")
 	}
 	if cfg.Predictor.Mode != "deterministic" && cfg.Predictor.Mode != "shadow" && cfg.Predictor.Mode != "blended" {
 		return fmt.Errorf("unsupported PREDICTOR_MODE: %s", cfg.Predictor.Mode)
@@ -304,6 +326,15 @@ func sqliteStorageDurable(path string) bool {
 		return false
 	}
 	return !strings.Contains(strings.ToLower(value), "mode=memory")
+}
+
+func oidcRequiresIssuerURL(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "google", "github":
+		return false
+	default:
+		return true
+	}
 }
 
 func memoryStoreDefault(raw string, mode Mode) string {

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { api } from "../../../lib/api";
+import { redactSensitiveText } from "../../../lib/security/redaction";
 import { useAssistantChat } from "./useAssistantChat";
 import type { AssistantMessage as Message, ChatSession } from "../types";
 import { applyIntentToPrompt, buildFollowUpPrompt } from "../utils";
@@ -119,7 +120,7 @@ export function useOpsAssistantView(): UseOpsAssistantViewResult {
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem(ASSISTANT_DRAFT_KEY, input);
+    window.localStorage.setItem(ASSISTANT_DRAFT_KEY, redactSensitiveText(input));
   }, [input]);
 
   useEffect(() => {

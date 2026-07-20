@@ -70,7 +70,7 @@ flowchart TD
 | **Streaming + audit**       | Live stream (SSE/WebSocket), request-level audit trail, hash-chain verification, and optional HMAC audit signatures                                               |
 | **Multi-cluster**           | Runtime context switching via named kubeconfig contexts                                                                                                           |
 | **Alerts**                  | Alert dispatch + lifecycle state with Alertmanager/Slack/PagerDuty                                                                                                |
-| **Experimental controls**   | Disabled-by-default eBPF telemetry, fleet drift detection, and policy-gated autonomous remediation proposals                                                      |
+| **Experimental controls**   | Disabled-by-default eBPF telemetry ingestion with SQL retention, fleet drift detection/review proposals, and policy-gated autonomous remediation proposals        |
 
 ---
 
@@ -155,7 +155,7 @@ kubectl top pods -A
 | `demo` | Safe showcase         | Off          | Off    |
 | `prod` | Controlled operations | **Required** | Off    |
 
-Write actions are opt-in in every mode. Enabling writes without auth is rejected at startup. `prod` mode refuses to boot without `AUTH_ENABLED=true` and valid tokens or OIDC configuration.
+Write actions are opt-in in every mode. Enabling writes without auth is rejected at startup. `prod` mode refuses to boot without `AUTH_ENABLED=true`, OIDC or static tokens of at least 32 characters, SQL workflow stores, and `AUDIT_SIGNING_KEY`.
 
 ---
 
@@ -165,8 +165,10 @@ Static token auth:
 
 ```env
 AUTH_ENABLED=true
-AUTH_TOKENS=viewer:viewer:token1,operator:operator:token2,admin:admin:token3
+AUTH_TOKENS=viewer:viewer:<32-plus-char-token>,operator:operator:<32-plus-char-token>,admin:admin:<32-plus-char-token>
 ```
+
+Generate production static tokens with a cryptographically secure source such as `openssl rand -hex 32`, or prefer OIDC/JWT auth.
 
 OIDC/JWT auth:
 
@@ -362,7 +364,7 @@ KUBECONFIG_DATA=                 # base64 kubeconfig for single cluster
 KUBECONFIG_CONTEXTS=             # name:base64,name:base64 for multi-cluster
 
 AUTH_ENABLED=false
-AUTH_TOKENS=                     # user:role:token,user:role:token
+AUTH_TOKENS=                     # user:role:token,user:role:token; prod static tokens must be 32+ chars
 AUTH_PROVIDER=                   # google | keycloak | oidc | github
 AUTH_OIDC_ISSUER_URL=
 AUTH_OIDC_CLIENT_ID=
@@ -398,12 +400,12 @@ DATABASE_URL=
 DATABASE_MIGRATIONS_AUTO=true
 # Required for production readiness; do not use :memory: in prod.
 DB_PATH=data/kubelens.db
-MEMORY_STORE=file                # file | sql, production readiness requires sql
+MEMORY_STORE=file                # file | sql, prod requires sql
 MEMORY_FILE_PATH=data/memory-runbooks.json
-AUDIT_STORE=memory               # memory | file | sql, production readiness requires sql
+AUDIT_STORE=memory               # memory | file | sql, prod requires sql
 AUDIT_LOG_FILE=                  # required when AUDIT_STORE=file
 AUDIT_MAX_ITEMS=500
-AUDIT_SIGNING_KEY=               # recommended for tamper-evident production audit
+AUDIT_SIGNING_KEY=               # required in prod for tamper-evident audit
 
 ALERTMANAGER_WEBHOOK_URL=
 SLACK_WEBHOOK_URL=
@@ -490,7 +492,7 @@ e2e/                Playwright end-to-end tests
 
 **`403` on write operations** -> Either the role does not permit writes, or `WRITE_ACTIONS_ENABLED=false`. Both must allow it.
 
-**Startup fails in `prod` mode** -> `AUTH_ENABLED=true` and `AUTH_TOKENS` or OIDC config are required.
+**Startup fails in `prod` mode** -> `AUTH_ENABLED=true`, OIDC or 32+ character static tokens, SQL memory/audit stores, and `AUDIT_SIGNING_KEY` are required.
 
 **`401` on predictor** -> `PREDICTOR_SHARED_SECRET` must match between dashboard and predictor service.
 

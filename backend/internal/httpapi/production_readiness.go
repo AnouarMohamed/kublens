@@ -130,7 +130,7 @@ func (s *Server) productionReadinessStatus(ctx context.Context) model.Production
 	addCheck(
 		"audit-signing",
 		stores.AuditSigned,
-		"warning",
+		"blocker",
 		boolMessage(stores.AuditSigned, "signed", "unsigned"),
 		"Set AUDIT_SIGNING_KEY for tamper-evident audit verification.",
 	)
@@ -164,6 +164,22 @@ func (s *Server) productionReadinessStatus(ctx context.Context) model.Production
 		productionExperimentalMessage(s.experimental),
 		"Keep experimental features disabled unless they have an explicit rollout and rollback plan.",
 	)
+	if s.experimental.EBPFTelemetryEnabled {
+		telemetryReport, agentConnected := s.nodeTelemetryReportFromAgents()
+		message := "agent-connected"
+		if !agentConnected {
+			message = "no-recent-agent-telemetry"
+		} else if strings.TrimSpace(telemetryReport.LastReceivedAt) != "" {
+			message = "last-received " + telemetryReport.LastReceivedAt
+		}
+		addCheck(
+			"ebpf-telemetry",
+			agentConnected,
+			"warning",
+			message,
+			"Verify node agents are deployed, authenticated, and posting telemetry before relying on deep telemetry signals.",
+		)
+	}
 
 	status := productionReadinessReady
 	if len(blockers) > 0 {

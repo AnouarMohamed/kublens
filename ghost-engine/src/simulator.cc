@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <cctype>
 #include <iostream>
+#include <unordered_set>
 
 namespace ghost {
 
@@ -111,6 +112,55 @@ bool Simulator::NodeSelectorMatches(
     for (auto const& [key, val] : selector) {
         auto it = labels.find(key);
         if (it == labels.end() || it->second != val) {
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string Simulator::TaintKey(const std::string& value) {
+    auto begin = value.find_first_not_of(" \t\r\n");
+    if (begin == std::string::npos) {
+        return "";
+    }
+
+    auto end = value.find_last_not_of(" \t\r\n");
+    std::string trimmed = value.substr(begin, end - begin + 1);
+    auto separator = trimmed.find_first_of("=:");
+    if (separator != std::string::npos) {
+        trimmed = trimmed.substr(0, separator);
+    }
+
+    auto key_begin = trimmed.find_first_not_of(" \t\r\n");
+    if (key_begin == std::string::npos) {
+        return "";
+    }
+    auto key_end = trimmed.find_last_not_of(" \t\r\n");
+    return trimmed.substr(key_begin, key_end - key_begin + 1);
+}
+
+bool Simulator::ToleratesNodeTaints(
+    const google::protobuf::RepeatedPtrField<std::string>& tolerations,
+    const google::protobuf::RepeatedPtrField<std::string>& taints
+) {
+    if (taints.empty()) {
+        return true;
+    }
+
+    std::unordered_set<std::string> tolerated;
+    for (const auto& toleration : tolerations) {
+        std::string key = TaintKey(toleration);
+        if (!key.empty()) {
+            tolerated.insert(key);
+        }
+    }
+
+    for (const auto& taint : taints) {
+        std::string key = TaintKey(taint);
+        if (key.empty()) {
+            continue;
+        }
+        if (tolerated.find(key) == tolerated.end()) {
             return false;
         }
     }
@@ -268,6 +318,7 @@ ghost::v1::SimulationResult Simulator::Run(const ghost::v1::SimulationRequest& r
             if (node.unschedulable()) continue;
             if (!IEquals(node.status(), "Ready")) continue;
             if (!NodeSelectorMatches(pod.node_selector(), node.labels())) continue;
+            if (!ToleratesNodeTaints(pod.tolerations(), node.taints())) continue;
             
             // Resource checks
             if (node.headroom().cpu_milli() < pod.requests().cpu_milli()) continue;

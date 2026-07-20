@@ -73,6 +73,13 @@ services:
       AUTONOMOUS_REMEDIATION_MAX_PROPOSALS: ${AUTONOMOUS_REMEDIATION_MAX_PROPOSALS:-5}
     volumes:
       - kubelens-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     depends_on:
       - k8s-ops-predictor
       - k8s-ops-ghost-engine
@@ -98,6 +105,13 @@ services:
       OTEL_EXPORTER_OTLP_INSECURE: ${OTEL_EXPORTER_OTLP_INSECURE:-true}
       OTEL_SERVICE_NAME: ${OTEL_PREDICTOR_SERVICE_NAME:-kubelens-predictor}
       OTEL_TRACES_SAMPLE_RATIO: ${OTEL_TRACES_SAMPLE_RATIO:-1}
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
   k8s-ops-ghost-engine:
@@ -108,6 +122,13 @@ services:
     container_name: k8s-ops-ghost-engine
     ports:
       - "8091:8091"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     restart: unless-stopped
 
 volumes:

@@ -10,6 +10,8 @@ import (
 	"math"
 	"net/http"
 	"strings"
+
+	"kubelens-backend/internal/redact"
 )
 
 type EmbeddingClient struct {
@@ -67,7 +69,7 @@ func (c *EmbeddingClient) Embed(ctx context.Context, text string) ([]float32, er
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		payload, _ := io.ReadAll(io.LimitReader(resp.Body, 16<<10))
-		return nil, fmt.Errorf("embedding status %d: %s", resp.StatusCode, strings.TrimSpace(string(payload)))
+		return nil, fmt.Errorf("embedding status %d: %s", resp.StatusCode, redact.SensitiveText(string(payload)))
 	}
 
 	var out struct {

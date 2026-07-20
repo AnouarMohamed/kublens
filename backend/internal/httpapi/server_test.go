@@ -75,6 +75,28 @@ func TestDecodeJSONBodyRejectsTrailingJSON(t *testing.T) {
 	}
 }
 
+func TestDecodeJSONBodyRejectsOversizedSuffix(t *testing.T) {
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/api/assistant",
+		strings.NewReader(`{"message":"hi"}`+strings.Repeat(" ", maxJSONRequestBody)),
+	)
+	var payload assistantRequest
+	err := decodeJSONBody(req, &payload)
+	if err == nil || err.Error() != "request body too large" {
+		t.Fatalf("decode error = %v, want request body too large", err)
+	}
+}
+
+func TestWriteJSONEscapesHTML(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeJSON(rr, http.StatusOK, map[string]string{"value": `<script>alert("x")</script>`})
+
+	if body := rr.Body.String(); strings.Contains(body, "<script>") || !strings.Contains(body, `\u003cscript\u003e`) {
+		t.Fatalf("response body did not escape HTML-sensitive characters: %q", body)
+	}
+}
+
 func TestDecodeJSONBodyIncludesParseDetailsOutsideProd(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
 	server := newServer(testClusterReader{}, nil, logger)

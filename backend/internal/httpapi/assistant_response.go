@@ -10,6 +10,7 @@ import (
 
 	"kubelens-backend/internal/ai"
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 func (s *Server) writeAssistantResponse(w http.ResponseWriter, reqCtx context.Context, ctx assistantContext) {
@@ -20,7 +21,7 @@ func (s *Server) writeAssistantResponse(w http.ResponseWriter, reqCtx context.Co
 		} else if err != nil && s.logger != nil {
 			s.logger.Warn("assistant provider fallback",
 				"provider", s.aiName(),
-				"error", err.Error(),
+				"error", redact.Error(err),
 			)
 		}
 	}

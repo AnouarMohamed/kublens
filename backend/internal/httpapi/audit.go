@@ -26,6 +26,7 @@ import (
 	storesql "kubelens-backend/internal/db"
 	"kubelens-backend/internal/events"
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 const (
@@ -119,9 +120,9 @@ func newAuditLogWithConfig(config AuditConfig, logger *slog.Logger) *auditLog {
 		trimmedPath := strings.TrimSpace(config.FilePath)
 		sink, err := newFileAuditSink(trimmedPath)
 		if err != nil {
-			log.lastError = err.Error()
+			log.lastError = redact.Error(err)
 			if logger != nil {
-				logger.Warn("audit file sink disabled", "path", trimmedPath, "error", err.Error())
+				logger.Warn("audit file sink disabled", "path", trimmedPath, "error", redact.Error(err))
 			}
 			return log
 		}
@@ -129,9 +130,9 @@ func newAuditLogWithConfig(config AuditConfig, logger *slog.Logger) *auditLog {
 		log.durable = true
 		items, maxID, err := loadAuditEntries(trimmedPath, maxItems)
 		if err != nil {
-			log.lastError = err.Error()
+			log.lastError = redact.Error(err)
 			if logger != nil {
-				logger.Warn("audit history load failed", "path", trimmedPath, "error", err.Error())
+				logger.Warn("audit history load failed", "path", trimmedPath, "error", redact.Error(err))
 			}
 			return log
 		}
@@ -151,9 +152,9 @@ func newAuditLogWithConfig(config AuditConfig, logger *slog.Logger) *auditLog {
 		log.durable = true
 		items, maxID, err := loadAuditEntriesFromSQL(config.SQLDB, dialect, maxItems)
 		if err != nil {
-			log.lastError = err.Error()
+			log.lastError = redact.Error(err)
 			if logger != nil {
-				logger.Warn("audit sql history load failed", "error", err.Error())
+				logger.Warn("audit sql history load failed", "error", redact.Error(err))
 			}
 			return log
 		}
@@ -189,7 +190,7 @@ func (l *auditLog) append(entry model.AuditEntry) model.AuditEntry {
 		if err := sink.write(entry); err != nil {
 			l.failures.Add(1)
 			l.mu.Lock()
-			l.lastError = err.Error()
+			l.lastError = redact.Error(err)
 			l.durable = false
 			l.mu.Unlock()
 		}

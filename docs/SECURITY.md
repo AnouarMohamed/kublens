@@ -36,7 +36,7 @@
 
 - Per-request audit records with actor, route, status, and latency
 - Action-specific audit labels for critical operations
-- Audit entries include hash-chain verification and optional HMAC signatures through `AUDIT_SIGNING_KEY`
+- Audit entries include hash-chain verification; `APP_MODE=prod` requires HMAC signatures through `AUDIT_SIGNING_KEY`
 - Persisted remediation GitOps artifacts with actor/timestamp linkage for governed change review
 - SQL-backed incident, remediation, postmortem, alert lifecycle, and Ghost simulation records through SQLite or Postgres
 - Optional OpenTelemetry traces for backend and predictor paths
@@ -69,9 +69,9 @@
 
 ## Experimental feature controls
 
-- eBPF telemetry, fleet drift detection, and autonomous remediation proposal generation are disabled by default.
+- eBPF telemetry, fleet drift detection, fleet drift proposal generation, and autonomous remediation proposal generation are disabled by default. Experimental eBPF telemetry ingestion and fleet drift proposal generation require operator-authenticated requests when auth is enabled.
 - Experimental API responses include explicit maturity/limitation fields.
-- Autonomous remediation proposal generation requires operator authorization and the global write gate; generated items remain proposals and still require human approval before execution.
+- Fleet drift proposal generation writes review-only remediation proposals from warning-level drift signals. Autonomous remediation proposal generation requires operator authorization and the global write gate; generated items remain proposals and still require human approval before execution.
 
 ## Operational recommendations
 

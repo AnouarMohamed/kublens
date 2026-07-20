@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const maxAssistantRequestBody = 1 << 20 // 1 MiB
+const maxJSONRequestBody = 1 << 20 // 1 MiB
 
 // decodeJSONBody decodes and validates a JSON payload against the destination struct.
 func decodeJSONBody(r *http.Request, dst any) error {
@@ -22,8 +23,15 @@ func decodeJSONBody(r *http.Request, dst any) error {
 
 // decodeJSONBodyWithDebug decodes strict JSON and optionally returns detailed decode errors.
 func decodeJSONBodyWithDebug(r *http.Request, dst any, debug bool) error {
-	limited := io.LimitReader(r.Body, maxAssistantRequestBody)
-	decoder := json.NewDecoder(limited)
+	payload, err := io.ReadAll(io.LimitReader(r.Body, maxJSONRequestBody+1))
+	if err != nil {
+		return invalidJSONError(err, debug)
+	}
+	if len(payload) > maxJSONRequestBody {
+		return errors.New("request body too large")
+	}
+
+	decoder := json.NewDecoder(bytes.NewReader(payload))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(dst); err != nil {
 		return invalidJSONError(err, debug)
@@ -54,7 +62,6 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	encoder := json.NewEncoder(w)
-	encoder.SetEscapeHTML(false)
 	_ = encoder.Encode(payload)
 }
 

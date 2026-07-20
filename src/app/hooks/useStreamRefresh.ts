@@ -3,6 +3,7 @@
  */
 import { useEffect } from "react";
 import { api } from "../../lib/api";
+import { parseStreamEvent } from "../../lib/api/stream";
 import type { StreamEvent } from "../../types";
 
 /**
@@ -43,7 +44,7 @@ export function useStreamRefresh<T>({ enabled, eventTypes, onEvent }: UseStreamR
       if (cancelled) {
         return;
       }
-      const payload = parseWSStreamEvent<T>(event.data);
+      const payload = parseStreamEvent<T>(event.data);
       if (!payload) {
         return;
       }
@@ -58,12 +59,4 @@ export function useStreamRefresh<T>({ enabled, eventTypes, onEvent }: UseStreamR
       socket?.close();
     };
   }, [enabled, eventTypes, onEvent]);
-}
-
-function parseWSStreamEvent<T>(data: string): StreamEvent<T> | null {
-  try {
-    return JSON.parse(data) as StreamEvent<T>;
-  } catch {
-    return null;
-  }
 }

@@ -68,7 +68,7 @@ Recommended profile defaults:
 
 - `demo`: UI demos, mock/safe behavior, no writes.
 - `dev`: engineering workflow, optional auth, optional write testing.
-- `prod`: authentication required, strict controls, read-only by default.
+- `prod`: authentication required, static tokens must be 32+ characters unless OIDC is used, SQL memory/audit stores and `AUDIT_SIGNING_KEY` are required, read-only by default.
 
 ## 4) Connect to real Kubernetes clusters
 
@@ -263,7 +263,8 @@ Production secret flow:
 
 ```bash
 cp k8s/secret.example.yaml k8s/secret.yaml
-# fill values (especially AUTH_TOKENS)
+# fill values: AUTH_TOKENS or OIDC settings, DATABASE_URL, AUDIT_SIGNING_KEY, and KUBECONFIG_DATA
+# generate static tokens with a secure source such as: openssl rand -hex 32
 kubectl apply -f k8s/secret.yaml
 kubectl apply -k k8s/overlays/prod
 ```

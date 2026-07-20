@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 func (s *Service) Retrieve(ctx context.Context, query string, limit int) []model.DocumentationReference {
@@ -217,7 +218,7 @@ func (s *Service) ensureLoaded(ctx context.Context) {
 		return nil, nil
 	})
 	if err != nil && s.logger != nil {
-		s.logger.Warn("rag refresh failed", "error", err.Error())
+		s.logger.Warn("rag refresh failed", "error", redact.Error(err))
 	}
 }
 

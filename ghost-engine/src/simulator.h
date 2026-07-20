@@ -17,6 +17,11 @@ private:
         const google::protobuf::Map<std::string, std::string>& selector,
         const google::protobuf::Map<std::string, std::string>& labels
     );
+    static bool ToleratesNodeTaints(
+        const google::protobuf::RepeatedPtrField<std::string>& tolerations,
+        const google::protobuf::RepeatedPtrField<std::string>& taints
+    );
+    static std::string TaintKey(const std::string& value);
 };
 
 } // namespace ghost

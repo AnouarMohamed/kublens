@@ -90,6 +90,7 @@ const (
 	RemediationKindRestartPod         RemediationKind = "restart_pod"
 	RemediationKindCordonNode         RemediationKind = "cordon_node"
 	RemediationKindRollbackDeployment RemediationKind = "rollback_deployment"
+	RemediationKindFleetDriftReview   RemediationKind = "fleet_drift_review"
 )
 
 type RemediationProposal struct {

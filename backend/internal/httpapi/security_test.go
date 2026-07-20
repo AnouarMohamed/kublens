@@ -255,8 +255,12 @@ func TestSecurityHeadersPresentOnAPIResponses(t *testing.T) {
 		t.Fatalf("status = %d, want 200", rr.Code)
 	}
 
-	if got := strings.TrimSpace(rr.Header().Get("Content-Security-Policy")); got == "" {
+	csp := strings.TrimSpace(rr.Header().Get("Content-Security-Policy"))
+	if csp == "" {
 		t.Fatal("expected Content-Security-Policy header")
+	}
+	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Fatalf("Content-Security-Policy allows inline scripts: %q", csp)
 	}
 	if got := rr.Header().Get("X-Frame-Options"); got != "DENY" {
 		t.Fatalf("X-Frame-Options = %q, want DENY", got)

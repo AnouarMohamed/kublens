@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"kubelens-backend/internal/redact"
 )
 
 func (s *Service) buildIndex(ctx context.Context) ([]chunk, [][]float32) {
@@ -22,7 +24,7 @@ func (s *Service) buildIndex(ctx context.Context) ([]chunk, [][]float32) {
 			text, err := s.fetchSourceText(ctx, source)
 			if err != nil {
 				if s.logger != nil {
-					s.logger.Warn("rag source fetch failed", "source", source.Source, "url", source.URL, "error", err.Error())
+					s.logger.Warn("rag source fetch failed", "source", source.Source, "url", source.URL, "error", redact.Error(err))
 				}
 				text = source.Fallback
 			}
@@ -93,7 +95,7 @@ func (s *Service) buildEmbeddings(ctx context.Context, chunks []chunk) [][]float
 		vector, err := s.embeddingClient.Embed(ctx, chunks[i].text)
 		if err != nil {
 			if s.logger != nil {
-				s.logger.Warn("rag embeddings failed", "error", err.Error())
+				s.logger.Warn("rag embeddings failed", "error", redact.Error(err))
 			}
 			return nil
 		}
@@ -115,7 +117,7 @@ func (s *Service) semanticScores(
 	queryEmbedding, err := s.embeddingClient.Embed(ctx, query)
 	if err != nil {
 		if s.logger != nil {
-			s.logger.Warn("rag query embedding failed", "error", err.Error())
+			s.logger.Warn("rag query embedding failed", "error", redact.Error(err))
 		}
 		return nil, false
 	}

@@ -8,6 +8,7 @@ import (
 
 	"kubelens-backend/internal/ai"
 	"kubelens-backend/internal/model"
+	"kubelens-backend/internal/redact"
 )
 
 const (
@@ -207,7 +208,7 @@ func marshalToolResult(data any) string {
 func marshalToolError(message string, err error) string {
 	payload, _ := json.Marshal(map[string]any{
 		"ok":    false,
-		"error": message + ": " + err.Error(),
+		"error": message + ": " + redact.Error(err),
 	})
 	return string(payload)
 }
